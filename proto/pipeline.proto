@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package photopipeline.pipeline;
+
+import "google/protobuf/struct.proto";
+
+service PipelineService {
+  rpc CreatePipeline(PipelineSpec) returns (PipelineId);
+  rpc Execute(ExecuteRequest) returns (stream ExecuteProgress);
+  rpc Validate(PipelineSpec) returns (ValidationResult);
+  rpc GetNodeSchema(PluginId) returns (NodeSchema);
+}
+
+message PluginId {
+  string id = 1;
+}
+
+message PipelineSpec {
+  string name = 1;
+  repeated PipelineNode nodes = 2;
+  repeated PipelineEdge edges = 3;
+  map<string, google.protobuf.Struct> params = 4;
+  BatchConfig batch = 5;
+}
+
+message PipelineNode {
+  string id = 1;
+  string plugin_id = 2;
+  string label = 3;
+  bool enabled = 4;
+  google.protobuf.Struct params = 5;
+}
+
+message PipelineEdge {
+  string from = 1;
+  string to = 2;
+}
+
+message PipelineId {
+  string id = 1;
+}
+
+message ExecuteRequest {
+  string pipeline_id = 1;
+  string image_path = 2;
+  string output_path = 3;
+}
+
+message ExecuteProgress {
+  enum Stage {
+    LOADING = 0;
+    DECODING = 1;
+    PROCESSING = 2;
+    ENCODING = 3;
+    DONE = 4;
+    ERROR = 5;
+  }
+  Stage stage = 1;
+  string node_id = 2;
+  string node_label = 3;
+  float fraction = 4;
+  string message = 5;
+  int64 elapsed_ms = 6;
+}
+
+message ValidationResult {
+  bool valid = 1;
+  repeated ValidationIssue issues = 2;
+}
+
+message ValidationIssue {
+  enum Severity {
+    INFO = 0;
+    WARNING = 1;
+    ERROR = 2;
+  }
+  Severity severity = 1;
+  string param = 2;
+  string message = 3;
+}
+
+message NodeSchema {
+  string plugin_id = 1;
+  string name = 2;
+  string version = 3;
+  string category = 4;
+  string description = 5;
+  google.protobuf.Struct parameter_schema = 6;
+  google.protobuf.Struct gui_schema = 7;
+}
+
+message BatchConfig {
+  int32 parallel = 1;
+  string output_pattern = 2;
+  string on_conflict = 3;
+  bool resume = 4;
+}

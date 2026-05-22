@@ -1,0 +1,13 @@
+[package]
+name = "photopipeline-external"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+photopipeline-core = { path = "../core" }
+photopipeline-plugin = { path = "../plugin" }
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+thiserror.workspace = true
+tracing.workspace = true

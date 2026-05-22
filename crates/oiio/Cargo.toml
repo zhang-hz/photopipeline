@@ -1,0 +1,9 @@
+[package]
+name = "oiio"
+version = "0.1.0"
+edition = "2021"
+description = "Rust FFI bindings for OpenImageIO"
+
+[features]
+default = ["oiio"]
+oiio = []

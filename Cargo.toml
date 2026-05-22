@@ -1,0 +1,69 @@
+[workspace]
+members = [
+    "crates/core",
+    "crates/plugin",
+    "crates/engine",
+    "crates/plugins",
+    "crates/external",
+    "cli",
+]
+exclude = [
+    "crates/server",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/photopipeline/photopipeline"
+rust-version = "1.90"
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+thiserror = "2"
+async-trait = "0.1"
+once_cell = "1"
+parking_lot = "0.12"
+dashmap = "6"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+rayon = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+image = { version = "0.25", default-features = false }
+bytemuck = { version = "1", features = ["derive"] }
+enum_dispatch = "0.3"
+strum = { version = "0.27", features = ["derive"] }
+derive_builder = "0.20"
+regex = "1"
+glob = "0.3"
+clap = { version = "4", features = ["derive"] }
+tonic = { version = "0.13", default-features = false }
+prost = "0.14"
+prost-types = "0.14"
+futures = "0.3"
+indicatif = "0.17"
+assertables = "0.9"
+
+# C FFI bindings (optional, CI only)
+libheif-sys = { version = "0.1" }
+libjxl-sys = { version = "0.1" }
+lcms2-sys = { version = "6" }
+exif = { version = "0.1" }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+opt-level = 1
+
+[profile.ci]
+inherits = "release"
+debug = true

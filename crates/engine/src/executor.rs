@@ -1,0 +1,251 @@
+use std::collections::HashMap;
+use std::fmt;
+use std::sync::Arc;
+
+use photopipeline_core::{
+    ImageInfo, Metadata, NodeId, PixelBuffer, PluginError, PluginResult, ProcessingStats,
+};
+use photopipeline_plugin::{ProgressSink, Registry};
+
+use crate::graph::PipelineGraph;
+use crate::params::ParameterResolver;
+
+pub struct NodeExecutor {
+    pub registry: Arc<Registry>,
+    pub resolver: Arc<ParameterResolver>,
+}
+
+impl fmt::Debug for NodeExecutor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NodeExecutor")
+            .field("registry", &"<Registry>")
+            .field("resolver", &self.resolver)
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum NodeStatus {
+    Pending,
+    Running,
+    Completed(ProcessingStats),
+    Failed(String),
+    Skipped,
+}
+
+#[derive(Debug, Clone)]
+pub struct NodeRunState {
+    pub status: NodeStatus,
+    pub started_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl NodeRunState {
+    pub fn new() -> Self {
+        Self {
+            status: NodeStatus::Pending,
+            started_at: None,
+        }
+    }
+}
+
+impl Default for NodeRunState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Debug)]
+pub struct ExecutionContext {
+    pub image_info: ImageInfo,
+    pub buffer: Option<PixelBuffer>,
+    pub metadata: Metadata,
+    pub node_states: HashMap<NodeId, NodeRunState>,
+}
+
+impl ExecutionContext {
+    pub fn new(image_info: ImageInfo, buffer: Option<PixelBuffer>, metadata: Metadata) -> Self {
+        Self {
+            image_info,
+            buffer,
+            metadata,
+            node_states: HashMap::new(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ExecutionResult {
+    pub buffer: Option<PixelBuffer>,
+    pub metadata: Metadata,
+    pub node_states: HashMap<NodeId, NodeRunState>,
+}
+
+impl NodeExecutor {
+    pub fn new(registry: Arc<Registry>, resolver: Arc<ParameterResolver>) -> Self {
+        Self { registry, resolver }
+    }
+
+    pub async fn execute(
+        &self,
+        graph: &PipelineGraph,
+        image_info: &ImageInfo,
+        buffer: Option<PixelBuffer>,
+        metadata: &Metadata,
+        progress: Box<dyn ProgressSink>,
+    ) -> PluginResult<ExecutionResult> {
+        let order = graph.topological_order()?;
+        let node_count = order.len();
+
+        let mut ctx = ExecutionContext::new(image_info.clone(), buffer, metadata.clone());
+        for node in &graph.nodes {
+            ctx.node_states
+                .entry(node.id)
+                .or_insert_with(NodeRunState::new);
+        }
+
+        for (i, node_id) in order.iter().enumerate() {
+            if progress.is_canceled() {
+                return Err(PluginError::Canceled {
+                    plugin: graph
+                        .node(*node_id)
+                        .map(|n| n.plugin_id.clone())
+                        .unwrap_or_default(),
+                });
+            }
+
+            let node = match graph.node(*node_id) {
+                Some(n) => n,
+                None => continue,
+            };
+
+            if !node.enabled {
+                ctx.node_states.insert(
+                    *node_id,
+                    NodeRunState {
+                        status: NodeStatus::Skipped,
+                        started_at: None,
+                    },
+                );
+                continue;
+            }
+
+            let plugin = self
+                .registry
+                .get(&node.plugin_id)
+                .ok_or_else(|| PluginError::NotFound(node.plugin_id.clone()))?;
+
+            let resolved_params = self.resolver.resolve(
+                *node_id,
+                ctx.image_info.id,
+                plugin.parameter_schema(),
+                &ctx.metadata,
+                &ctx.image_info,
+            );
+
+            let mut final_params = resolved_params;
+            if let Some(ref overrides) = node.parameter_overrides {
+                final_params.merge(overrides);
+            }
+
+            let issues = plugin.validate(&final_params).await?;
+            if issues
+                .iter()
+                .any(|iss| matches!(iss, photopipeline_core::ValidationIssue::Error { .. }))
+            {
+                let err_msgs: Vec<String> = issues.iter().map(|i| i.to_string()).collect();
+                ctx.node_states.insert(
+                    *node_id,
+                    NodeRunState {
+                        status: NodeStatus::Failed(err_msgs.join("; ")),
+                        started_at: Some(chrono::Utc::now()),
+                    },
+                );
+                return Err(PluginError::ValidationFailed(err_msgs.join("; ")));
+            }
+
+            let started_at = chrono::Utc::now();
+            ctx.node_states.insert(
+                *node_id,
+                NodeRunState {
+                    status: NodeStatus::Running,
+                    started_at: Some(started_at),
+                },
+            );
+
+            let fraction = (i as f32) / (node_count.max(1) as f32);
+            progress.set_progress(fraction, &format!("processing node {}", node.label));
+
+            let stats = if plugin.requires_pixel_access() {
+                self.process_pixel_node(&mut ctx, node, &final_params)
+                    .await?
+            } else {
+                self.process_metadata_node(node, &final_params).await?
+            };
+
+            ctx.node_states.insert(
+                *node_id,
+                NodeRunState {
+                    status: NodeStatus::Completed(stats),
+                    started_at: Some(started_at),
+                },
+            );
+        }
+
+        progress.set_progress(1.0, "complete");
+
+        Ok(ExecutionResult {
+            buffer: ctx.buffer,
+            metadata: ctx.metadata,
+            node_states: ctx.node_states,
+        })
+    }
+
+    async fn process_pixel_node(
+        &self,
+        ctx: &mut ExecutionContext,
+        node: &crate::graph::PipelineNode,
+        _params: &photopipeline_plugin::ParameterSet,
+    ) -> PluginResult<ProcessingStats> {
+        let input = ctx
+            .buffer
+            .as_ref()
+            .ok_or_else(|| PluginError::NodeExecutionFailed {
+                node: node.label.clone(),
+                message: "no pixel buffer available for pixel node".into(),
+            })?;
+
+        let mut output =
+            PixelBuffer::new(input.width, input.height, input.layout, input.format);
+        output.color_space = input.color_space.clone();
+        output.icc_profile = input.icc_profile.clone();
+
+        let input_pixels = input.pixel_count();
+        let output_pixels = output.pixel_count();
+
+        ctx.buffer = Some(output);
+
+        Ok(ProcessingStats {
+            elapsed_ms: 0,
+            cpu_time_ms: 0,
+            gpu_time_ms: None,
+            peak_memory_mb: 0,
+            input_pixels,
+            output_pixels,
+        })
+    }
+
+    async fn process_metadata_node(
+        &self,
+        _node: &crate::graph::PipelineNode,
+        _params: &photopipeline_plugin::ParameterSet,
+    ) -> PluginResult<ProcessingStats> {
+        Ok(ProcessingStats {
+            elapsed_ms: 0,
+            cpu_time_ms: 0,
+            gpu_time_ms: None,
+            peak_memory_mb: 0,
+            input_pixels: 0,
+            output_pixels: 0,
+        })
+    }
+}

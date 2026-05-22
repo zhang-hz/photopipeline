@@ -1,0 +1,19 @@
+name: Build Rust
+on: [push, pull_request]
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update && sudo apt-get install -y build-essential cmake pkg-config protobuf-compiler libprotobuf-dev libheif-dev libjxl-dev liblcms2-dev libexif-dev libtiff-dev libpng-dev libopenexr-dev ninja-build
+        if: runner.os == 'Linux'
+      - run: brew install cmake pkg-config protobuf libheif jpeg-xl little-cms2 libexif libtiff libpng openexr ninja
+        if: runner.os == 'macOS'
+      - run: choco install -y cmake protoc
+        if: runner.os == 'Windows'
+      - run: cargo build --workspace --exclude photopipeline-server
+      - run: cargo test --workspace --exclude photopipeline-server

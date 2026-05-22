@@ -1,0 +1,24 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+jobs:
+  release:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: photopipeline-linux-x86_64
+          - os: windows-latest
+            artifact: photopipeline-windows-x86_64
+          - os: macos-latest
+            artifact: photopipeline-macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release --workspace --exclude photopipeline-server
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: target/release/photopipeline*
