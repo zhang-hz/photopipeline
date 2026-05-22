@@ -1,0 +1,55 @@
+[metadata]
+name = "HDR Processing Pipeline"
+version = "1.0"
+
+[[nodes]]
+id = "source"
+plugin = "photopipeline.plugins.raw_input"
+
+[[nodes]]
+id = "gps"
+plugin = "photopipeline.plugins.gps_set"
+params = { mode = "manual" }
+
+[[nodes]]
+id = "color"
+plugin = "photopipeline.plugins.colorspace"
+params = { source = "srgb", target = "rec2020_pq" }
+
+[[nodes]]
+id = "denoise"
+plugin = "photopipeline.plugins.ai_denoise"
+params = { strength = 0.85 }
+
+[[nodes]]
+id = "lens"
+plugin = "photopipeline.plugins.lens_correct"
+
+[[nodes]]
+id = "output"
+plugin = "photopipeline.plugins.heif_encoder"
+params = { encoder = "x265", crf = 18, chroma = "444", bit_depth = 10 }
+
+[[edges]]
+from = "source"
+to = "gps"
+
+[[edges]]
+from = "gps"
+to = "color"
+
+[[edges]]
+from = "gps"
+to = "lens"
+
+[[edges]]
+from = "color"
+to = "denoise"
+
+[[edges]]
+from = "lens"
+to = "denoise"
+
+[[edges]]
+from = "denoise"
+to = "output"

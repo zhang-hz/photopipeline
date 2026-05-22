@@ -180,6 +180,7 @@ static GUI_SCHEMA: LazyLock<GuiSchema> = LazyLock::new(|| {
 #[derive(Debug)]
 pub struct JxlEncoderPlugin {
     id: String,
+    #[allow(dead_code)]
     lib_version: LazyLock<String>,
 }
 
