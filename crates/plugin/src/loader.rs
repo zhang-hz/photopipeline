@@ -1,8 +1,8 @@
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use crate::registry::Registry;
 use crate::trait_def::*;
-use photopipeline_core::{PluginResult, PluginId};
+use photopipeline_core::{PluginId, PluginResult};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 #[async_trait::async_trait]
 pub trait PluginLoader: Send + Sync {
@@ -18,16 +18,28 @@ pub struct BuiltinPluginLoader;
 
 #[async_trait::async_trait]
 impl PluginLoader for BuiltinPluginLoader {
-    fn name(&self) -> &str { "builtin" }
-    fn supported_extensions(&self) -> Vec<&str> { vec![] }
-    fn can_hot_reload(&self) -> bool { false }
+    fn name(&self) -> &str {
+        "builtin"
+    }
+    fn supported_extensions(&self) -> Vec<&str> {
+        vec![]
+    }
+    fn can_hot_reload(&self) -> bool {
+        false
+    }
 
     async fn probe(&self, _path: &Path) -> PluginResult<Option<PluginManifest>> {
         Ok(None)
     }
 
-    async fn load(&self, _manifest: &PluginManifest, _path: &Path) -> PluginResult<Box<dyn Plugin>> {
-        Err(photopipeline_core::PluginError::Other("builtin loader does not load from path".into()))
+    async fn load(
+        &self,
+        _manifest: &PluginManifest,
+        _path: &Path,
+    ) -> PluginResult<Box<dyn Plugin>> {
+        Err(photopipeline_core::PluginError::Other(
+            "builtin loader does not load from path".into(),
+        ))
     }
 }
 
@@ -35,11 +47,15 @@ pub struct NativePluginLoader;
 
 #[async_trait::async_trait]
 impl PluginLoader for NativePluginLoader {
-    fn name(&self) -> &str { "native" }
+    fn name(&self) -> &str {
+        "native"
+    }
     fn supported_extensions(&self) -> Vec<&str> {
         vec!["so", "dylib", "dll"]
     }
-    fn can_hot_reload(&self) -> bool { false }
+    fn can_hot_reload(&self) -> bool {
+        false
+    }
 
     async fn probe(&self, path: &Path) -> PluginResult<Option<PluginManifest>> {
         if !path.exists() || !path.is_file() {
@@ -47,11 +63,12 @@ impl PluginLoader for NativePluginLoader {
         }
         let manifest_path = path.with_extension("toml");
         if manifest_path.exists() {
-            let content = std::fs::read_to_string(&manifest_path)
-                .map_err(|e| photopipeline_core::PluginError::Io {
+            let content = std::fs::read_to_string(&manifest_path).map_err(|e| {
+                photopipeline_core::PluginError::Io {
                     plugin: PluginId::from("native_loader"),
                     error: e,
-                })?;
+                }
+            })?;
             let manifest: PluginManifest = toml::from_str(&content)
                 .map_err(|e| photopipeline_core::PluginError::Config(e.to_string()))?;
             Ok(Some(manifest))
@@ -64,7 +81,7 @@ impl PluginLoader for NativePluginLoader {
         let _manifest = manifest;
         let _path = path;
         Err(photopipeline_core::PluginError::Other(
-            "Native plugin loading requires plugin-specific FFI implementation".into()
+            "Native plugin loading requires plugin-specific FFI implementation".into(),
         ))
     }
 }
@@ -73,16 +90,28 @@ pub struct ExternalToolPluginLoader;
 
 #[async_trait::async_trait]
 impl PluginLoader for ExternalToolPluginLoader {
-    fn name(&self) -> &str { "external_tool" }
-    fn supported_extensions(&self) -> Vec<&str> { vec![] }
-    fn can_hot_reload(&self) -> bool { false }
+    fn name(&self) -> &str {
+        "external_tool"
+    }
+    fn supported_extensions(&self) -> Vec<&str> {
+        vec![]
+    }
+    fn can_hot_reload(&self) -> bool {
+        false
+    }
 
     async fn probe(&self, _path: &Path) -> PluginResult<Option<PluginManifest>> {
         Ok(None)
     }
 
-    async fn load(&self, _manifest: &PluginManifest, _path: &Path) -> PluginResult<Box<dyn Plugin>> {
-        Err(photopipeline_core::PluginError::Other("external tool loading TBD".into()))
+    async fn load(
+        &self,
+        _manifest: &PluginManifest,
+        _path: &Path,
+    ) -> PluginResult<Box<dyn Plugin>> {
+        Err(photopipeline_core::PluginError::Other(
+            "external tool loading TBD".into(),
+        ))
     }
 }
 
@@ -124,7 +153,11 @@ impl PluginLoaderManager {
                                         loaded.push(id);
                                     }
                                     Err(e) => {
-                                        tracing::warn!("Failed to load plugin {}: {}", manifest.id, e);
+                                        tracing::warn!(
+                                            "Failed to load plugin {}: {}",
+                                            manifest.id,
+                                            e
+                                        );
                                     }
                                 }
                             }

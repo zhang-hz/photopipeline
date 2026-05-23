@@ -4,184 +4,203 @@ use std::sync::LazyLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use photopipeline_core::{
-    PluginId, PluginVersion, PluginCategory, PluginResult, PluginError,
-    ImageFormat, FormatProbe, DecodeOptions, DecodedImage, EncodeOptions,
-    PixelBuffer, Metadata,
-    ValidationIssue, HardwareRequirement,
+    DecodeOptions, DecodedImage, EncodeOptions, FormatProbe, HardwareRequirement, ImageFormat,
+    Metadata, PixelBuffer, PluginCategory, PluginError, PluginId, PluginResult, PluginVersion,
+    ValidationIssue,
 };
 use photopipeline_plugin::{
-    Plugin, FormatProcessor,
-    ParameterSchema, ParameterSet, ParameterSection, ParameterField, ParameterType,
-    EnumOption,
-    GuiSchema, GuiLayout, GuiSection,
-    PreviewMode, SectionStyle,
+    EnumOption, FormatProcessor, GuiLayout, GuiSchema, GuiSection, ParameterField, ParameterSchema,
+    ParameterSection, ParameterSet, ParameterType, Plugin, PreviewMode, SectionStyle,
 };
 
-static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| {
-    ParameterSchema {
-        version: 1,
-        sections: vec![
-            ParameterSection {
-                id: "quality".into(),
-                label: "Quality".into(),
-                description: Some("HEIF encoding quality settings".into()),
-                icon: None,
-                collapsible: false,
-                default_collapsed: false,
-                fields: vec![
-                    ParameterField {
-                        id: "quality".into(),
-                        label: "Quality".into(),
-                        description: Some("Encoding quality (0-100)".into()),
-                        help_url: None,
-                        field_type: ParameterType::Slider {
-                            min: 0.0, max: 100.0, step: 1.0,
-                            show_ticks: true,
-                            ticks: Some(vec![0.0, 25.0, 50.0, 75.0, 100.0]),
-                            show_value: true,
-                            orientation: Default::default(),
-                            style: Default::default(),
-                        },
-                        default: serde_json::json!(95.0),
-                        required: false,
-                        advanced: false,
-                        allow_override: true,
-                        supports_expression: false,
+static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterSchema {
+    version: 1,
+    sections: vec![
+        ParameterSection {
+            id: "quality".into(),
+            label: "Quality".into(),
+            description: Some("HEIF encoding quality settings".into()),
+            icon: None,
+            collapsible: false,
+            default_collapsed: false,
+            fields: vec![
+                ParameterField {
+                    id: "quality".into(),
+                    label: "Quality".into(),
+                    description: Some("Encoding quality (0-100)".into()),
+                    help_url: None,
+                    field_type: ParameterType::Slider {
+                        min: 0.0,
+                        max: 100.0,
+                        step: 1.0,
+                        show_ticks: true,
+                        ticks: Some(vec![0.0, 25.0, 50.0, 75.0, 100.0]),
+                        show_value: true,
+                        orientation: Default::default(),
+                        style: Default::default(),
                     },
-                    ParameterField {
-                        id: "lossless".into(),
-                        label: "Lossless".into(),
-                        description: Some("Use lossless compression".into()),
-                        help_url: None,
-                        field_type: ParameterType::Boolean {
-                            label_true: Some("Lossless".into()),
-                            label_false: Some("Lossy".into()),
-                        },
-                        default: serde_json::json!(false),
-                        required: false,
-                        advanced: false,
-                        allow_override: true,
-                        supports_expression: false,
+                    default: serde_json::json!(95.0),
+                    required: false,
+                    advanced: false,
+                    allow_override: true,
+                    supports_expression: false,
+                },
+                ParameterField {
+                    id: "lossless".into(),
+                    label: "Lossless".into(),
+                    description: Some("Use lossless compression".into()),
+                    help_url: None,
+                    field_type: ParameterType::Boolean {
+                        label_true: Some("Lossless".into()),
+                        label_false: Some("Lossy".into()),
                     },
-                    ParameterField {
-                        id: "bit_depth".into(),
-                        label: "Bit Depth".into(),
-                        description: Some("Output bit depth (8 or 10 bit)".into()),
-                        help_url: None,
-                        field_type: ParameterType::Enum {
-                            options: vec![
-                                EnumOption {
-                                    value: "8".into(), label: "8-bit".into(),
-                                    description: Some("Standard 8-bit output".into()),
-                                    icon: None, tags: vec![], recommended: false,
-                                },
-                                EnumOption {
-                                    value: "10".into(), label: "10-bit".into(),
-                                    description: Some("High bit depth 10-bit output".into()),
-                                    icon: None, tags: vec!["hdr".into()], recommended: true,
-                                },
-                            ],
-                            display: Default::default(),
-                        },
-                        default: serde_json::json!("10"),
-                        required: false,
-                        advanced: false,
-                        allow_override: true,
-                        supports_expression: false,
+                    default: serde_json::json!(false),
+                    required: false,
+                    advanced: false,
+                    allow_override: true,
+                    supports_expression: false,
+                },
+                ParameterField {
+                    id: "bit_depth".into(),
+                    label: "Bit Depth".into(),
+                    description: Some("Output bit depth (8 or 10 bit)".into()),
+                    help_url: None,
+                    field_type: ParameterType::Enum {
+                        options: vec![
+                            EnumOption {
+                                value: "8".into(),
+                                label: "8-bit".into(),
+                                description: Some("Standard 8-bit output".into()),
+                                icon: None,
+                                tags: vec![],
+                                recommended: false,
+                            },
+                            EnumOption {
+                                value: "10".into(),
+                                label: "10-bit".into(),
+                                description: Some("High bit depth 10-bit output".into()),
+                                icon: None,
+                                tags: vec!["hdr".into()],
+                                recommended: true,
+                            },
+                        ],
+                        display: Default::default(),
                     },
-                ],
-            },
-            ParameterSection {
-                id: "advanced".into(),
-                label: "Advanced".into(),
-                description: Some("Advanced HEIF encoder options".into()),
-                icon: None,
-                collapsible: true,
-                default_collapsed: true,
-                fields: vec![
-                    ParameterField {
-                        id: "chroma_subsampling".into(),
-                        label: "Chroma Subsampling".into(),
-                        description: Some("Chroma subsampling mode".into()),
-                        help_url: None,
-                        field_type: ParameterType::Enum {
-                            options: vec![
-                                EnumOption {
-                                    value: "444".into(), label: "4:4:4".into(),
-                                    description: Some("No subsampling, best quality".into()),
-                                    icon: None, tags: vec![], recommended: true,
-                                },
-                                EnumOption {
-                                    value: "422".into(), label: "4:2:2".into(),
-                                    description: Some("Horizontal subsampling".into()),
-                                    icon: None, tags: vec![], recommended: false,
-                                },
-                                EnumOption {
-                                    value: "420".into(), label: "4:2:0".into(),
-                                    description: Some("2x subsampling, best compression".into()),
-                                    icon: None, tags: vec![], recommended: false,
-                                },
-                            ],
-                            display: Default::default(),
-                        },
-                        default: serde_json::json!("444"),
-                        required: false,
-                        advanced: true,
-                        allow_override: true,
-                        supports_expression: false,
-                    },
-                    ParameterField {
-                        id: "encoder_effort".into(),
-                        label: "Effort".into(),
-                        description: Some("Encoder effort (0 = fast, 10 = best compression)".into()),
-                        help_url: None,
-                        field_type: ParameterType::Integer {
-                            min: 0, max: 10, step: 1,
-                            unit: None,
-                            style: Default::default(),
-                        },
-                        default: serde_json::json!(4),
-                        required: false,
-                        advanced: true,
-                        allow_override: true,
-                        supports_expression: false,
-                    },
-                    ParameterField {
-                        id: "heif_enc_path".into(),
-                        label: "heif-enc Path".into(),
-                        description: Some("Custom path to the heif-enc binary".into()),
-                        help_url: None,
-                        field_type: ParameterType::String {
-                            max_length: 1024,
-                            pattern: None,
-                            placeholder: Some("/usr/bin/heif-enc".into()),
-                        },
-                        default: serde_json::json!("heif-enc"),
-                        required: false,
-                        advanced: true,
-                        allow_override: true,
-                        supports_expression: false,
-                    },
-                ],
-            },
-        ],
-    }
-});
-
-static GUI_SCHEMA: LazyLock<GuiSchema> = LazyLock::new(|| {
-    GuiSchema {
-        layout: GuiLayout::Standard {
-            sections: vec![
-                GuiSection { param_section_id: "quality".into(), title_visible: true, style: SectionStyle::Card },
-                GuiSection { param_section_id: "advanced".into(), title_visible: true, style: SectionStyle::CollapsibleCard },
+                    default: serde_json::json!("10"),
+                    required: false,
+                    advanced: false,
+                    allow_override: true,
+                    supports_expression: false,
+                },
             ],
         },
-        icon: Some("image".into()),
-        color: Some("#14b8a6".into()),
-        preview: PreviewMode::None,
-        aux_views: vec![],
-        min_panel_width: 320,
-    }
+        ParameterSection {
+            id: "advanced".into(),
+            label: "Advanced".into(),
+            description: Some("Advanced HEIF encoder options".into()),
+            icon: None,
+            collapsible: true,
+            default_collapsed: true,
+            fields: vec![
+                ParameterField {
+                    id: "chroma_subsampling".into(),
+                    label: "Chroma Subsampling".into(),
+                    description: Some("Chroma subsampling mode".into()),
+                    help_url: None,
+                    field_type: ParameterType::Enum {
+                        options: vec![
+                            EnumOption {
+                                value: "444".into(),
+                                label: "4:4:4".into(),
+                                description: Some("No subsampling, best quality".into()),
+                                icon: None,
+                                tags: vec![],
+                                recommended: true,
+                            },
+                            EnumOption {
+                                value: "422".into(),
+                                label: "4:2:2".into(),
+                                description: Some("Horizontal subsampling".into()),
+                                icon: None,
+                                tags: vec![],
+                                recommended: false,
+                            },
+                            EnumOption {
+                                value: "420".into(),
+                                label: "4:2:0".into(),
+                                description: Some("2x subsampling, best compression".into()),
+                                icon: None,
+                                tags: vec![],
+                                recommended: false,
+                            },
+                        ],
+                        display: Default::default(),
+                    },
+                    default: serde_json::json!("444"),
+                    required: false,
+                    advanced: true,
+                    allow_override: true,
+                    supports_expression: false,
+                },
+                ParameterField {
+                    id: "encoder_effort".into(),
+                    label: "Effort".into(),
+                    description: Some("Encoder effort (0 = fast, 10 = best compression)".into()),
+                    help_url: None,
+                    field_type: ParameterType::Integer {
+                        min: 0,
+                        max: 10,
+                        step: 1,
+                        unit: None,
+                        style: Default::default(),
+                    },
+                    default: serde_json::json!(4),
+                    required: false,
+                    advanced: true,
+                    allow_override: true,
+                    supports_expression: false,
+                },
+                ParameterField {
+                    id: "heif_enc_path".into(),
+                    label: "heif-enc Path".into(),
+                    description: Some("Custom path to the heif-enc binary".into()),
+                    help_url: None,
+                    field_type: ParameterType::String {
+                        max_length: 1024,
+                        pattern: None,
+                        placeholder: Some("/usr/bin/heif-enc".into()),
+                    },
+                    default: serde_json::json!("heif-enc"),
+                    required: false,
+                    advanced: true,
+                    allow_override: true,
+                    supports_expression: false,
+                },
+            ],
+        },
+    ],
+});
+
+static GUI_SCHEMA: LazyLock<GuiSchema> = LazyLock::new(|| GuiSchema {
+    layout: GuiLayout::Standard {
+        sections: vec![
+            GuiSection {
+                param_section_id: "quality".into(),
+                title_visible: true,
+                style: SectionStyle::Card,
+            },
+            GuiSection {
+                param_section_id: "advanced".into(),
+                title_visible: true,
+                style: SectionStyle::CollapsibleCard,
+            },
+        ],
+    },
+    icon: Some("image".into()),
+    color: Some("#14b8a6".into()),
+    preview: PreviewMode::None,
+    aux_views: vec![],
+    min_panel_width: 320,
 });
 
 #[derive(Debug)]
@@ -194,7 +213,7 @@ impl HeifEncoderPlugin {
     pub fn new() -> Self {
         Self {
             id: "photopipeline.plugins.heif_encoder".to_string(),
-            lib_version: LazyLock::new(|| detect_heif_encoder()),
+            lib_version: LazyLock::new(detect_heif_encoder),
         }
     }
 
@@ -211,18 +230,43 @@ impl Default for HeifEncoderPlugin {
 
 #[async_trait]
 impl Plugin for HeifEncoderPlugin {
-    fn id(&self) -> &PluginId { &self.id }
-    fn name(&self) -> &str { "HEIF Encoder" }
-    fn version(&self) -> PluginVersion { PluginVersion::new(1, 0, 0) }
-    fn category(&self) -> PluginCategory { PluginCategory::Format }
-    fn description(&self) -> &str { "Encode images in HEIF/HEIC 10-bit format using libheif or heif-enc" }
-    fn tags(&self) -> &[String] { &TAGS }
-    fn requires_pixel_access(&self) -> bool { false }
-    fn produces_pixel_output(&self) -> bool { false }
-    fn supported_hardware(&self) -> HardwareRequirement { HardwareRequirement { min_ram_mb: 512, ..Default::default() } }
+    fn id(&self) -> &PluginId {
+        &self.id
+    }
+    fn name(&self) -> &str {
+        "HEIF Encoder"
+    }
+    fn version(&self) -> PluginVersion {
+        PluginVersion::new(1, 0, 0)
+    }
+    fn category(&self) -> PluginCategory {
+        PluginCategory::Format
+    }
+    fn description(&self) -> &str {
+        "Encode images in HEIF/HEIC 10-bit format using libheif or heif-enc"
+    }
+    fn tags(&self) -> &[String] {
+        &TAGS
+    }
+    fn requires_pixel_access(&self) -> bool {
+        false
+    }
+    fn produces_pixel_output(&self) -> bool {
+        false
+    }
+    fn supported_hardware(&self) -> HardwareRequirement {
+        HardwareRequirement {
+            min_ram_mb: 512,
+            ..Default::default()
+        }
+    }
 
-    fn parameter_schema(&self) -> &ParameterSchema { &PARAMETER_SCHEMA }
-    fn gui_schema(&self) -> &GuiSchema { &GUI_SCHEMA }
+    fn parameter_schema(&self) -> &ParameterSchema {
+        &PARAMETER_SCHEMA
+    }
+    fn gui_schema(&self) -> &GuiSchema {
+        &GUI_SCHEMA
+    }
 
     async fn initialize(&mut self, _cfg: &photopipeline_plugin::PluginConfig) -> PluginResult<()> {
         let version = detect_heif_encoder();
@@ -236,8 +280,11 @@ impl Plugin for HeifEncoderPlugin {
 
     async fn validate(&self, params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>> {
         let mut issues = Vec::new();
-        let quality = params.get("quality").and_then(|v| v.as_f64()).unwrap_or(95.0);
-        if quality < 0.0 || quality > 100.0 {
+        let quality = params
+            .get("quality")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(95.0);
+        if !(0.0..=100.0).contains(&quality) {
             issues.push(ValidationIssue::Error {
                 param: "quality".into(),
                 message: "Quality must be between 0 and 100".into(),
@@ -280,19 +327,20 @@ impl FormatProcessor for HeifEncoderPlugin {
                 return true;
             }
         }
-        if let Some(ref magic) = probe.magic_bytes {
-            if magic.len() >= 12
-                && &magic[4..8] == b"ftyp"
-                && (&magic[8..12] == b"heic" || &magic[8..12] == b"heix" || &magic[8..12] == b"mif1")
-            {
-                return true;
-            }
+        if let Some(ref magic) = probe.magic_bytes
+            && magic.len() >= 12
+            && &magic[4..8] == b"ftyp"
+            && (&magic[8..12] == b"heic" || &magic[8..12] == b"heix" || &magic[8..12] == b"mif1")
+        {
+            return true;
         }
         false
     }
 
     async fn decode(&self, _data: &[u8], _options: &DecodeOptions) -> PluginResult<DecodedImage> {
-        Err(PluginError::UnsupportedFormat("HEIF decoding not supported by encoder plugin".into()))
+        Err(PluginError::UnsupportedFormat(
+            "HEIF decoding not supported by encoder plugin".into(),
+        ))
     }
 
     fn can_encode(&self, format: &ImageFormat) -> bool {
@@ -300,7 +348,10 @@ impl FormatProcessor for HeifEncoderPlugin {
     }
 
     async fn encode(
-        &self, image: &PixelBuffer, _metadata: &Metadata, options: &EncodeOptions,
+        &self,
+        image: &PixelBuffer,
+        _metadata: &Metadata,
+        options: &EncodeOptions,
     ) -> PluginResult<Vec<u8>> {
         let quality = options.quality.unwrap_or(95.0);
         let lossless = options.lossless;
@@ -314,16 +365,22 @@ impl FormatProcessor for HeifEncoderPlugin {
             cmd_args.push(format!("{}", quality as u32));
         }
 
-        match options.bit_depth {
-            10 => { cmd_args.push("-b".to_string()); cmd_args.push("10".to_string()); }
-            _ => {}
+        if options.bit_depth == 10 {
+            cmd_args.push("-b".to_string());
+            cmd_args.push("10".to_string());
         }
 
         if let Some(ref chroma) = options.chroma_subsampling {
             match chroma {
-                photopipeline_core::ChromaSubsampling::Yuv444 => cmd_args.push("--chroma=444".to_string()),
-                photopipeline_core::ChromaSubsampling::Yuv422 => cmd_args.push("--chroma=422".to_string()),
-                photopipeline_core::ChromaSubsampling::Yuv420 => cmd_args.push("--chroma=420".to_string()),
+                photopipeline_core::ChromaSubsampling::Yuv444 => {
+                    cmd_args.push("--chroma=444".to_string())
+                }
+                photopipeline_core::ChromaSubsampling::Yuv422 => {
+                    cmd_args.push("--chroma=422".to_string())
+                }
+                photopipeline_core::ChromaSubsampling::Yuv420 => {
+                    cmd_args.push("--chroma=420".to_string())
+                }
             };
         }
 
@@ -336,7 +393,8 @@ impl FormatProcessor for HeifEncoderPlugin {
         let heif_enc = "heif-enc";
         match Command::new(heif_enc)
             .args(&cmd_args)
-            .arg("-o").arg(&tmp_output)
+            .arg("-o")
+            .arg(&tmp_output)
             .arg(&tmp_input)
             .output()
         {
@@ -362,7 +420,10 @@ impl FormatProcessor for HeifEncoderPlugin {
             Err(e) => {
                 let _ = std::fs::remove_file(&tmp_input);
                 let _ = std::fs::remove_file(&tmp_output);
-                Err(PluginError::Io { plugin: self.id.clone(), error: e })
+                Err(PluginError::Io {
+                    plugin: self.id.clone(),
+                    error: e,
+                })
             }
         }
     }
@@ -393,10 +454,11 @@ fn write_ppm(path: &std::path::Path, image: &PixelBuffer) -> PluginResult<()> {
         let row_start = y * stride;
         let row_end = row_start + stride;
         if row_end <= image.data.data.len() {
-            f.write_all(&image.data.data[row_start..row_end]).map_err(|e| PluginError::Io {
-                plugin: PluginId::from("heif_encoder"),
-                error: e,
-            })?;
+            f.write_all(&image.data.data[row_start..row_end])
+                .map_err(|e| PluginError::Io {
+                    plugin: PluginId::from("heif_encoder"),
+                    error: e,
+                })?;
         }
     }
     Ok(())
@@ -406,7 +468,12 @@ static TMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 static TAGS: LazyLock<Vec<String>> = LazyLock::new(|| {
     vec![
-        "format".into(), "heif".into(), "heic".into(), "encode".into(),
-        "10bit".into(), "hdr".into(), "output".into(),
+        "format".into(),
+        "heif".into(),
+        "heic".into(),
+        "encode".into(),
+        "10bit".into(),
+        "hdr".into(),
+        "output".into(),
     ]
 });

@@ -14,23 +14,10 @@ pub struct ParameterResolver {
 
 #[derive(Debug, Clone)]
 pub enum GroupCondition {
-    ExifEq {
-        tag: String,
-        value: String,
-    },
-    ExifGte {
-        tag: String,
-        value: f64,
-    },
-    ExifLte {
-        tag: String,
-        value: f64,
-    },
-    GpsNear {
-        lat: f64,
-        lon: f64,
-        radius_km: f64,
-    },
+    ExifEq { tag: String, value: String },
+    ExifGte { tag: String, value: f64 },
+    ExifLte { tag: String, value: f64 },
+    GpsNear { lat: f64, lon: f64, radius_km: f64 },
     Always,
     And(Vec<GroupCondition>),
     Or(Vec<GroupCondition>),
@@ -219,31 +206,15 @@ impl ExpressionEngine {
                 .clone()
                 .or_else(|| exif.exposure_time.clone())
                 .unwrap_or_else(|| "0".to_string())),
-            "focal_length" => Ok(exif
-                .focal_length
-                .clone()
-                .unwrap_or_else(|| "0".to_string())),
-            "make" => Ok(exif
-                .make
-                .clone()
-                .unwrap_or_default()),
-            "model" => Ok(exif
-                .model
-                .clone()
-                .unwrap_or_default()),
-            "lens" => Ok(exif
-                .lens_model
-                .clone()
-                .unwrap_or_default()),
+            "focal_length" => Ok(exif.focal_length.clone().unwrap_or_else(|| "0".to_string())),
+            "make" => Ok(exif.make.clone().unwrap_or_default()),
+            "model" => Ok(exif.model.clone().unwrap_or_default()),
+            "lens" => Ok(exif.lens_model.clone().unwrap_or_default()),
             _ => Err(format!("unknown exif field '{}'", field)),
         }
     }
 
-    fn resolve_image_var(
-        &self,
-        field: &str,
-        image_info: &ImageInfo,
-    ) -> Result<String, String> {
+    fn resolve_image_var(&self, field: &str, image_info: &ImageInfo) -> Result<String, String> {
         match field {
             "filename" => Ok(image_info.filename.clone()),
             "width" => Ok(image_info.width.to_string()),
@@ -260,7 +231,7 @@ impl ParameterResolver {
             template_params: HashMap::new(),
             group_overrides: Vec::new(),
             image_overrides: HashMap::new(),
-            expr_engine: ExpressionEngine::default(),
+            expr_engine: ExpressionEngine,
         }
     }
 
@@ -276,12 +247,7 @@ impl ParameterResolver {
         self.group_overrides.push((condition, params));
     }
 
-    pub fn set_image_override(
-        &mut self,
-        image_id: ImageId,
-        node_id: NodeId,
-        params: ParameterSet,
-    ) {
+    pub fn set_image_override(&mut self, image_id: ImageId, node_id: NodeId, params: ParameterSet) {
         self.image_overrides.insert((image_id, node_id), params);
     }
 
@@ -300,10 +266,10 @@ impl ParameterResolver {
         }
 
         for (condition, node_params) in &self.group_overrides {
-            if self.evaluate_condition(condition, metadata, image_info) {
-                if let Some(group_params) = node_params.get(&node_id) {
-                    result.merge(group_params);
-                }
+            if self.evaluate_condition(condition, metadata, image_info)
+                && let Some(group_params) = node_params.get(&node_id)
+            {
+                result.merge(group_params);
             }
         }
 
@@ -316,11 +282,7 @@ impl ParameterResolver {
         result
     }
 
-    pub fn resolve_single(
-        &self,
-        node_id: NodeId,
-        schema: &ParameterSchema,
-    ) -> ParameterSet {
+    pub fn resolve_single(&self, node_id: NodeId, schema: &ParameterSchema) -> ParameterSet {
         let mut result = self.resolve_plugin_defaults(schema);
         if let Some(template_params) = self.template_params.get(&node_id) {
             result.merge(template_params);
@@ -427,9 +389,7 @@ impl ParameterResolver {
         let dlat = (lat2 - lat1).to_radians();
         let dlon = (lon2 - lon1).to_radians();
         let a = (dlat / 2.0).sin().powi(2)
-            + lat1.to_radians().cos()
-                * lat2.to_radians().cos()
-                * (dlon / 2.0).sin().powi(2);
+            + lat1.to_radians().cos() * lat2.to_radians().cos() * (dlon / 2.0).sin().powi(2);
         let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
         r * c
     }
@@ -442,14 +402,11 @@ impl ParameterResolver {
     ) {
         let keys: Vec<String> = params.values.keys().cloned().collect();
         for key in keys {
-            if let Some(serde_json::Value::String(expr_str)) = params.values.get(&key) {
-                if expr_str.contains("${") {
-                    match self.expr_engine.evaluate(expr_str, metadata, image_info) {
-                        Ok(value) => {
-                            params.values.insert(key, value);
-                        }
-                        Err(_) => {}
-                    }
+            if let Some(serde_json::Value::String(expr_str)) = params.values.get(&key)
+                && expr_str.contains("${")
+            {
+                if let Ok(value) = self.expr_engine.evaluate(expr_str, metadata, image_info) {
+                    params.values.insert(key, value);
                 }
             }
         }
@@ -465,8 +422,10 @@ impl Default for ParameterResolver {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use photopipeline_core::{ExifData, Metadata, PixelFormat, ColorSpace, ImageFormat, IntegerWidget};
-    use photopipeline_plugin::{ParameterSchema, ParameterSection, ParameterField, ParameterType};
+    use photopipeline_core::{
+        ColorSpace, ExifData, ImageFormat, IntegerWidget, Metadata, PixelFormat,
+    };
+    use photopipeline_plugin::{ParameterField, ParameterSchema, ParameterSection, ParameterType};
     use uuid::Uuid;
 
     fn make_simple_schema() -> ParameterSchema {
@@ -594,7 +553,10 @@ mod tests {
         let resolver = ParameterResolver::new();
         let metadata = make_test_metadata(800);
         let image_info = make_test_image_info();
-        let cond = GroupCondition::ExifEq { tag: "make".into(), value: "Canon".into() };
+        let cond = GroupCondition::ExifEq {
+            tag: "make".into(),
+            value: "Canon".into(),
+        };
         assert!(resolver.evaluate_condition(&cond, &metadata, &image_info));
     }
 
@@ -603,7 +565,10 @@ mod tests {
         let resolver = ParameterResolver::new();
         let metadata = make_test_metadata(800);
         let image_info = make_test_image_info();
-        let cond = GroupCondition::ExifEq { tag: "make".into(), value: "Nikon".into() };
+        let cond = GroupCondition::ExifEq {
+            tag: "make".into(),
+            value: "Nikon".into(),
+        };
         assert!(!resolver.evaluate_condition(&cond, &metadata, &image_info));
     }
 
@@ -612,7 +577,10 @@ mod tests {
         let resolver = ParameterResolver::new();
         let metadata = make_test_metadata(800);
         let image_info = make_test_image_info();
-        let cond = GroupCondition::ExifGte { tag: "iso".into(), value: 400.0 };
+        let cond = GroupCondition::ExifGte {
+            tag: "iso".into(),
+            value: 400.0,
+        };
         assert!(resolver.evaluate_condition(&cond, &metadata, &image_info));
     }
 
@@ -621,7 +589,10 @@ mod tests {
         let resolver = ParameterResolver::new();
         let metadata = make_test_metadata(100);
         let image_info = make_test_image_info();
-        let cond = GroupCondition::ExifGte { tag: "iso".into(), value: 400.0 };
+        let cond = GroupCondition::ExifGte {
+            tag: "iso".into(),
+            value: 400.0,
+        };
         assert!(!resolver.evaluate_condition(&cond, &metadata, &image_info));
     }
 
@@ -630,7 +601,10 @@ mod tests {
         let resolver = ParameterResolver::new();
         let metadata = make_test_metadata(200);
         let image_info = make_test_image_info();
-        let cond = GroupCondition::ExifLte { tag: "iso".into(), value: 400.0 };
+        let cond = GroupCondition::ExifLte {
+            tag: "iso".into(),
+            value: 400.0,
+        };
         assert!(resolver.evaluate_condition(&cond, &metadata, &image_info));
     }
 
@@ -639,7 +613,10 @@ mod tests {
         let resolver = ParameterResolver::new();
         let metadata = make_test_metadata(800);
         let image_info = make_test_image_info();
-        let cond = GroupCondition::ExifLte { tag: "iso".into(), value: 400.0 };
+        let cond = GroupCondition::ExifLte {
+            tag: "iso".into(),
+            value: 400.0,
+        };
         assert!(!resolver.evaluate_condition(&cond, &metadata, &image_info));
     }
 
@@ -648,7 +625,10 @@ mod tests {
         let resolver = ParameterResolver::new();
         let metadata = Metadata::default();
         let image_info = make_test_image_info();
-        let cond = GroupCondition::ExifGte { tag: "iso".into(), value: 100.0 };
+        let cond = GroupCondition::ExifGte {
+            tag: "iso".into(),
+            value: 100.0,
+        };
         assert!(!resolver.evaluate_condition(&cond, &metadata, &image_info));
     }
 
@@ -664,7 +644,11 @@ mod tests {
             ..Default::default()
         };
         let image_info = make_test_image_info();
-        let cond = GroupCondition::GpsNear { lat: 34.05, lon: -118.24, radius_km: 10.0 };
+        let cond = GroupCondition::GpsNear {
+            lat: 34.05,
+            lon: -118.24,
+            radius_km: 10.0,
+        };
         assert!(resolver.evaluate_condition(&cond, &metadata, &image_info));
     }
 
@@ -680,7 +664,11 @@ mod tests {
             ..Default::default()
         };
         let image_info = make_test_image_info();
-        let cond = GroupCondition::GpsNear { lat: 34.05, lon: -118.24, radius_km: 0.001 };
+        let cond = GroupCondition::GpsNear {
+            lat: 34.05,
+            lon: -118.24,
+            radius_km: 0.001,
+        };
         assert!(!resolver.evaluate_condition(&cond, &metadata, &image_info));
     }
 
@@ -689,7 +677,11 @@ mod tests {
         let resolver = ParameterResolver::new();
         let metadata = Metadata::default();
         let image_info = make_test_image_info();
-        let cond = GroupCondition::GpsNear { lat: 34.0, lon: -118.0, radius_km: 10.0 };
+        let cond = GroupCondition::GpsNear {
+            lat: 34.0,
+            lon: -118.0,
+            radius_km: 10.0,
+        };
         assert!(!resolver.evaluate_condition(&cond, &metadata, &image_info));
     }
 
@@ -698,10 +690,7 @@ mod tests {
         let resolver = ParameterResolver::new();
         let metadata = Metadata::default();
         let image_info = make_test_image_info();
-        let cond = GroupCondition::And(vec![
-            GroupCondition::Always,
-            GroupCondition::Always,
-        ]);
+        let cond = GroupCondition::And(vec![GroupCondition::Always, GroupCondition::Always]);
         assert!(resolver.evaluate_condition(&cond, &metadata, &image_info));
     }
 
@@ -712,7 +701,10 @@ mod tests {
         let image_info = make_test_image_info();
         let cond = GroupCondition::And(vec![
             GroupCondition::Always,
-            GroupCondition::ExifEq { tag: "make".into(), value: "Canon".into() },
+            GroupCondition::ExifEq {
+                tag: "make".into(),
+                value: "Canon".into(),
+            },
         ]);
         assert!(!resolver.evaluate_condition(&cond, &metadata, &image_info));
     }
@@ -724,7 +716,10 @@ mod tests {
         let image_info = make_test_image_info();
         let cond = GroupCondition::Or(vec![
             GroupCondition::Always,
-            GroupCondition::ExifEq { tag: "make".into(), value: "Canon".into() },
+            GroupCondition::ExifEq {
+                tag: "make".into(),
+                value: "Canon".into(),
+            },
         ]);
         assert!(resolver.evaluate_condition(&cond, &metadata, &image_info));
     }
@@ -735,8 +730,14 @@ mod tests {
         let metadata = Metadata::default();
         let image_info = make_test_image_info();
         let cond = GroupCondition::Or(vec![
-            GroupCondition::ExifEq { tag: "make".into(), value: "Canon".into() },
-            GroupCondition::ExifEq { tag: "make".into(), value: "Nikon".into() },
+            GroupCondition::ExifEq {
+                tag: "make".into(),
+                value: "Canon".into(),
+            },
+            GroupCondition::ExifEq {
+                tag: "make".into(),
+                value: "Nikon".into(),
+            },
         ]);
         assert!(!resolver.evaluate_condition(&cond, &metadata, &image_info));
     }
@@ -746,7 +747,9 @@ mod tests {
         let engine = ExpressionEngine::default();
         let metadata = make_test_metadata(400);
         let image_info = make_test_image_info();
-        let result = engine.evaluate("${exif.make}", &metadata, &image_info).unwrap();
+        let result = engine
+            .evaluate("${exif.make}", &metadata, &image_info)
+            .unwrap();
         assert_eq!(result, serde_json::json!("Canon"));
     }
 
@@ -755,7 +758,9 @@ mod tests {
         let engine = ExpressionEngine::default();
         let metadata = Metadata::default();
         let image_info = make_test_image_info();
-        let result = engine.evaluate("${image.width}", &metadata, &image_info).unwrap();
+        let result = engine
+            .evaluate("${image.width}", &metadata, &image_info)
+            .unwrap();
         assert_eq!(result, serde_json::Value::String("1920".into()));
     }
 
@@ -764,7 +769,9 @@ mod tests {
         let engine = ExpressionEngine::default();
         let metadata = make_test_metadata(400);
         let image_info = make_test_image_info();
-        let result = engine.evaluate("${exif.iso == 400}", &metadata, &image_info).unwrap();
+        let result = engine
+            .evaluate("${exif.iso == 400}", &metadata, &image_info)
+            .unwrap();
         assert_eq!(result, serde_json::Value::String("true".into()));
     }
 
@@ -773,7 +780,9 @@ mod tests {
         let engine = ExpressionEngine::default();
         let metadata = make_test_metadata(800);
         let image_info = make_test_image_info();
-        let result = engine.evaluate("${exif.iso > 400}", &metadata, &image_info).unwrap();
+        let result = engine
+            .evaluate("${exif.iso > 400}", &metadata, &image_info)
+            .unwrap();
         assert_eq!(result, serde_json::Value::String("true".into()));
     }
 
@@ -782,7 +791,9 @@ mod tests {
         let engine = ExpressionEngine::default();
         let metadata = make_test_metadata(400);
         let image_info = make_test_image_info();
-        let result = engine.evaluate("${exif.iso <= 400}", &metadata, &image_info).unwrap();
+        let result = engine
+            .evaluate("${exif.iso <= 400}", &metadata, &image_info)
+            .unwrap();
         assert_eq!(result, serde_json::Value::String("true".into()));
     }
 
@@ -791,7 +802,13 @@ mod tests {
         let engine = ExpressionEngine::default();
         let metadata = make_test_metadata(800);
         let image_info = make_test_image_info();
-        let result = engine.evaluate("${exif.iso >= 400 ? 'high' : 'low'}", &metadata, &image_info).unwrap();
+        let result = engine
+            .evaluate(
+                "${exif.iso >= 400 ? 'high' : 'low'}",
+                &metadata,
+                &image_info,
+            )
+            .unwrap();
         assert_eq!(result, serde_json::Value::String("high".into()));
     }
 
@@ -800,7 +817,13 @@ mod tests {
         let engine = ExpressionEngine::default();
         let metadata = make_test_metadata(100);
         let image_info = make_test_image_info();
-        let result = engine.evaluate("${exif.iso >= 400 ? 'high' : 'low'}", &metadata, &image_info).unwrap();
+        let result = engine
+            .evaluate(
+                "${exif.iso >= 400 ? 'high' : 'low'}",
+                &metadata,
+                &image_info,
+            )
+            .unwrap();
         assert_eq!(result, serde_json::Value::String("low".into()));
     }
 
@@ -818,7 +841,9 @@ mod tests {
         let engine = ExpressionEngine::default();
         let metadata = Metadata::default();
         let image_info = make_test_image_info();
-        let result = engine.evaluate("${\"hello\"}", &metadata, &image_info).unwrap();
+        let result = engine
+            .evaluate("${\"hello\"}", &metadata, &image_info)
+            .unwrap();
         assert_eq!(result, serde_json::Value::String("hello".into()));
     }
 
@@ -827,7 +852,9 @@ mod tests {
         let engine = ExpressionEngine::default();
         let metadata = make_test_metadata(400);
         let image_info = make_test_image_info();
-        let result = engine.evaluate("${exif.make == \"Canon\"}", &metadata, &image_info).unwrap();
+        let result = engine
+            .evaluate("${exif.make == \"Canon\"}", &metadata, &image_info)
+            .unwrap();
         assert_eq!(result, serde_json::Value::String("true".into()));
     }
 
@@ -836,7 +863,9 @@ mod tests {
         let engine = ExpressionEngine::default();
         let metadata = make_test_metadata(400);
         let image_info = make_test_image_info();
-        let result = engine.evaluate("${exif.make != \"Nikon\"}", &metadata, &image_info).unwrap();
+        let result = engine
+            .evaluate("${exif.make != \"Nikon\"}", &metadata, &image_info)
+            .unwrap();
         assert_eq!(result, serde_json::Value::String("true".into()));
     }
 
@@ -845,7 +874,11 @@ mod tests {
         let engine = ExpressionEngine::default();
         let metadata = Metadata::default();
         let image_info = make_test_image_info();
-        assert!(engine.evaluate("${unknown.var}", &metadata, &image_info).is_err());
+        assert!(
+            engine
+                .evaluate("${unknown.var}", &metadata, &image_info)
+                .is_err()
+        );
     }
 
     #[test]
@@ -878,7 +911,10 @@ mod tests {
         let mut node_map = std::collections::HashMap::new();
         node_map.insert(node_id, group_params);
         resolver.add_group_override(
-            GroupCondition::ExifEq { tag: "make".into(), value: "Canon".into() },
+            GroupCondition::ExifEq {
+                tag: "make".into(),
+                value: "Canon".into(),
+            },
             node_map,
         );
 
@@ -900,7 +936,10 @@ mod tests {
         let mut node_map = std::collections::HashMap::new();
         node_map.insert(node_id, group_params);
         resolver.add_group_override(
-            GroupCondition::ExifEq { tag: "make".into(), value: "Nikon".into() },
+            GroupCondition::ExifEq {
+                tag: "make".into(),
+                value: "Nikon".into(),
+            },
             node_map,
         );
 
@@ -1029,8 +1068,14 @@ mod tests {
         let metadata = Metadata::default();
         let image_info = make_test_image_info();
         let cond = GroupCondition::And(vec![
-            GroupCondition::ExifEq { tag: "make".into(), value: "Canon".into() },
-            GroupCondition::ExifEq { tag: "make".into(), value: "Nikon".into() },
+            GroupCondition::ExifEq {
+                tag: "make".into(),
+                value: "Canon".into(),
+            },
+            GroupCondition::ExifEq {
+                tag: "make".into(),
+                value: "Nikon".into(),
+            },
         ]);
         assert!(!resolver.evaluate_condition(&cond, &metadata, &image_info));
     }
@@ -1047,7 +1092,11 @@ mod tests {
             ..Default::default()
         };
         let image_info = make_test_image_info();
-        let cond = GroupCondition::GpsNear { lat: 51.5074, lon: -0.1278, radius_km: 400.0 };
+        let cond = GroupCondition::GpsNear {
+            lat: 51.5074,
+            lon: -0.1278,
+            radius_km: 400.0,
+        };
         assert!(resolver.evaluate_condition(&cond, &metadata, &image_info));
     }
 
@@ -1063,7 +1112,11 @@ mod tests {
             ..Default::default()
         };
         let image_info = make_test_image_info();
-        let cond = GroupCondition::GpsNear { lat: 51.5074, lon: -0.1278, radius_km: 350.0 };
+        let cond = GroupCondition::GpsNear {
+            lat: 51.5074,
+            lon: -0.1278,
+            radius_km: 350.0,
+        };
         assert!(resolver.evaluate_condition(&cond, &metadata, &image_info));
     }
 
@@ -1079,7 +1132,11 @@ mod tests {
             ..Default::default()
         };
         let image_info = make_test_image_info();
-        let cond = GroupCondition::GpsNear { lat: 34.0522, lon: -118.2437, radius_km: 4000.0 };
+        let cond = GroupCondition::GpsNear {
+            lat: 34.0522,
+            lon: -118.2437,
+            radius_km: 4000.0,
+        };
         assert!(resolver.evaluate_condition(&cond, &metadata, &image_info));
     }
 
@@ -1088,7 +1145,10 @@ mod tests {
         let resolver = ParameterResolver::new();
         let metadata = make_test_metadata(400);
         let image_info = make_test_image_info();
-        let cond = GroupCondition::ExifGte { tag: "iso".into(), value: 400.0 };
+        let cond = GroupCondition::ExifGte {
+            tag: "iso".into(),
+            value: 400.0,
+        };
         assert!(resolver.evaluate_condition(&cond, &metadata, &image_info));
     }
 
@@ -1097,7 +1157,10 @@ mod tests {
         let resolver = ParameterResolver::new();
         let metadata = make_test_metadata(400);
         let image_info = make_test_image_info();
-        let cond = GroupCondition::ExifLte { tag: "iso".into(), value: 400.0 };
+        let cond = GroupCondition::ExifLte {
+            tag: "iso".into(),
+            value: 400.0,
+        };
         assert!(resolver.evaluate_condition(&cond, &metadata, &image_info));
     }
 
@@ -1106,7 +1169,10 @@ mod tests {
         let resolver = ParameterResolver::new();
         let metadata = make_test_metadata(400);
         let image_info = make_test_image_info();
-        let cond = GroupCondition::ExifEq { tag: "unknown_tag".into(), value: "x".into() };
+        let cond = GroupCondition::ExifEq {
+            tag: "unknown_tag".into(),
+            value: "x".into(),
+        };
         assert!(!resolver.evaluate_condition(&cond, &metadata, &image_info));
     }
 
@@ -1115,7 +1181,10 @@ mod tests {
         let resolver = ParameterResolver::new();
         let metadata = Metadata::default();
         let image_info = make_test_image_info();
-        let cond = GroupCondition::ExifGte { tag: "iso".into(), value: 100.0 };
+        let cond = GroupCondition::ExifGte {
+            tag: "iso".into(),
+            value: 100.0,
+        };
         assert!(!resolver.evaluate_condition(&cond, &metadata, &image_info));
     }
 
@@ -1124,7 +1193,10 @@ mod tests {
         let resolver = ParameterResolver::new();
         let metadata = Metadata::default();
         let image_info = make_test_image_info();
-        let cond = GroupCondition::ExifLte { tag: "iso".into(), value: 6400.0 };
+        let cond = GroupCondition::ExifLte {
+            tag: "iso".into(),
+            value: 6400.0,
+        };
         assert!(!resolver.evaluate_condition(&cond, &metadata, &image_info));
     }
 
@@ -1133,7 +1205,9 @@ mod tests {
         let engine = ExpressionEngine::default();
         let metadata = make_test_metadata(400);
         let image_info = make_test_image_info();
-        let result = engine.evaluate("${exif.make} ${exif.model}", &metadata, &image_info).unwrap();
+        let result = engine
+            .evaluate("${exif.make} ${exif.model}", &metadata, &image_info)
+            .unwrap();
         assert_eq!(result, serde_json::Value::String("Canon EOS R5".into()));
     }
 
@@ -1142,7 +1216,9 @@ mod tests {
         let engine = ExpressionEngine::default();
         let metadata = make_test_metadata(800);
         let image_info = make_test_image_info();
-        let result = engine.evaluate("${exif.iso > 400 ? 100 : 200}", &metadata, &image_info).unwrap();
+        let result = engine
+            .evaluate("${exif.iso > 400 ? 100 : 200}", &metadata, &image_info)
+            .unwrap();
         assert_eq!(result, serde_json::Value::String("100".into()));
     }
 
@@ -1151,7 +1227,9 @@ mod tests {
         let engine = ExpressionEngine::default();
         let metadata = Metadata::default();
         let image_info = make_test_image_info();
-        let result = engine.evaluate("plain text", &metadata, &image_info).unwrap();
+        let result = engine
+            .evaluate("plain text", &metadata, &image_info)
+            .unwrap();
         assert_eq!(result, serde_json::Value::String("plain text".into()));
     }
 
@@ -1169,7 +1247,9 @@ mod tests {
         let engine = ExpressionEngine::default();
         let metadata = make_test_metadata(400);
         let image_info = make_test_image_info();
-        let result = engine.evaluate("${exif.make != \"Sony\"}", &metadata, &image_info).unwrap();
+        let result = engine
+            .evaluate("${exif.make != \"Sony\"}", &metadata, &image_info)
+            .unwrap();
         assert_eq!(result, serde_json::Value::String("true".into()));
     }
 
@@ -1178,7 +1258,9 @@ mod tests {
         let engine = ExpressionEngine::default();
         let metadata = make_test_metadata(100);
         let image_info = make_test_image_info();
-        let result = engine.evaluate("${exif.iso < 400}", &metadata, &image_info).unwrap();
+        let result = engine
+            .evaluate("${exif.iso < 400}", &metadata, &image_info)
+            .unwrap();
         assert_eq!(result, serde_json::Value::String("true".into()));
     }
 
@@ -1187,7 +1269,9 @@ mod tests {
         let engine = ExpressionEngine::default();
         let metadata = make_test_metadata(400);
         let image_info = make_test_image_info();
-        let result = engine.evaluate("${exif.iso >= 400}", &metadata, &image_info).unwrap();
+        let result = engine
+            .evaluate("${exif.iso >= 400}", &metadata, &image_info)
+            .unwrap();
         assert_eq!(result, serde_json::Value::String("true".into()));
     }
 
@@ -1196,7 +1280,9 @@ mod tests {
         let engine = ExpressionEngine::default();
         let metadata = Metadata::default();
         let image_info = make_test_image_info();
-        let result = engine.evaluate("${'hello world'}", &metadata, &image_info).unwrap();
+        let result = engine
+            .evaluate("${'hello world'}", &metadata, &image_info)
+            .unwrap();
         assert_eq!(result, serde_json::Value::String("hello world".into()));
     }
 
@@ -1205,7 +1291,11 @@ mod tests {
         let engine = ExpressionEngine::default();
         let metadata = Metadata::default();
         let image_info = make_test_image_info();
-        assert!(engine.evaluate("${image.unknown}", &metadata, &image_info).is_err());
+        assert!(
+            engine
+                .evaluate("${image.unknown}", &metadata, &image_info)
+                .is_err()
+        );
     }
 
     #[test]
@@ -1213,7 +1303,11 @@ mod tests {
         let engine = ExpressionEngine::default();
         let metadata = make_test_metadata(100);
         let image_info = make_test_image_info();
-        assert!(engine.evaluate("${exif.unknown}", &metadata, &image_info).is_err());
+        assert!(
+            engine
+                .evaluate("${exif.unknown}", &metadata, &image_info)
+                .is_err()
+        );
     }
 
     #[test]
@@ -1221,7 +1315,9 @@ mod tests {
         let engine = ExpressionEngine::default();
         let metadata = make_test_metadata(100);
         let image_info = make_test_image_info();
-        let result = engine.evaluate("${exif.lens}", &metadata, &image_info).unwrap();
+        let result = engine
+            .evaluate("${exif.lens}", &metadata, &image_info)
+            .unwrap();
         assert_eq!(result, serde_json::Value::String("24-70mm".into()));
     }
 

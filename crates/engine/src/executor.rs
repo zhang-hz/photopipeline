@@ -98,9 +98,7 @@ impl NodeExecutor {
 
         let mut ctx = ExecutionContext::new(image_info.clone(), buffer, metadata.clone());
         for node in &graph.nodes {
-            ctx.node_states
-                .entry(node.id)
-                .or_insert_with(NodeRunState::new);
+            ctx.node_states.entry(node.id).or_default();
         }
 
         for (i, node_id) in order.iter().enumerate() {
@@ -214,8 +212,7 @@ impl NodeExecutor {
                 message: "no pixel buffer available for pixel node".into(),
             })?;
 
-        let mut output =
-            PixelBuffer::new(input.width, input.height, input.layout, input.format);
+        let mut output = PixelBuffer::new(input.width, input.height, input.layout, input.format);
         output.color_space = input.color_space.clone();
         output.icc_profile = input.icc_profile.clone();
 
@@ -227,7 +224,9 @@ impl NodeExecutor {
         struct InlineProgress;
         impl photopipeline_plugin::ProgressSink for InlineProgress {
             fn set_progress(&self, _fraction: f32, _message: &str) {}
-            fn is_canceled(&self) -> bool { false }
+            fn is_canceled(&self) -> bool {
+                false
+            }
         }
 
         let stats = processor
@@ -262,7 +261,7 @@ impl NodeExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use photopipeline_core::{ColorSpace, ImageFormat, PixelFormat, ChannelLayout};
+    use photopipeline_core::{ChannelLayout, ColorSpace, ImageFormat, PixelFormat};
     use uuid::Uuid;
 
     fn make_test_image_info() -> ImageInfo {
@@ -365,11 +364,7 @@ mod tests {
 
     #[test]
     fn execution_context_node_states_empty() {
-        let ctx = ExecutionContext::new(
-            make_test_image_info(),
-            None,
-            Metadata::default(),
-        );
+        let ctx = ExecutionContext::new(make_test_image_info(), None, Metadata::default());
         assert!(ctx.node_states.is_empty());
     }
 

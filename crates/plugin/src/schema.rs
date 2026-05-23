@@ -1,12 +1,12 @@
-use serde::{Deserialize, Serialize};
 use photopipeline_core::{
-    ColorMode, FilePathKind, SliderOrientation, SliderStyle, FloatWidget,
-    IntegerWidget, EnumDisplay,
+    ColorMode, EnumDisplay, FilePathKind, FloatWidget, IntegerWidget, SliderOrientation,
+    SliderStyle,
 };
+use serde::{Deserialize, Serialize};
 
 pub use photopipeline_core::{
-    GuiSchema, GuiLayout, GuiSection, GuiCell, GuiRow,
-    PreviewMode, AuxView, SectionStyle, RowHeight, LabelPosition, SplitOrientation,
+    AuxView, GuiCell, GuiLayout, GuiRow, GuiSchema, GuiSection, LabelPosition, PreviewMode,
+    RowHeight, SectionStyle, SplitOrientation,
 };
 
 // ---- Parameter Schema ----
@@ -18,7 +18,10 @@ pub struct ParameterSchema {
 
 impl ParameterSchema {
     pub fn empty() -> Self {
-        Self { version: 1, sections: vec![] }
+        Self {
+            version: 1,
+            sections: vec![],
+        }
     }
 
     pub fn field(&self, section_id: &str, field_id: &str) -> Option<&ParameterField> {
@@ -73,7 +76,9 @@ pub struct ParameterField {
     pub supports_expression: bool,
 }
 
-fn default_true() -> bool { true }
+fn default_true() -> bool {
+    true
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -166,9 +171,7 @@ pub enum ParameterType {
         unit: Option<String>,
     },
     #[serde(rename = "expression")]
-    Expression {
-        variables: Vec<VariableDef>,
-    },
+    Expression { variables: Vec<VariableDef> },
     #[serde(rename = "preset")]
     Preset {
         preset_schema_ref: String,
@@ -200,16 +203,14 @@ pub enum ParameterType {
         show_histogram: bool,
     },
     #[serde(rename = "separator")]
-    Separator {
-        label: Option<String>,
-    },
+    Separator { label: Option<String> },
     #[serde(rename = "section")]
-    Section {
-        fields: Vec<ParameterField>,
-    },
+    Section { fields: Vec<ParameterField> },
 }
 
-fn default_step() -> f64 { 1.0 }
+fn default_step() -> f64 {
+    1.0
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnumOption {
@@ -246,7 +247,9 @@ pub struct ParameterSet {
 
 impl ParameterSet {
     pub fn new() -> Self {
-        Self { values: Default::default() }
+        Self {
+            values: Default::default(),
+        }
     }
 
     pub fn insert(&mut self, key: String, value: serde_json::Value) {
@@ -528,7 +531,9 @@ mod tests {
     #[test]
     fn parameter_type_integer_serialization_roundtrip() {
         let pt = ParameterType::Integer {
-            min: 0, max: 100, step: 1,
+            min: 0,
+            max: 100,
+            step: 1,
             unit: Some("px".into()),
             style: Default::default(),
         };
@@ -540,9 +545,13 @@ mod tests {
     #[test]
     fn parameter_type_float_serialization_roundtrip() {
         let pt = ParameterType::Float {
-            min: 0.0, max: 1.0, step: 0.1,
-            precision: 2, unit: None,
-            logarithmic: true, style: Default::default(),
+            min: 0.0,
+            max: 1.0,
+            step: 0.1,
+            precision: 2,
+            unit: None,
+            logarithmic: true,
+            style: Default::default(),
         };
         let json = serde_json::to_string(&pt).unwrap();
         let _pt2: ParameterType = serde_json::from_str(&json).unwrap();
@@ -551,7 +560,10 @@ mod tests {
 
     #[test]
     fn parameter_type_boolean_serialization_roundtrip() {
-        let pt = ParameterType::Boolean { label_true: Some("On".into()), label_false: None };
+        let pt = ParameterType::Boolean {
+            label_true: Some("On".into()),
+            label_false: None,
+        };
         let json = serde_json::to_string(&pt).unwrap();
         let _pt2: ParameterType = serde_json::from_str(&json).unwrap();
         assert!(json.contains("\"boolean\""));
@@ -561,8 +573,11 @@ mod tests {
     fn parameter_type_enum_serialization_roundtrip() {
         let pt = ParameterType::Enum {
             options: vec![EnumOption {
-                value: "a".into(), label: "A".into(),
-                description: None, icon: None, tags: vec![],
+                value: "a".into(),
+                label: "A".into(),
+                description: None,
+                icon: None,
+                tags: vec![],
                 recommended: true,
             }],
             display: Default::default(),
@@ -574,7 +589,10 @@ mod tests {
 
     #[test]
     fn parameter_type_color_serialization_roundtrip() {
-        let pt = ParameterType::Color { mode: ColorMode::RGB, show_alpha: true };
+        let pt = ParameterType::Color {
+            mode: ColorMode::RGB,
+            show_alpha: true,
+        };
         let json = serde_json::to_string(&pt).unwrap();
         let _pt2: ParameterType = serde_json::from_str(&json).unwrap();
         assert!(json.contains("\"color\""));
@@ -594,7 +612,10 @@ mod tests {
 
     #[test]
     fn parameter_type_coordinate_serialization_roundtrip() {
-        let pt = ParameterType::Coordinate { alt_required: true, direction_required: false };
+        let pt = ParameterType::Coordinate {
+            alt_required: true,
+            direction_required: false,
+        };
         let json = serde_json::to_string(&pt).unwrap();
         let _pt2: ParameterType = serde_json::from_str(&json).unwrap();
         assert!(json.contains("\"coordinate\""));
@@ -603,9 +624,14 @@ mod tests {
     #[test]
     fn parameter_type_slider_serialization_roundtrip() {
         let pt = ParameterType::Slider {
-            min: 0.0, max: 100.0, step: 5.0,
-            show_ticks: true, ticks: Some(vec![0.0, 50.0, 100.0]),
-            show_value: true, orientation: Default::default(), style: Default::default(),
+            min: 0.0,
+            max: 100.0,
+            step: 5.0,
+            show_ticks: true,
+            ticks: Some(vec![0.0, 50.0, 100.0]),
+            show_value: true,
+            orientation: Default::default(),
+            style: Default::default(),
         };
         let json = serde_json::to_string(&pt).unwrap();
         let _pt2: ParameterType = serde_json::from_str(&json).unwrap();
@@ -615,7 +641,9 @@ mod tests {
     #[test]
     fn parameter_type_combo_slider_serialization_roundtrip() {
         let pt = ParameterType::ComboSlider {
-            min: 0.0, max: 10.0, step: 0.5,
+            min: 0.0,
+            max: 10.0,
+            step: 0.5,
             presets: vec![("Low".into(), 1.0), ("High".into(), 9.0)],
             unit: Some("dB".into()),
         };
@@ -628,8 +656,10 @@ mod tests {
     fn parameter_type_expression_serialization_roundtrip() {
         let pt = ParameterType::Expression {
             variables: vec![VariableDef {
-                name: "iso".into(), description: "ISO value".into(),
-                var_type: "number".into(), example: Some("400".into()),
+                name: "iso".into(),
+                description: "ISO value".into(),
+                var_type: "number".into(),
+                example: Some("400".into()),
             }],
         };
         let json = serde_json::to_string(&pt).unwrap();
@@ -642,10 +672,12 @@ mod tests {
         let pt = ParameterType::Preset {
             preset_schema_ref: "lut_schema".into(),
             builtin_presets: vec![NamedPreset {
-                name: "warm".into(), description: None,
+                name: "warm".into(),
+                description: None,
                 params: Default::default(),
             }],
-            allow_custom: true, allow_import: false,
+            allow_custom: true,
+            allow_import: false,
         };
         let json = serde_json::to_string(&pt).unwrap();
         let _pt2: ParameterType = serde_json::from_str(&json).unwrap();
@@ -655,10 +687,20 @@ mod tests {
     #[test]
     fn parameter_type_array_serialization_roundtrip() {
         let inner = ParameterField {
-            id: "elem".into(), label: "Elem".into(), description: None, help_url: None,
-            field_type: ParameterType::String { max_length: 100, pattern: None, placeholder: None },
-            default: serde_json::json!(""), required: false, advanced: false,
-            allow_override: true, supports_expression: false,
+            id: "elem".into(),
+            label: "Elem".into(),
+            description: None,
+            help_url: None,
+            field_type: ParameterType::String {
+                max_length: 100,
+                pattern: None,
+                placeholder: None,
+            },
+            default: serde_json::json!(""),
+            required: false,
+            advanced: false,
+            allow_override: true,
+            supports_expression: false,
         };
         let pt = ParameterType::Array {
             element: Box::new(inner),
@@ -673,7 +715,9 @@ mod tests {
     #[test]
     fn parameter_type_map_widget_serialization_roundtrip() {
         let pt = ParameterType::MapWidget {
-            show_track: true, show_photos: false, allow_manual_pin: true,
+            show_track: true,
+            show_photos: false,
+            allow_manual_pin: true,
         };
         let json = serde_json::to_string(&pt).unwrap();
         let _pt2: ParameterType = serde_json::from_str(&json).unwrap();
@@ -693,7 +737,9 @@ mod tests {
 
     #[test]
     fn parameter_type_separator_serialization_roundtrip() {
-        let pt = ParameterType::Separator { label: Some("divider".into()) };
+        let pt = ParameterType::Separator {
+            label: Some("divider".into()),
+        };
         let json = serde_json::to_string(&pt).unwrap();
         let _pt2: ParameterType = serde_json::from_str(&json).unwrap();
         assert!(json.contains("\"separator\""));
@@ -702,12 +748,23 @@ mod tests {
     #[test]
     fn parameter_type_section_serialization_roundtrip() {
         let inner = ParameterField {
-            id: "sub".into(), label: "Sub".into(), description: None, help_url: None,
-            field_type: ParameterType::Boolean { label_true: None, label_false: None },
-            default: serde_json::json!(false), required: false, advanced: false,
-            allow_override: true, supports_expression: false,
+            id: "sub".into(),
+            label: "Sub".into(),
+            description: None,
+            help_url: None,
+            field_type: ParameterType::Boolean {
+                label_true: None,
+                label_false: None,
+            },
+            default: serde_json::json!(false),
+            required: false,
+            advanced: false,
+            allow_override: true,
+            supports_expression: false,
         };
-        let pt = ParameterType::Section { fields: vec![inner] };
+        let pt = ParameterType::Section {
+            fields: vec![inner],
+        };
         let json = serde_json::to_string(&pt).unwrap();
         let _pt2: ParameterType = serde_json::from_str(&json).unwrap();
         assert!(json.contains("\"section\""));
@@ -716,10 +773,19 @@ mod tests {
     #[test]
     fn parameter_field_default_allow_override() {
         let field = ParameterField {
-            id: "f".into(), label: "F".into(), description: None, help_url: None,
-            field_type: ParameterType::Boolean { label_true: None, label_false: None },
-            default: serde_json::json!(true), required: false, advanced: false,
-            allow_override: true, supports_expression: false,
+            id: "f".into(),
+            label: "F".into(),
+            description: None,
+            help_url: None,
+            field_type: ParameterType::Boolean {
+                label_true: None,
+                label_false: None,
+            },
+            default: serde_json::json!(true),
+            required: false,
+            advanced: false,
+            allow_override: true,
+            supports_expression: false,
         };
         assert!(field.allow_override);
     }
@@ -727,10 +793,20 @@ mod tests {
     #[test]
     fn parameter_field_default_supports_expression() {
         let field = ParameterField {
-            id: "f2".into(), label: "F2".into(), description: None, help_url: None,
-            field_type: ParameterType::String { max_length: 100, pattern: None, placeholder: None },
-            default: serde_json::json!(""), required: false, advanced: false,
-            allow_override: true, supports_expression: false,
+            id: "f2".into(),
+            label: "F2".into(),
+            description: None,
+            help_url: None,
+            field_type: ParameterType::String {
+                max_length: 100,
+                pattern: None,
+                placeholder: None,
+            },
+            default: serde_json::json!(""),
+            required: false,
+            advanced: false,
+            allow_override: true,
+            supports_expression: false,
         };
         assert!(!field.supports_expression);
     }
@@ -738,10 +814,20 @@ mod tests {
     #[test]
     fn parameter_field_required_true() {
         let field = ParameterField {
-            id: "req".into(), label: "Req".into(), description: None, help_url: None,
-            field_type: ParameterType::String { max_length: 10, pattern: None, placeholder: None },
-            default: serde_json::json!(""), required: true, advanced: false,
-            allow_override: true, supports_expression: false,
+            id: "req".into(),
+            label: "Req".into(),
+            description: None,
+            help_url: None,
+            field_type: ParameterType::String {
+                max_length: 10,
+                pattern: None,
+                placeholder: None,
+            },
+            default: serde_json::json!(""),
+            required: true,
+            advanced: false,
+            allow_override: true,
+            supports_expression: false,
         };
         assert!(field.required);
     }
@@ -749,10 +835,22 @@ mod tests {
     #[test]
     fn parameter_field_advanced_true() {
         let field = ParameterField {
-            id: "adv".into(), label: "Adv".into(), description: None, help_url: None,
-            field_type: ParameterType::Integer { min: 0, max: 10, step: 1, unit: None, style: Default::default() },
-            default: serde_json::json!(0), required: false, advanced: true,
-            allow_override: true, supports_expression: false,
+            id: "adv".into(),
+            label: "Adv".into(),
+            description: None,
+            help_url: None,
+            field_type: ParameterType::Integer {
+                min: 0,
+                max: 10,
+                step: 1,
+                unit: None,
+                style: Default::default(),
+            },
+            default: serde_json::json!(0),
+            required: false,
+            advanced: true,
+            allow_override: true,
+            supports_expression: false,
         };
         assert!(field.advanced);
     }
@@ -831,8 +929,11 @@ mod tests {
     #[test]
     fn enum_option_default_recommended_false() {
         let opt = EnumOption {
-            value: "v".into(), label: "L".into(),
-            description: None, icon: None, tags: vec![],
+            value: "v".into(),
+            label: "L".into(),
+            description: None,
+            icon: None,
+            tags: vec![],
             recommended: false,
         };
         assert!(!opt.recommended);
@@ -850,6 +951,9 @@ mod tests {
         let json = serde_json::to_string(&preset).unwrap();
         let preset2: NamedPreset = serde_json::from_str(&json).unwrap();
         assert_eq!(preset2.name, "vivid");
-        assert_eq!(preset2.params.get("brightness").and_then(|v| v.as_f64()), Some(0.5));
+        assert_eq!(
+            preset2.params.get("brightness").and_then(|v| v.as_f64()),
+            Some(0.5)
+        );
     }
 }

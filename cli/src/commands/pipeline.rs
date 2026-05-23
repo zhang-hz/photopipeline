@@ -1,9 +1,9 @@
-use std::path::Path;
-use std::sync::Arc;
+use indicatif::{ProgressBar, ProgressStyle};
 use photopipeline_engine::executor::NodeExecutor;
 use photopipeline_engine::params::ParameterResolver;
 use photopipeline_plugin::Registry;
-use indicatif::{ProgressBar, ProgressStyle};
+use std::path::Path;
+use std::sync::Arc;
 
 use crate::config;
 

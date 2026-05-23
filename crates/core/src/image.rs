@@ -1,6 +1,6 @@
-use strum::{Display, EnumString};
-use serde::{Deserialize, Serialize};
 use crate::color::ColorSpace;
+use serde::{Deserialize, Serialize};
+use strum::{Display, EnumString};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Display, EnumString)]
 pub enum PixelFormat {
@@ -109,8 +109,8 @@ pub struct TileLayout {
 impl TileLayout {
     pub fn new(image_width: u32, image_height: u32, tile_size: u32, overlap: u32) -> Self {
         let stride = tile_size.saturating_sub(overlap).max(1);
-        let tx = (image_width + stride - 1) / stride;
-        let ty = (image_height + stride - 1) / stride;
+        let tx = image_width.div_ceil(stride);
+        let ty = image_height.div_ceil(stride);
         Self {
             image_width,
             image_height,
@@ -138,9 +138,7 @@ impl TileLayout {
     }
 
     pub fn iter_tiles(&self) -> impl Iterator<Item = TileSpec> + '_ {
-        (0..self.tiles_y).flat_map(move |y| {
-            (0..self.tiles_x).map(move |x| self.tile_spec(x, y))
-        })
+        (0..self.tiles_y).flat_map(move |y| (0..self.tiles_x).map(move |x| self.tile_spec(x, y)))
     }
 }
 
@@ -343,7 +341,10 @@ pub struct PluginConfig {
 
 impl Default for PluginConfig {
     fn default() -> Self {
-        Self { enabled: true, settings: Default::default() }
+        Self {
+            enabled: true,
+            settings: Default::default(),
+        }
     }
 }
 
@@ -545,7 +546,10 @@ mod tests {
 
     #[test]
     fn image_dimensions_pixel_count() {
-        let dims = ImageDimensions { width: 1920, height: 1080 };
+        let dims = ImageDimensions {
+            width: 1920,
+            height: 1080,
+        };
         assert_eq!(dims.pixel_count(), 2073600);
     }
 

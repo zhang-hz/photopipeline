@@ -1,5 +1,5 @@
 pub use photopipeline_core::{
-    GuiSchema, GuiLayout, GuiSection, GuiCell, GuiRow, PreviewMode, AuxView,
+    AuxView, GuiCell, GuiLayout, GuiRow, GuiSchema, GuiSection, PreviewMode,
 };
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -75,10 +75,7 @@ pub enum PanelWidget {
         filters: Vec<(String, String)>,
     },
     #[serde(rename = "color_picker")]
-    ColorPicker {
-        param_id: String,
-        show_alpha: bool,
-    },
+    ColorPicker { param_id: String, show_alpha: bool },
     #[serde(rename = "coordinate_input")]
     CoordinateInput {
         param_id_lat: String,
@@ -113,13 +110,9 @@ pub enum PanelWidget {
         show_histogram: bool,
     },
     #[serde(rename = "nested_fields")]
-    NestedFields {
-        fields: Vec<PanelSection>,
-    },
+    NestedFields { fields: Vec<PanelSection> },
     #[serde(rename = "label")]
-    Label {
-        text: String,
-    },
+    Label { text: String },
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

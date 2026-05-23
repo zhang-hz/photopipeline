@@ -3,197 +3,216 @@ use std::process::Command;
 use std::sync::LazyLock;
 
 use photopipeline_core::{
-    PluginId, PluginVersion, PluginCategory, PluginResult, PluginError,
-    ImageFormat, FormatProbe, DecodeOptions, DecodedImage, EncodeOptions,
-    PixelBuffer, PixelFormat, ColorSpace, ChannelLayout, Metadata,
-    AlignedBuffer,
-    ValidationIssue, HardwareRequirement,
+    AlignedBuffer, ChannelLayout, ColorSpace, DecodeOptions, DecodedImage, EncodeOptions,
+    FormatProbe, HardwareRequirement, ImageFormat, Metadata, PixelBuffer, PixelFormat,
+    PluginCategory, PluginError, PluginId, PluginResult, PluginVersion, ValidationIssue,
 };
 use photopipeline_plugin::{
-    Plugin, FormatProcessor,
-    ParameterSchema, ParameterSet, ParameterSection, ParameterField, ParameterType,
-    EnumOption,
-    GuiSchema, GuiLayout, GuiSection,
-    PreviewMode, SectionStyle,
+    EnumOption, FormatProcessor, GuiLayout, GuiSchema, GuiSection, ParameterField, ParameterSchema,
+    ParameterSection, ParameterSet, ParameterType, Plugin, PreviewMode, SectionStyle,
 };
 
-static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| {
-    ParameterSchema {
-        version: 1,
-        sections: vec![
-            ParameterSection {
-                id: "raw_format".into(),
-                label: "RAW Format".into(),
-                description: Some("RAW file format detection and processing".into()),
-                icon: Some("camera".into()),
-                collapsible: false,
-                default_collapsed: false,
-                fields: vec![
-                    ParameterField {
-                        id: "raw_mode".into(),
-                        label: "Decode Mode".into(),
-                        description: Some("How to process the RAW file".into()),
-                        help_url: None,
-                        field_type: ParameterType::Enum {
-                            options: vec![
-                                EnumOption {
-                                    value: "auto".into(), label: "Auto".into(),
-                                    description: Some("Detect from file and use best method".into()),
-                                    icon: None, tags: vec![], recommended: true,
-                                },
-                                EnumOption {
-                                    value: "dcraw".into(), label: "dcraw".into(),
-                                    description: Some("Use dcraw for raw conversion".into()),
-                                    icon: None, tags: vec![], recommended: false,
-                                },
-                                EnumOption {
-                                    value: "libraw".into(), label: "LibRaw".into(),
-                                    description: Some("Use LibRaw via FFI (when available)".into()),
-                                    icon: None, tags: vec![], recommended: false,
-                                },
-                                EnumOption {
-                                    value: "rawtherapee".into(), label: "RawTherapee".into(),
-                                    description: Some("Use RawTherapee CLI".into()),
-                                    icon: None, tags: vec![], recommended: false,
-                                },
-                            ],
-                            display: Default::default(),
+static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterSchema {
+    version: 1,
+    sections: vec![
+        ParameterSection {
+            id: "raw_format".into(),
+            label: "RAW Format".into(),
+            description: Some("RAW file format detection and processing".into()),
+            icon: Some("camera".into()),
+            collapsible: false,
+            default_collapsed: false,
+            fields: vec![ParameterField {
+                id: "raw_mode".into(),
+                label: "Decode Mode".into(),
+                description: Some("How to process the RAW file".into()),
+                help_url: None,
+                field_type: ParameterType::Enum {
+                    options: vec![
+                        EnumOption {
+                            value: "auto".into(),
+                            label: "Auto".into(),
+                            description: Some("Detect from file and use best method".into()),
+                            icon: None,
+                            tags: vec![],
+                            recommended: true,
                         },
-                        default: serde_json::json!("auto"),
-                        required: false,
-                        advanced: false,
-                        allow_override: true,
-                        supports_expression: false,
-                    },
-                ],
-            },
-            ParameterSection {
-                id: "output".into(),
-                label: "Output".into(),
-                description: Some("RAW decoding output options".into()),
-                icon: None,
-                collapsible: false,
-                default_collapsed: false,
-                fields: vec![
-                    ParameterField {
-                        id: "output_format".into(),
-                        label: "Output Pixel Format".into(),
-                        description: Some("Pixel format for decoded output".into()),
-                        help_url: None,
-                        field_type: ParameterType::Enum {
-                            options: vec![
-                                EnumOption {
-                                    value: "u16".into(), label: "16-bit".into(),
-                                    description: Some("Standard 16-bit integer".into()),
-                                    icon: None, tags: vec![], recommended: true,
-                                },
-                                EnumOption {
-                                    value: "f32".into(), label: "32-bit float".into(),
-                                    description: Some("Floating-point for HDR processing".into()),
-                                    icon: None, tags: vec!["hdr".into()], recommended: false,
-                                },
-                            ],
-                            display: Default::default(),
+                        EnumOption {
+                            value: "dcraw".into(),
+                            label: "dcraw".into(),
+                            description: Some("Use dcraw for raw conversion".into()),
+                            icon: None,
+                            tags: vec![],
+                            recommended: false,
                         },
-                        default: serde_json::json!("u16"),
-                        required: false,
-                        advanced: false,
-                        allow_override: true,
-                        supports_expression: false,
-                    },
-                    ParameterField {
-                        id: "half_size".into(),
-                        label: "Half Size".into(),
-                        description: Some("Decode at half resolution for faster previews".into()),
-                        help_url: None,
-                        field_type: ParameterType::Boolean {
-                            label_true: Some("Half".into()),
-                            label_false: Some("Full".into()),
+                        EnumOption {
+                            value: "libraw".into(),
+                            label: "LibRaw".into(),
+                            description: Some("Use LibRaw via FFI (when available)".into()),
+                            icon: None,
+                            tags: vec![],
+                            recommended: false,
                         },
-                        default: serde_json::json!(false),
-                        required: false,
-                        advanced: false,
-                        allow_override: true,
-                        supports_expression: false,
-                    },
-                    ParameterField {
-                        id: "apply_white_balance".into(),
-                        label: "White Balance".into(),
-                        description: Some("Apply camera white balance during decode".into()),
-                        help_url: None,
-                        field_type: ParameterType::Boolean {
-                            label_true: Some("Apply".into()),
-                            label_false: Some("As-Shot".into()),
+                        EnumOption {
+                            value: "rawtherapee".into(),
+                            label: "RawTherapee".into(),
+                            description: Some("Use RawTherapee CLI".into()),
+                            icon: None,
+                            tags: vec![],
+                            recommended: false,
                         },
-                        default: serde_json::json!(true),
-                        required: false,
-                        advanced: true,
-                        allow_override: true,
-                        supports_expression: false,
+                    ],
+                    display: Default::default(),
+                },
+                default: serde_json::json!("auto"),
+                required: false,
+                advanced: false,
+                allow_override: true,
+                supports_expression: false,
+            }],
+        },
+        ParameterSection {
+            id: "output".into(),
+            label: "Output".into(),
+            description: Some("RAW decoding output options".into()),
+            icon: None,
+            collapsible: false,
+            default_collapsed: false,
+            fields: vec![
+                ParameterField {
+                    id: "output_format".into(),
+                    label: "Output Pixel Format".into(),
+                    description: Some("Pixel format for decoded output".into()),
+                    help_url: None,
+                    field_type: ParameterType::Enum {
+                        options: vec![
+                            EnumOption {
+                                value: "u16".into(),
+                                label: "16-bit".into(),
+                                description: Some("Standard 16-bit integer".into()),
+                                icon: None,
+                                tags: vec![],
+                                recommended: true,
+                            },
+                            EnumOption {
+                                value: "f32".into(),
+                                label: "32-bit float".into(),
+                                description: Some("Floating-point for HDR processing".into()),
+                                icon: None,
+                                tags: vec!["hdr".into()],
+                                recommended: false,
+                            },
+                        ],
+                        display: Default::default(),
                     },
-                ],
-            },
-            ParameterSection {
-                id: "dcraw_options".into(),
-                label: "dcraw Options".into(),
-                description: Some("dcraw-specific settings".into()),
-                icon: None,
-                collapsible: true,
-                default_collapsed: true,
-                fields: vec![
-                    ParameterField {
-                        id: "dcraw_path".into(),
-                        label: "dcraw Path".into(),
-                        description: Some("Path to the dcraw binary".into()),
-                        help_url: None,
-                        field_type: ParameterType::String {
-                            max_length: 1024,
-                            pattern: None,
-                            placeholder: Some("/usr/bin/dcraw".into()),
-                        },
-                        default: serde_json::json!("dcraw"),
-                        required: false,
-                        advanced: true,
-                        allow_override: true,
-                        supports_expression: false,
+                    default: serde_json::json!("u16"),
+                    required: false,
+                    advanced: false,
+                    allow_override: true,
+                    supports_expression: false,
+                },
+                ParameterField {
+                    id: "half_size".into(),
+                    label: "Half Size".into(),
+                    description: Some("Decode at half resolution for faster previews".into()),
+                    help_url: None,
+                    field_type: ParameterType::Boolean {
+                        label_true: Some("Half".into()),
+                        label_false: Some("Full".into()),
                     },
-                    ParameterField {
-                        id: "dcraw_extra_args".into(),
-                        label: "Extra Arguments".into(),
-                        description: Some("Additional dcraw command-line arguments".into()),
-                        help_url: None,
-                        field_type: ParameterType::String {
-                            max_length: 512,
-                            pattern: None,
-                            placeholder: Some("-H 2".into()),
-                        },
-                        default: serde_json::json!(""),
-                        required: false,
-                        advanced: true,
-                        allow_override: true,
-                        supports_expression: false,
+                    default: serde_json::json!(false),
+                    required: false,
+                    advanced: false,
+                    allow_override: true,
+                    supports_expression: false,
+                },
+                ParameterField {
+                    id: "apply_white_balance".into(),
+                    label: "White Balance".into(),
+                    description: Some("Apply camera white balance during decode".into()),
+                    help_url: None,
+                    field_type: ParameterType::Boolean {
+                        label_true: Some("Apply".into()),
+                        label_false: Some("As-Shot".into()),
                     },
-                ],
-            },
-        ],
-    }
-});
-
-static GUI_SCHEMA: LazyLock<GuiSchema> = LazyLock::new(|| {
-    GuiSchema {
-        layout: GuiLayout::Standard {
-            sections: vec![
-                GuiSection { param_section_id: "raw_format".into(), title_visible: true, style: SectionStyle::Card },
-                GuiSection { param_section_id: "output".into(), title_visible: true, style: SectionStyle::Card },
-                GuiSection { param_section_id: "dcraw_options".into(), title_visible: true, style: SectionStyle::CollapsibleCard },
+                    default: serde_json::json!(true),
+                    required: false,
+                    advanced: true,
+                    allow_override: true,
+                    supports_expression: false,
+                },
             ],
         },
-        icon: Some("camera".into()),
-        color: Some("#ef4444".into()),
-        preview: PreviewMode::None,
-        aux_views: vec![],
-        min_panel_width: 320,
-    }
+        ParameterSection {
+            id: "dcraw_options".into(),
+            label: "dcraw Options".into(),
+            description: Some("dcraw-specific settings".into()),
+            icon: None,
+            collapsible: true,
+            default_collapsed: true,
+            fields: vec![
+                ParameterField {
+                    id: "dcraw_path".into(),
+                    label: "dcraw Path".into(),
+                    description: Some("Path to the dcraw binary".into()),
+                    help_url: None,
+                    field_type: ParameterType::String {
+                        max_length: 1024,
+                        pattern: None,
+                        placeholder: Some("/usr/bin/dcraw".into()),
+                    },
+                    default: serde_json::json!("dcraw"),
+                    required: false,
+                    advanced: true,
+                    allow_override: true,
+                    supports_expression: false,
+                },
+                ParameterField {
+                    id: "dcraw_extra_args".into(),
+                    label: "Extra Arguments".into(),
+                    description: Some("Additional dcraw command-line arguments".into()),
+                    help_url: None,
+                    field_type: ParameterType::String {
+                        max_length: 512,
+                        pattern: None,
+                        placeholder: Some("-H 2".into()),
+                    },
+                    default: serde_json::json!(""),
+                    required: false,
+                    advanced: true,
+                    allow_override: true,
+                    supports_expression: false,
+                },
+            ],
+        },
+    ],
+});
+
+static GUI_SCHEMA: LazyLock<GuiSchema> = LazyLock::new(|| GuiSchema {
+    layout: GuiLayout::Standard {
+        sections: vec![
+            GuiSection {
+                param_section_id: "raw_format".into(),
+                title_visible: true,
+                style: SectionStyle::Card,
+            },
+            GuiSection {
+                param_section_id: "output".into(),
+                title_visible: true,
+                style: SectionStyle::Card,
+            },
+            GuiSection {
+                param_section_id: "dcraw_options".into(),
+                title_visible: true,
+                style: SectionStyle::CollapsibleCard,
+            },
+        ],
+    },
+    icon: Some("camera".into()),
+    color: Some("#ef4444".into()),
+    preview: PreviewMode::None,
+    aux_views: vec![],
+    min_panel_width: 320,
 });
 
 #[derive(Debug)]
@@ -201,29 +220,66 @@ pub struct RawInputPlugin {
     id: String,
 }
 
+impl Default for RawInputPlugin {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RawInputPlugin {
     pub fn new() -> Self {
-        Self { id: "photopipeline.plugins.raw_input".to_string() }
+        Self {
+            id: "photopipeline.plugins.raw_input".to_string(),
+        }
     }
 }
 
 #[async_trait]
 impl Plugin for RawInputPlugin {
-    fn id(&self) -> &PluginId { &self.id }
-    fn name(&self) -> &str { "RAW Input" }
-    fn version(&self) -> PluginVersion { PluginVersion::new(1, 0, 0) }
-    fn category(&self) -> PluginCategory { PluginCategory::Input }
-    fn description(&self) -> &str { "Read RAW camera files (ARW, CR2, CR3, NEF, DNG, RAF, ORF, RW2, PEF)" }
-    fn tags(&self) -> &[String] { &TAGS }
-    fn requires_pixel_access(&self) -> bool { false }
-    fn produces_pixel_output(&self) -> bool { true }
-    fn supported_hardware(&self) -> HardwareRequirement { HardwareRequirement { min_ram_mb: 512, ..Default::default() } }
+    fn id(&self) -> &PluginId {
+        &self.id
+    }
+    fn name(&self) -> &str {
+        "RAW Input"
+    }
+    fn version(&self) -> PluginVersion {
+        PluginVersion::new(1, 0, 0)
+    }
+    fn category(&self) -> PluginCategory {
+        PluginCategory::Input
+    }
+    fn description(&self) -> &str {
+        "Read RAW camera files (ARW, CR2, CR3, NEF, DNG, RAF, ORF, RW2, PEF)"
+    }
+    fn tags(&self) -> &[String] {
+        &TAGS
+    }
+    fn requires_pixel_access(&self) -> bool {
+        false
+    }
+    fn produces_pixel_output(&self) -> bool {
+        true
+    }
+    fn supported_hardware(&self) -> HardwareRequirement {
+        HardwareRequirement {
+            min_ram_mb: 512,
+            ..Default::default()
+        }
+    }
 
-    fn parameter_schema(&self) -> &ParameterSchema { &PARAMETER_SCHEMA }
-    fn gui_schema(&self) -> &GuiSchema { &GUI_SCHEMA }
+    fn parameter_schema(&self) -> &ParameterSchema {
+        &PARAMETER_SCHEMA
+    }
+    fn gui_schema(&self) -> &GuiSchema {
+        &GUI_SCHEMA
+    }
 
-    async fn initialize(&mut self, _cfg: &photopipeline_plugin::PluginConfig) -> PluginResult<()> { Ok(()) }
-    async fn shutdown(&mut self) -> PluginResult<()> { Ok(()) }
+    async fn initialize(&mut self, _cfg: &photopipeline_plugin::PluginConfig) -> PluginResult<()> {
+        Ok(())
+    }
+    async fn shutdown(&mut self) -> PluginResult<()> {
+        Ok(())
+    }
 
     async fn validate(&self, params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>> {
         let mut issues = Vec::new();
@@ -264,12 +320,16 @@ impl FormatProcessor for RawInputPlugin {
         ]
     }
 
-    fn format_id(&self) -> ImageFormat { ImageFormat::RAW }
+    fn format_id(&self) -> ImageFormat {
+        ImageFormat::RAW
+    }
 
     fn can_decode(&self, probe: &FormatProbe) -> bool {
         if probe.extension.is_some() || probe.path.is_some() {
             let ext = probe.extension.as_deref().unwrap_or("");
-            let fname = probe.path.as_ref()
+            let fname = probe
+                .path
+                .as_ref()
                 .and_then(|p| p.file_name())
                 .and_then(|n| n.to_str())
                 .unwrap_or("");
@@ -279,29 +339,50 @@ impl FormatProcessor for RawInputPlugin {
 
             if matches!(
                 ext_lower.as_str(),
-                "arw" | "cr2" | "cr3" | "nef" | "dng" | "raf" | "orf" | "rw2"
-                | "pef" | "srf" | "sr2" | "3fr" | "mef" | "mos" | "erf"
+                "arw"
+                    | "cr2"
+                    | "cr3"
+                    | "nef"
+                    | "dng"
+                    | "raf"
+                    | "orf"
+                    | "rw2"
+                    | "pef"
+                    | "srf"
+                    | "sr2"
+                    | "3fr"
+                    | "mef"
+                    | "mos"
+                    | "erf"
             ) {
                 return true;
             }
 
-            if fname_lower.ends_with(".arw") || fname_lower.ends_with(".cr2")
-                || fname_lower.ends_with(".cr3") || fname_lower.ends_with(".nef")
-                || fname_lower.ends_with(".dng") || fname_lower.ends_with(".raf")
-                || fname_lower.ends_with(".orf") || fname_lower.ends_with(".rw2")
+            if fname_lower.ends_with(".arw")
+                || fname_lower.ends_with(".cr2")
+                || fname_lower.ends_with(".cr3")
+                || fname_lower.ends_with(".nef")
+                || fname_lower.ends_with(".dng")
+                || fname_lower.ends_with(".raf")
+                || fname_lower.ends_with(".orf")
+                || fname_lower.ends_with(".rw2")
             {
                 return true;
             }
         }
 
         if let Some(ref magic) = probe.magic_bytes {
-            if magic.len() >= 4 {
-                if &magic[0..4] == b"II\x2A\x00" || &magic[0..4] == b"MM\x00\x2A" {
-                    let tiff_magic_ok = probe.extension.as_deref().map_or(false, |e| {
-                        let el = e.to_lowercase();
-                        matches!(el.as_str(), "arw" | "cr2" | "nef" | "dng" | "orf" | "rw2" | "pef")
-                    });
-                    if tiff_magic_ok { return true; }
+            if magic.len() >= 4 && (&magic[0..4] == b"II\x2A\x00" || &magic[0..4] == b"MM\x00\x2A")
+            {
+                let tiff_magic_ok = probe.extension.as_deref().is_some_and(|e| {
+                    let el = e.to_lowercase();
+                    matches!(
+                        el.as_str(),
+                        "arw" | "cr2" | "nef" | "dng" | "orf" | "rw2" | "pef"
+                    )
+                });
+                if tiff_magic_ok {
+                    return true;
                 }
             }
             if magic.len() >= 4 && &magic[0..4] == b"IIQ\x00" {
@@ -369,16 +450,28 @@ impl FormatProcessor for RawInputPlugin {
     }
 
     async fn encode(
-        &self, _image: &PixelBuffer, _metadata: &Metadata, _options: &EncodeOptions,
+        &self,
+        _image: &PixelBuffer,
+        _metadata: &Metadata,
+        _options: &EncodeOptions,
     ) -> PluginResult<Vec<u8>> {
-        Err(PluginError::UnsupportedFormat("RAW format is input-only".into()))
+        Err(PluginError::UnsupportedFormat(
+            "RAW format is input-only".into(),
+        ))
     }
 }
 
 static TAGS: LazyLock<Vec<String>> = LazyLock::new(|| {
     vec![
-        "input".into(), "raw".into(), "camera".into(), "decode".into(),
-        "arw".into(), "cr2".into(), "nef".into(), "dng".into(),
-        "dcraw".into(), "libraw".into(),
+        "input".into(),
+        "raw".into(),
+        "camera".into(),
+        "decode".into(),
+        "arw".into(),
+        "cr2".into(),
+        "nef".into(),
+        "dng".into(),
+        "dcraw".into(),
+        "libraw".into(),
     ]
 });

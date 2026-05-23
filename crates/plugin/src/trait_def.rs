@@ -1,15 +1,13 @@
 use async_trait::async_trait;
 use photopipeline_core::{
-    ImageFormat, PixelFormat, ColorSpace, GpuBackend, GpuContext, PluginVersion,
-    PluginCategory, PluginResult, ProcessingStats,
-    ImageInfo, Metadata, MetadataScope, MetadataTarget, MetadataWriteReport,
-    PixelBuffer, GpuBuffer, Tensor, AiBackend, ValidationIssue,
-    DecodeOptions, DecodedImage, EncodeOptions, FormatProbe, VersionRequirement,
-    GuiSchema, HardwareRequirement,
+    AiBackend, ColorSpace, DecodeOptions, DecodedImage, EncodeOptions, FormatProbe, GpuBackend,
+    GpuBuffer, GpuContext, GuiSchema, HardwareRequirement, ImageFormat, ImageInfo, Metadata,
+    MetadataScope, MetadataTarget, MetadataWriteReport, PixelBuffer, PixelFormat, PluginCategory,
+    PluginResult, PluginVersion, ProcessingStats, Tensor, ValidationIssue, VersionRequirement,
 };
 
+use crate::schema::{ParameterSchema, ParameterSet};
 pub use photopipeline_core::PluginId;
-use crate::schema::{ParameterSet, ParameterSchema};
 
 // ---- Progress reporting ----
 pub trait ProgressSink: Send + Sync {
@@ -78,11 +76,16 @@ pub trait MetadataProcessor: Plugin {
     fn metadata_scope(&self) -> Vec<MetadataScope>;
 
     async fn read_metadata(
-        &self, target: &MetadataTarget, params: &ParameterSet,
+        &self,
+        target: &MetadataTarget,
+        params: &ParameterSet,
     ) -> PluginResult<Metadata>;
 
     async fn write_metadata(
-        &self, target: &mut MetadataTarget, metadata: &Metadata, params: &ParameterSet,
+        &self,
+        target: &mut MetadataTarget,
+        metadata: &Metadata,
+        params: &ParameterSet,
     ) -> PluginResult<MetadataWriteReport>;
 }
 
@@ -95,8 +98,11 @@ pub trait PixelProcessor: Plugin {
     fn required_gpu_backend(&self) -> Option<GpuBackend>;
 
     async fn process_pixels(
-        &self, input: &PixelBuffer, output: &mut PixelBuffer,
-        params: &ParameterSet, progress: Box<dyn ProgressSink>,
+        &self,
+        input: &PixelBuffer,
+        output: &mut PixelBuffer,
+        params: &ParameterSet,
+        progress: Box<dyn ProgressSink>,
     ) -> PluginResult<ProcessingStats>;
 }
 
@@ -111,7 +117,10 @@ pub trait FormatProcessor: Plugin {
 
     fn can_encode(&self, format: &ImageFormat) -> bool;
     async fn encode(
-        &self, image: &PixelBuffer, metadata: &Metadata, options: &EncodeOptions,
+        &self,
+        image: &PixelBuffer,
+        metadata: &Metadata,
+        options: &EncodeOptions,
     ) -> PluginResult<Vec<u8>>;
 }
 
@@ -122,8 +131,12 @@ pub trait GpuProcessor: Plugin {
     fn gpu_memory_required(&self, info: &ImageInfo, params: &ParameterSet) -> u64;
 
     async fn process_gpu(
-        &self, ctx: &GpuContext, input: &GpuBuffer, output: &mut GpuBuffer,
-        params: &ParameterSet, progress: Box<dyn ProgressSink>,
+        &self,
+        ctx: &GpuContext,
+        input: &GpuBuffer,
+        output: &mut GpuBuffer,
+        params: &ParameterSet,
+        progress: Box<dyn ProgressSink>,
     ) -> PluginResult<ProcessingStats>;
 }
 

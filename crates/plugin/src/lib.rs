@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+#![allow(clippy::ptr_arg)]
 pub mod gui_schema;
 pub mod loader;
 pub mod registry;

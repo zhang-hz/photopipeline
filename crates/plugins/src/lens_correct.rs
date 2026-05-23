@@ -2,230 +2,246 @@ use async_trait::async_trait;
 use std::sync::LazyLock;
 
 use photopipeline_core::{
-    PluginId, PluginVersion, PluginCategory, PluginResult,
-    PixelBuffer, PixelFormat, ColorSpace, GpuBackend,
-    ValidationIssue, HardwareRequirement, ProcessingStats,
+    ColorSpace, GpuBackend, HardwareRequirement, PixelBuffer, PixelFormat, PluginCategory,
+    PluginId, PluginResult, PluginVersion, ProcessingStats, ValidationIssue,
 };
 use photopipeline_plugin::{
-    Plugin, PixelProcessor, ProgressSink,
-    ParameterSchema, ParameterSet, ParameterSection, ParameterField, ParameterType,
-    EnumOption,
-    GuiSchema, GuiLayout, GuiSection,
-    PreviewMode, AuxView, SectionStyle,
+    AuxView, EnumOption, GuiLayout, GuiSchema, GuiSection, ParameterField, ParameterSchema,
+    ParameterSection, ParameterSet, ParameterType, PixelProcessor, Plugin, PreviewMode,
+    ProgressSink, SectionStyle,
 };
 
-static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| {
-    ParameterSchema {
-        version: 1,
-        sections: vec![
-            ParameterSection {
-                id: "lens_detection".into(),
-                label: "Lens Detection".into(),
-                description: Some("Detect and configure lens parameters".into()),
-                icon: Some("camera".into()),
-                collapsible: false,
-                default_collapsed: false,
-                fields: vec![
-                    ParameterField {
-                        id: "correction_mode".into(),
-                        label: "Correction Mode".into(),
-                        description: Some("How to determine lens correction parameters".into()),
-                        help_url: None,
-                        field_type: ParameterType::Enum {
-                            options: vec![
-                                EnumOption {
-                                    value: "auto".into(), label: "Auto (from metadata)".into(),
-                                    description: Some("Detect lens from EXIF and use LensFun database".into()),
-                                    icon: None, tags: vec![], recommended: true,
-                                },
-                                EnumOption {
-                                    value: "manual".into(), label: "Manual".into(),
-                                    description: Some("Specify lens parameters manually".into()),
-                                    icon: None, tags: vec![], recommended: false,
-                                },
-                                EnumOption {
-                                    value: "off".into(), label: "Off".into(),
-                                    description: Some("Disable lens correction".into()),
-                                    icon: None, tags: vec![], recommended: false,
-                                },
-                            ],
-                            display: Default::default(),
+static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterSchema {
+    version: 1,
+    sections: vec![
+        ParameterSection {
+            id: "lens_detection".into(),
+            label: "Lens Detection".into(),
+            description: Some("Detect and configure lens parameters".into()),
+            icon: Some("camera".into()),
+            collapsible: false,
+            default_collapsed: false,
+            fields: vec![ParameterField {
+                id: "correction_mode".into(),
+                label: "Correction Mode".into(),
+                description: Some("How to determine lens correction parameters".into()),
+                help_url: None,
+                field_type: ParameterType::Enum {
+                    options: vec![
+                        EnumOption {
+                            value: "auto".into(),
+                            label: "Auto (from metadata)".into(),
+                            description: Some(
+                                "Detect lens from EXIF and use LensFun database".into(),
+                            ),
+                            icon: None,
+                            tags: vec![],
+                            recommended: true,
                         },
-                        default: serde_json::json!("auto"),
-                        required: false,
-                        advanced: false,
-                        allow_override: true,
-                        supports_expression: false,
-                    },
-                ],
-            },
-            ParameterSection {
-                id: "corrections".into(),
-                label: "Corrections".into(),
-                description: Some("Types of lens correction to apply".into()),
-                icon: Some("wrench".into()),
-                collapsible: false,
-                default_collapsed: false,
-                fields: vec![
-                    ParameterField {
-                        id: "correct_distortion".into(),
-                        label: "Distortion".into(),
-                        description: Some("Correct barrel/pincushion distortion".into()),
-                        help_url: None,
-                        field_type: ParameterType::Boolean {
-                            label_true: Some("Correct".into()),
-                            label_false: Some("Skip".into()),
+                        EnumOption {
+                            value: "manual".into(),
+                            label: "Manual".into(),
+                            description: Some("Specify lens parameters manually".into()),
+                            icon: None,
+                            tags: vec![],
+                            recommended: false,
                         },
-                        default: serde_json::json!(true),
-                        required: false,
-                        advanced: false,
-                        allow_override: true,
-                        supports_expression: false,
-                    },
-                    ParameterField {
-                        id: "correct_tca".into(),
-                        label: "TCA (Chromatic Aberration)".into(),
-                        description: Some("Correct transverse chromatic aberration".into()),
-                        help_url: None,
-                        field_type: ParameterType::Boolean {
-                            label_true: Some("Correct".into()),
-                            label_false: Some("Skip".into()),
+                        EnumOption {
+                            value: "off".into(),
+                            label: "Off".into(),
+                            description: Some("Disable lens correction".into()),
+                            icon: None,
+                            tags: vec![],
+                            recommended: false,
                         },
-                        default: serde_json::json!(true),
-                        required: false,
-                        advanced: false,
-                        allow_override: true,
-                        supports_expression: false,
+                    ],
+                    display: Default::default(),
+                },
+                default: serde_json::json!("auto"),
+                required: false,
+                advanced: false,
+                allow_override: true,
+                supports_expression: false,
+            }],
+        },
+        ParameterSection {
+            id: "corrections".into(),
+            label: "Corrections".into(),
+            description: Some("Types of lens correction to apply".into()),
+            icon: Some("wrench".into()),
+            collapsible: false,
+            default_collapsed: false,
+            fields: vec![
+                ParameterField {
+                    id: "correct_distortion".into(),
+                    label: "Distortion".into(),
+                    description: Some("Correct barrel/pincushion distortion".into()),
+                    help_url: None,
+                    field_type: ParameterType::Boolean {
+                        label_true: Some("Correct".into()),
+                        label_false: Some("Skip".into()),
                     },
-                    ParameterField {
-                        id: "correct_vignetting".into(),
-                        label: "Vignetting".into(),
-                        description: Some("Correct light falloff towards corners".into()),
-                        help_url: None,
-                        field_type: ParameterType::Boolean {
-                            label_true: Some("Correct".into()),
-                            label_false: Some("Skip".into()),
-                        },
-                        default: serde_json::json!(true),
-                        required: false,
-                        advanced: false,
-                        allow_override: true,
-                        supports_expression: false,
+                    default: serde_json::json!(true),
+                    required: false,
+                    advanced: false,
+                    allow_override: true,
+                    supports_expression: false,
+                },
+                ParameterField {
+                    id: "correct_tca".into(),
+                    label: "TCA (Chromatic Aberration)".into(),
+                    description: Some("Correct transverse chromatic aberration".into()),
+                    help_url: None,
+                    field_type: ParameterType::Boolean {
+                        label_true: Some("Correct".into()),
+                        label_false: Some("Skip".into()),
                     },
-                    ParameterField {
-                        id: "correct_geometry".into(),
-                        label: "Geometry".into(),
-                        description: Some("Correct perspective/geometry distortion independently".into()),
-                        help_url: None,
-                        field_type: ParameterType::Boolean {
-                            label_true: Some("Correct".into()),
-                            label_false: Some("Skip".into()),
-                        },
-                        default: serde_json::json!(false),
-                        required: false,
-                        advanced: true,
-                        allow_override: true,
-                        supports_expression: false,
+                    default: serde_json::json!(true),
+                    required: false,
+                    advanced: false,
+                    allow_override: true,
+                    supports_expression: false,
+                },
+                ParameterField {
+                    id: "correct_vignetting".into(),
+                    label: "Vignetting".into(),
+                    description: Some("Correct light falloff towards corners".into()),
+                    help_url: None,
+                    field_type: ParameterType::Boolean {
+                        label_true: Some("Correct".into()),
+                        label_false: Some("Skip".into()),
                     },
-                ],
-            },
-            ParameterSection {
-                id: "lensfun".into(),
-                label: "LensFun".into(),
-                description: Some("LensFun library configuration".into()),
-                icon: Some("database".into()),
-                collapsible: true,
-                default_collapsed: true,
-                fields: vec![
-                    ParameterField {
-                        id: "lensfun_db_path".into(),
-                        label: "Database Path".into(),
-                        description: Some("Custom path to LensFun XML database directory".into()),
-                        help_url: None,
-                        field_type: ParameterType::FilePath {
-                            kind: photopipeline_core::FilePathKind::Directory,
-                            filters: vec![],
-                            must_exist: true,
-                        },
-                        default: serde_json::json!("/usr/share/lensfun"),
-                        required: false,
-                        advanced: true,
-                        allow_override: true,
-                        supports_expression: false,
+                    default: serde_json::json!(true),
+                    required: false,
+                    advanced: false,
+                    allow_override: true,
+                    supports_expression: false,
+                },
+                ParameterField {
+                    id: "correct_geometry".into(),
+                    label: "Geometry".into(),
+                    description: Some(
+                        "Correct perspective/geometry distortion independently".into(),
+                    ),
+                    help_url: None,
+                    field_type: ParameterType::Boolean {
+                        label_true: Some("Correct".into()),
+                        label_false: Some("Skip".into()),
                     },
-                    ParameterField {
-                        id: "camera_make".into(),
-                        label: "Camera Make".into(),
-                        description: Some("Override camera manufacturer for manual mode".into()),
-                        help_url: None,
-                        field_type: ParameterType::String {
-                            max_length: 128,
-                            pattern: None,
-                            placeholder: Some("Sony".into()),
-                        },
-                        default: serde_json::json!(""),
-                        required: false,
-                        advanced: true,
-                        allow_override: true,
-                        supports_expression: false,
-                    },
-                    ParameterField {
-                        id: "camera_model".into(),
-                        label: "Camera Model".into(),
-                        description: Some("Override camera model for manual mode".into()),
-                        help_url: None,
-                        field_type: ParameterType::String {
-                            max_length: 128,
-                            pattern: None,
-                            placeholder: Some("ILCE-7RM5".into()),
-                        },
-                        default: serde_json::json!(""),
-                        required: false,
-                        advanced: true,
-                        allow_override: true,
-                        supports_expression: false,
-                    },
-                    ParameterField {
-                        id: "lens_model".into(),
-                        label: "Lens Model".into(),
-                        description: Some("Override lens model for manual mode".into()),
-                        help_url: None,
-                        field_type: ParameterType::String {
-                            max_length: 256,
-                            pattern: None,
-                            placeholder: Some("FE 24-70mm F2.8 GM II".into()),
-                        },
-                        default: serde_json::json!(""),
-                        required: false,
-                        advanced: true,
-                        allow_override: true,
-                        supports_expression: false,
-                    },
-                ],
-            },
-        ],
-    }
-});
-
-static GUI_SCHEMA: LazyLock<GuiSchema> = LazyLock::new(|| {
-    GuiSchema {
-        layout: GuiLayout::Standard {
-            sections: vec![
-                GuiSection { param_section_id: "lens_detection".into(), title_visible: true, style: SectionStyle::Card },
-                GuiSection { param_section_id: "corrections".into(), title_visible: true, style: SectionStyle::Card },
-                GuiSection { param_section_id: "lensfun".into(), title_visible: true, style: SectionStyle::CollapsibleCard },
+                    default: serde_json::json!(false),
+                    required: false,
+                    advanced: true,
+                    allow_override: true,
+                    supports_expression: false,
+                },
             ],
         },
-        icon: Some("aperture".into()),
-        color: Some("#6366f1".into()),
-        preview: PreviewMode::BeforeAfter {
-            default_split: 0.5,
-            orientation: photopipeline_core::SplitOrientation::Horizontal,
-            lock_zoom: true,
+        ParameterSection {
+            id: "lensfun".into(),
+            label: "LensFun".into(),
+            description: Some("LensFun library configuration".into()),
+            icon: Some("database".into()),
+            collapsible: true,
+            default_collapsed: true,
+            fields: vec![
+                ParameterField {
+                    id: "lensfun_db_path".into(),
+                    label: "Database Path".into(),
+                    description: Some("Custom path to LensFun XML database directory".into()),
+                    help_url: None,
+                    field_type: ParameterType::FilePath {
+                        kind: photopipeline_core::FilePathKind::Directory,
+                        filters: vec![],
+                        must_exist: true,
+                    },
+                    default: serde_json::json!("/usr/share/lensfun"),
+                    required: false,
+                    advanced: true,
+                    allow_override: true,
+                    supports_expression: false,
+                },
+                ParameterField {
+                    id: "camera_make".into(),
+                    label: "Camera Make".into(),
+                    description: Some("Override camera manufacturer for manual mode".into()),
+                    help_url: None,
+                    field_type: ParameterType::String {
+                        max_length: 128,
+                        pattern: None,
+                        placeholder: Some("Sony".into()),
+                    },
+                    default: serde_json::json!(""),
+                    required: false,
+                    advanced: true,
+                    allow_override: true,
+                    supports_expression: false,
+                },
+                ParameterField {
+                    id: "camera_model".into(),
+                    label: "Camera Model".into(),
+                    description: Some("Override camera model for manual mode".into()),
+                    help_url: None,
+                    field_type: ParameterType::String {
+                        max_length: 128,
+                        pattern: None,
+                        placeholder: Some("ILCE-7RM5".into()),
+                    },
+                    default: serde_json::json!(""),
+                    required: false,
+                    advanced: true,
+                    allow_override: true,
+                    supports_expression: false,
+                },
+                ParameterField {
+                    id: "lens_model".into(),
+                    label: "Lens Model".into(),
+                    description: Some("Override lens model for manual mode".into()),
+                    help_url: None,
+                    field_type: ParameterType::String {
+                        max_length: 256,
+                        pattern: None,
+                        placeholder: Some("FE 24-70mm F2.8 GM II".into()),
+                    },
+                    default: serde_json::json!(""),
+                    required: false,
+                    advanced: true,
+                    allow_override: true,
+                    supports_expression: false,
+                },
+            ],
         },
-        aux_views: vec![AuxView::Histogram, AuxView::StatusText],
-        min_panel_width: 340,
-    }
+    ],
+});
+
+static GUI_SCHEMA: LazyLock<GuiSchema> = LazyLock::new(|| GuiSchema {
+    layout: GuiLayout::Standard {
+        sections: vec![
+            GuiSection {
+                param_section_id: "lens_detection".into(),
+                title_visible: true,
+                style: SectionStyle::Card,
+            },
+            GuiSection {
+                param_section_id: "corrections".into(),
+                title_visible: true,
+                style: SectionStyle::Card,
+            },
+            GuiSection {
+                param_section_id: "lensfun".into(),
+                title_visible: true,
+                style: SectionStyle::CollapsibleCard,
+            },
+        ],
+    },
+    icon: Some("aperture".into()),
+    color: Some("#6366f1".into()),
+    preview: PreviewMode::BeforeAfter {
+        default_split: 0.5,
+        orientation: photopipeline_core::SplitOrientation::Horizontal,
+        lock_zoom: true,
+    },
+    aux_views: vec![AuxView::Histogram, AuxView::StatusText],
+    min_panel_width: 340,
 });
 
 #[derive(Debug, Clone)]
@@ -235,7 +251,9 @@ pub struct LensCorrectPlugin {
 
 impl LensCorrectPlugin {
     pub fn new() -> Self {
-        Self { id: "photopipeline.plugins.lens_correct".to_string() }
+        Self {
+            id: "photopipeline.plugins.lens_correct".to_string(),
+        }
     }
 }
 
@@ -247,18 +265,43 @@ impl Default for LensCorrectPlugin {
 
 #[async_trait]
 impl Plugin for LensCorrectPlugin {
-    fn id(&self) -> &PluginId { &self.id }
-    fn name(&self) -> &str { "Lens Correction" }
-    fn version(&self) -> PluginVersion { PluginVersion::new(1, 0, 0) }
-    fn category(&self) -> PluginCategory { PluginCategory::Enhance }
-    fn description(&self) -> &str { "Correct lens distortion, chromatic aberration, and vignetting via LensFun" }
-    fn tags(&self) -> &[String] { &TAGS }
-    fn requires_pixel_access(&self) -> bool { true }
-    fn produces_pixel_output(&self) -> bool { true }
-    fn supported_hardware(&self) -> HardwareRequirement { HardwareRequirement { min_ram_mb: 256, ..Default::default() } }
+    fn id(&self) -> &PluginId {
+        &self.id
+    }
+    fn name(&self) -> &str {
+        "Lens Correction"
+    }
+    fn version(&self) -> PluginVersion {
+        PluginVersion::new(1, 0, 0)
+    }
+    fn category(&self) -> PluginCategory {
+        PluginCategory::Enhance
+    }
+    fn description(&self) -> &str {
+        "Correct lens distortion, chromatic aberration, and vignetting via LensFun"
+    }
+    fn tags(&self) -> &[String] {
+        &TAGS
+    }
+    fn requires_pixel_access(&self) -> bool {
+        true
+    }
+    fn produces_pixel_output(&self) -> bool {
+        true
+    }
+    fn supported_hardware(&self) -> HardwareRequirement {
+        HardwareRequirement {
+            min_ram_mb: 256,
+            ..Default::default()
+        }
+    }
 
-    fn parameter_schema(&self) -> &ParameterSchema { &PARAMETER_SCHEMA }
-    fn gui_schema(&self) -> &GuiSchema { &GUI_SCHEMA }
+    fn parameter_schema(&self) -> &ParameterSchema {
+        &PARAMETER_SCHEMA
+    }
+    fn gui_schema(&self) -> &GuiSchema {
+        &GUI_SCHEMA
+    }
 
     async fn initialize(&mut self, _cfg: &photopipeline_plugin::PluginConfig) -> PluginResult<()> {
         tracing::info!("LensCorrect initialized - LensFun integration via FFI pending");
@@ -286,7 +329,9 @@ impl Plugin for LensCorrectPlugin {
             }
         }
 
-        let db = params.get_str("lensfun_db_path").unwrap_or("/usr/share/lensfun");
+        let db = params
+            .get_str("lensfun_db_path")
+            .unwrap_or("/usr/share/lensfun");
         if mode == "auto" && !db.is_empty() && !std::path::Path::new(db).exists() {
             issues.push(ValidationIssue::Warning {
                 param: "lensfun_db_path".into(),
@@ -301,15 +346,30 @@ impl Plugin for LensCorrectPlugin {
 #[async_trait]
 impl PixelProcessor for LensCorrectPlugin {
     fn supported_input_formats(&self) -> Vec<PixelFormat> {
-        vec![PixelFormat::U8, PixelFormat::U16, PixelFormat::F16, PixelFormat::F32]
+        vec![
+            PixelFormat::U8,
+            PixelFormat::U16,
+            PixelFormat::F16,
+            PixelFormat::F32,
+        ]
     }
 
     fn supported_output_formats(&self) -> Vec<PixelFormat> {
-        vec![PixelFormat::U8, PixelFormat::U16, PixelFormat::F16, PixelFormat::F32]
+        vec![
+            PixelFormat::U8,
+            PixelFormat::U16,
+            PixelFormat::F16,
+            PixelFormat::F32,
+        ]
     }
 
     fn supported_color_spaces(&self) -> Vec<ColorSpace> {
-        vec![ColorSpace::SRGB, ColorSpace::LINEAR_SRGB, ColorSpace::DISPLAY_P3, ColorSpace::ADOBE_RGB]
+        vec![
+            ColorSpace::SRGB,
+            ColorSpace::LINEAR_SRGB,
+            ColorSpace::DISPLAY_P3,
+            ColorSpace::ADOBE_RGB,
+        ]
     }
 
     fn required_gpu_backend(&self) -> Option<GpuBackend> {
@@ -317,15 +377,27 @@ impl PixelProcessor for LensCorrectPlugin {
     }
 
     async fn process_pixels(
-        &self, input: &PixelBuffer, output: &mut PixelBuffer,
-        params: &ParameterSet, progress: Box<dyn ProgressSink>,
+        &self,
+        input: &PixelBuffer,
+        output: &mut PixelBuffer,
+        params: &ParameterSet,
+        progress: Box<dyn ProgressSink>,
     ) -> PluginResult<ProcessingStats> {
         progress.set_progress(0.0, "analyzing lens parameters");
 
         let mode = params.get_str("correction_mode").unwrap_or("auto");
-        let correct_dist = params.get("correct_distortion").and_then(|v| v.as_bool()).unwrap_or(true);
-        let correct_tca = params.get("correct_tca").and_then(|v| v.as_bool()).unwrap_or(true);
-        let correct_vig = params.get("correct_vignetting").and_then(|v| v.as_bool()).unwrap_or(true);
+        let correct_dist = params
+            .get("correct_distortion")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        let correct_tca = params
+            .get("correct_tca")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        let correct_vig = params
+            .get("correct_vignetting")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
 
         if mode == "off" {
             output.data.data.copy_from_slice(&input.data.data);
@@ -338,20 +410,27 @@ impl PixelProcessor for LensCorrectPlugin {
 
             progress.set_progress(1.0, "done");
             return Ok(ProcessingStats {
-                elapsed_ms: 0, cpu_time_ms: 0, gpu_time_ms: None,
+                elapsed_ms: 0,
+                cpu_time_ms: 0,
+                gpu_time_ms: None,
                 peak_memory_mb: (input.data.data.len() * 2) as u64 / (1024 * 1024),
-                input_pixels: input.pixel_count(), output_pixels: input.pixel_count(),
+                input_pixels: input.pixel_count(),
+                output_pixels: input.pixel_count(),
             });
         }
 
         progress.set_progress(0.3, "detecting lens from metadata");
 
-        let corrections_active = vec![
+        let corrections_active = [
             if correct_dist { "distortion" } else { "" },
             if correct_tca { "tca" } else { "" },
             if correct_vig { "vignetting" } else { "" },
         ];
-        let active: Vec<&str> = corrections_active.iter().filter(|s| !s.is_empty()).copied().collect();
+        let active: Vec<&str> = corrections_active
+            .iter()
+            .filter(|s| !s.is_empty())
+            .copied()
+            .collect();
 
         if active.is_empty() {
             tracing::info!("LensCorrect: no corrections enabled, passing through");
@@ -387,8 +466,13 @@ impl PixelProcessor for LensCorrectPlugin {
 
 static TAGS: LazyLock<Vec<String>> = LazyLock::new(|| {
     vec![
-        "lens".into(), "correction".into(), "distortion".into(),
-        "chromatic".into(), "vignetting".into(), "lensfun".into(),
-        "optics".into(), "enhance".into(),
+        "lens".into(),
+        "correction".into(),
+        "distortion".into(),
+        "chromatic".into(),
+        "vignetting".into(),
+        "lensfun".into(),
+        "optics".into(),
+        "enhance".into(),
     ]
 });

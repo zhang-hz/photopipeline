@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct Metadata {
@@ -194,7 +194,9 @@ pub struct GpxPoint {
 
 impl GpxTrack {
     pub fn interpolate_at(&self, timestamp: &DateTime<Utc>) -> Option<GpxPoint> {
-        let pts: Vec<&GpxPoint> = self.points.iter()
+        let pts: Vec<&GpxPoint> = self
+            .points
+            .iter()
             .filter(|p| p.timestamp.is_some())
             .collect();
         if pts.is_empty() {
@@ -216,9 +218,10 @@ impl GpxTrack {
         }
 
         match (before, after) {
-            (Some(b), Some(a)) if b.timestamp == a.timestamp => {
-                Some(GpxPoint { timestamp: Some(*timestamp), ..*b })
-            }
+            (Some(b), Some(a)) if b.timestamp == a.timestamp => Some(GpxPoint {
+                timestamp: Some(*timestamp),
+                ..*b
+            }),
             (Some(b), Some(a)) => {
                 let t0 = b.timestamp.unwrap().timestamp_millis() as f64;
                 let t1 = a.timestamp.unwrap().timestamp_millis() as f64;
@@ -227,9 +230,7 @@ impl GpxTrack {
                 Some(GpxPoint {
                     latitude: b.latitude + (a.latitude - b.latitude) * frac,
                     longitude: b.longitude + (a.longitude - b.longitude) * frac,
-                    elevation: interpolate_f64(
-                        b.elevation, a.elevation, frac,
-                    ),
+                    elevation: interpolate_f64(b.elevation, a.elevation, frac),
                     timestamp: Some(*timestamp),
                     speed: interpolate_f64(b.speed, a.speed, frac),
                     bearing: interpolate_bearing(b.bearing, a.bearing, frac),
@@ -261,10 +262,20 @@ fn interpolate_bearing(a: Option<f64>, b: Option<f64>, frac: f64) -> Option<f64>
     match (a, b) {
         (Some(va), Some(vb)) => {
             let mut diff = vb - va;
-            if diff > 180.0 { diff -= 360.0; }
-            if diff < -180.0 { diff += 360.0; }
+            if diff > 180.0 {
+                diff -= 360.0;
+            }
+            if diff < -180.0 {
+                diff += 360.0;
+            }
             let result = va + diff * frac;
-            Some(if result < 0.0 { result + 360.0 } else if result >= 360.0 { result - 360.0 } else { result })
+            Some(if result < 0.0 {
+                result + 360.0
+            } else if result >= 360.0 {
+                result - 360.0
+            } else {
+                result
+            })
         }
         (Some(va), None) => Some(va),
         (None, Some(vb)) => Some(vb),
@@ -399,16 +410,14 @@ mod tests {
         let t_before = Utc.with_ymd_and_hms(2024, 1, 1, 11, 0, 0).unwrap();
         let track = GpxTrack {
             name: None,
-            points: vec![
-                GpxPoint {
-                    latitude: 40.0,
-                    longitude: -74.0,
-                    elevation: Some(10.0),
-                    timestamp: Some(t1),
-                    speed: Some(5.0),
-                    bearing: Some(90.0),
-                },
-            ],
+            points: vec![GpxPoint {
+                latitude: 40.0,
+                longitude: -74.0,
+                elevation: Some(10.0),
+                timestamp: Some(t1),
+                speed: Some(5.0),
+                bearing: Some(90.0),
+            }],
             duration_seconds: None,
             distance_meters: None,
         };
@@ -426,16 +435,14 @@ mod tests {
         let t_after = Utc.with_ymd_and_hms(2024, 1, 1, 13, 0, 0).unwrap();
         let track = GpxTrack {
             name: None,
-            points: vec![
-                GpxPoint {
-                    latitude: 40.0,
-                    longitude: -74.0,
-                    elevation: Some(10.0),
-                    timestamp: Some(t1),
-                    speed: Some(5.0),
-                    bearing: Some(90.0),
-                },
-            ],
+            points: vec![GpxPoint {
+                latitude: 40.0,
+                longitude: -74.0,
+                elevation: Some(10.0),
+                timestamp: Some(t1),
+                speed: Some(5.0),
+                bearing: Some(90.0),
+            }],
             duration_seconds: None,
             distance_meters: None,
         };
@@ -503,37 +510,61 @@ mod tests {
 
     #[test]
     fn gps_data_lat_only_no_coordinates() {
-        let gps = GpsData { latitude: Some(34.0), longitude: None, ..Default::default() };
+        let gps = GpsData {
+            latitude: Some(34.0),
+            longitude: None,
+            ..Default::default()
+        };
         assert!(!gps.has_coordinates());
     }
 
     #[test]
     fn gps_data_lon_only_no_coordinates() {
-        let gps = GpsData { latitude: None, longitude: Some(-118.0), ..Default::default() };
+        let gps = GpsData {
+            latitude: None,
+            longitude: Some(-118.0),
+            ..Default::default()
+        };
         assert!(!gps.has_coordinates());
     }
 
     #[test]
     fn gps_data_both_none_no_coordinates() {
-        let gps = GpsData { latitude: None, longitude: None, ..Default::default() };
+        let gps = GpsData {
+            latitude: None,
+            longitude: None,
+            ..Default::default()
+        };
         assert!(!gps.has_coordinates());
     }
 
     #[test]
     fn gps_data_coordinate_tuple_zero_zero() {
-        let gps = GpsData { latitude: Some(0.0), longitude: Some(0.0), ..Default::default() };
+        let gps = GpsData {
+            latitude: Some(0.0),
+            longitude: Some(0.0),
+            ..Default::default()
+        };
         assert_eq!(gps.coordinate_tuple(), Some((0.0, 0.0)));
     }
 
     #[test]
     fn gps_data_coordinate_tuple_max_values() {
-        let gps = GpsData { latitude: Some(90.0), longitude: Some(180.0), ..Default::default() };
+        let gps = GpsData {
+            latitude: Some(90.0),
+            longitude: Some(180.0),
+            ..Default::default()
+        };
         assert_eq!(gps.coordinate_tuple(), Some((90.0, 180.0)));
     }
 
     #[test]
     fn gps_data_coordinate_tuple_min_values() {
-        let gps = GpsData { latitude: Some(-90.0), longitude: Some(-180.0), ..Default::default() };
+        let gps = GpsData {
+            latitude: Some(-90.0),
+            longitude: Some(-180.0),
+            ..Default::default()
+        };
         assert_eq!(gps.coordinate_tuple(), Some((-90.0, -180.0)));
     }
 
@@ -591,7 +622,12 @@ mod tests {
 
     #[test]
     fn gpx_track_empty_points_no_interpolation() {
-        let track = GpxTrack { name: None, points: vec![], duration_seconds: None, distance_meters: None };
+        let track = GpxTrack {
+            name: None,
+            points: vec![],
+            duration_seconds: None,
+            distance_meters: None,
+        };
         let t = chrono::Utc::now();
         assert_eq!(track.interpolate_at(&t), None);
     }
@@ -600,9 +636,14 @@ mod tests {
     fn gpx_track_all_points_no_timestamps() {
         let track = GpxTrack {
             name: None,
-            points: vec![
-                GpxPoint { latitude: 40.0, longitude: -74.0, elevation: None, timestamp: None, speed: None, bearing: None },
-            ],
+            points: vec![GpxPoint {
+                latitude: 40.0,
+                longitude: -74.0,
+                elevation: None,
+                timestamp: None,
+                speed: None,
+                bearing: None,
+            }],
             duration_seconds: None,
             distance_meters: None,
         };
@@ -615,9 +656,14 @@ mod tests {
         let t1 = chrono::Utc::now();
         let track = GpxTrack {
             name: None,
-            points: vec![
-                GpxPoint { latitude: 40.0, longitude: -74.0, elevation: None, timestamp: Some(t1), speed: None, bearing: None },
-            ],
+            points: vec![GpxPoint {
+                latitude: 40.0,
+                longitude: -74.0,
+                elevation: None,
+                timestamp: Some(t1),
+                speed: None,
+                bearing: None,
+            }],
             duration_seconds: None,
             distance_meters: None,
         };
@@ -632,8 +678,22 @@ mod tests {
         let track = GpxTrack {
             name: None,
             points: vec![
-                GpxPoint { latitude: 40.0, longitude: -74.0, elevation: None, timestamp: Some(t1), speed: None, bearing: None },
-                GpxPoint { latitude: 41.0, longitude: -73.0, elevation: None, timestamp: Some(t1), speed: None, bearing: None },
+                GpxPoint {
+                    latitude: 40.0,
+                    longitude: -74.0,
+                    elevation: None,
+                    timestamp: Some(t1),
+                    speed: None,
+                    bearing: None,
+                },
+                GpxPoint {
+                    latitude: 41.0,
+                    longitude: -73.0,
+                    elevation: None,
+                    timestamp: Some(t1),
+                    speed: None,
+                    bearing: None,
+                },
             ],
             duration_seconds: None,
             distance_meters: None,
@@ -649,8 +709,22 @@ mod tests {
         let track = GpxTrack {
             name: None,
             points: vec![
-                GpxPoint { latitude: 10.0, longitude: 20.0, elevation: None, timestamp: Some(t1), speed: None, bearing: None },
-                GpxPoint { latitude: 20.0, longitude: 30.0, elevation: None, timestamp: Some(t2), speed: None, bearing: None },
+                GpxPoint {
+                    latitude: 10.0,
+                    longitude: 20.0,
+                    elevation: None,
+                    timestamp: Some(t1),
+                    speed: None,
+                    bearing: None,
+                },
+                GpxPoint {
+                    latitude: 20.0,
+                    longitude: 30.0,
+                    elevation: None,
+                    timestamp: Some(t2),
+                    speed: None,
+                    bearing: None,
+                },
             ],
             duration_seconds: None,
             distance_meters: None,
@@ -668,8 +742,22 @@ mod tests {
         let track = GpxTrack {
             name: None,
             points: vec![
-                GpxPoint { latitude: 10.0, longitude: 20.0, elevation: None, timestamp: Some(t1), speed: None, bearing: None },
-                GpxPoint { latitude: 20.0, longitude: 30.0, elevation: None, timestamp: Some(t2), speed: None, bearing: None },
+                GpxPoint {
+                    latitude: 10.0,
+                    longitude: 20.0,
+                    elevation: None,
+                    timestamp: Some(t1),
+                    speed: None,
+                    bearing: None,
+                },
+                GpxPoint {
+                    latitude: 20.0,
+                    longitude: 30.0,
+                    elevation: None,
+                    timestamp: Some(t2),
+                    speed: None,
+                    bearing: None,
+                },
             ],
             duration_seconds: None,
             distance_meters: None,
@@ -818,19 +906,32 @@ mod tests {
 
     #[test]
     fn raw_exif_tag_fields() {
-        let tag = RawExifTag { tag: "0x829A".into(), group: "ExifIFD".into(), value: "1/125".into() };
+        let tag = RawExifTag {
+            tag: "0x829A".into(),
+            group: "ExifIFD".into(),
+            value: "1/125".into(),
+        };
         assert_eq!(tag.tag, "0x829A");
     }
 
     #[test]
     fn raw_xmp_property_fields() {
-        let prop = RawXmpProperty { namespace: "dc".into(), name: "creator".into(), value: "me".into() };
+        let prop = RawXmpProperty {
+            namespace: "dc".into(),
+            name: "creator".into(),
+            value: "me".into(),
+        };
         assert_eq!(prop.namespace, "dc");
     }
 
     #[test]
     fn raw_iptc_tag_fields() {
-        let tag = RawIptcTag { record: 2, dataset: 80, name: "Byline".into(), value: "Author".into() };
+        let tag = RawIptcTag {
+            record: 2,
+            dataset: 80,
+            name: "Byline".into(),
+            value: "Author".into(),
+        };
         assert_eq!(tag.record, 2);
         assert_eq!(tag.dataset, 80);
     }
@@ -838,14 +939,21 @@ mod tests {
     #[test]
     fn metadata_target_fields() {
         use crate::types::ImageFormat;
-        let target = MetadataTarget { path: "/tmp/img.jpg".into(), format: ImageFormat::JPEG };
+        let target = MetadataTarget {
+            path: "/tmp/img.jpg".into(),
+            format: ImageFormat::JPEG,
+        };
         assert_eq!(target.path, "/tmp/img.jpg");
         assert_eq!(target.format, ImageFormat::JPEG);
     }
 
     #[test]
     fn metadata_write_report_defaults() {
-        let report = MetadataWriteReport { tags_written: 10, tags_skipped: 2, warnings: vec![] };
+        let report = MetadataWriteReport {
+            tags_written: 10,
+            tags_skipped: 2,
+            warnings: vec![],
+        };
         assert_eq!(report.tags_written, 10);
         assert_eq!(report.tags_skipped, 2);
         assert!(report.warnings.is_empty());
@@ -881,8 +989,12 @@ mod tests {
     #[test]
     fn gpx_point_all_fields_none() {
         let pt = GpxPoint {
-            latitude: 0.0, longitude: 0.0,
-            elevation: None, timestamp: None, speed: None, bearing: None,
+            latitude: 0.0,
+            longitude: 0.0,
+            elevation: None,
+            timestamp: None,
+            speed: None,
+            bearing: None,
         };
         assert!(pt.elevation.is_none());
     }

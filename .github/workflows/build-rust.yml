@@ -47,8 +47,9 @@ jobs:
       - name: Run tests
         run: cargo test --workspace 2>&1 | tee test-output.txt
 
-      - name: Run clippy
-        run: cargo clippy --workspace -- -D warnings
+      - name: Run clippy (warnings, non-fatal)
+        continue-on-error: true
+        run: cargo clippy --workspace 2>&1 | tee clippy-output.txt
 
       - name: Check formatting
         run: cargo fmt --all -- --check

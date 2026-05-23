@@ -1,8 +1,6 @@
-use photopipeline_core::{PluginCategory, PluginVersion, ImageFormat, GpuBackend, AiBackend};
-use photopipeline_plugin::{
-    registry::Registry, PluginQuery,
-};
-use photopipeline_engine::{PipelineTemplate, TemplateNode, TemplateEdge, PipelineGraph};
+use photopipeline_core::{AiBackend, GpuBackend, ImageFormat, PluginCategory, PluginVersion};
+use photopipeline_engine::{PipelineGraph, PipelineTemplate, TemplateEdge, TemplateNode};
+use photopipeline_plugin::{PluginQuery, registry::Registry};
 use uuid::Uuid;
 
 #[test]
@@ -50,8 +48,14 @@ fn test_build_pipeline_graph_from_template() {
             },
         ],
         edges: vec![
-            TemplateEdge { from: "input".into(), to: "transform".into() },
-            TemplateEdge { from: "transform".into(), to: "output".into() },
+            TemplateEdge {
+                from: "input".into(),
+                to: "transform".into(),
+            },
+            TemplateEdge {
+                from: "transform".into(),
+                to: "output".into(),
+            },
         ],
         overrides: vec![],
         groups: vec![],
@@ -392,7 +396,11 @@ fn test_registry_register_get_remove_cycle() {
     let manifests_before = registry.manifests().len();
     let first_id = registry.all()[0].id().clone();
     let removed = registry.unregister(&first_id);
-    assert!(removed.is_some(), "unregister returned None for {}", first_id);
+    assert!(
+        removed.is_some(),
+        "unregister returned None for {}",
+        first_id
+    );
     let manifests_after = registry.manifests().len();
     assert_eq!(manifests_after, manifests_before - 1);
 }

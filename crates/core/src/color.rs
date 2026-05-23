@@ -120,7 +120,7 @@ impl ColorSpace {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Display, EnumString)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Display, EnumString, Default)]
 pub enum WhitePoint {
     #[strum(serialize = "d50")]
     D50,
@@ -129,6 +129,7 @@ pub enum WhitePoint {
     #[strum(serialize = "d60")]
     D60,
     #[strum(serialize = "d65")]
+    #[default]
     D65,
     #[strum(serialize = "d75")]
     D75,
@@ -138,12 +139,6 @@ pub enum WhitePoint {
     E,
     #[strum(serialize = "custom")]
     Custom(f32, f32),
-}
-
-impl Default for WhitePoint {
-    fn default() -> Self {
-        Self::D65
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Display, EnumString)]
@@ -190,8 +185,16 @@ pub struct ColorRGB {
 }
 
 impl ColorRGB {
-    pub const BLACK: Self = Self { r: 0.0, g: 0.0, b: 0.0 };
-    pub const WHITE: Self = Self { r: 1.0, g: 1.0, b: 1.0 };
+    pub const BLACK: Self = Self {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
+    };
+    pub const WHITE: Self = Self {
+        r: 1.0,
+        g: 1.0,
+        b: 1.0,
+    };
 
     pub fn luminance(&self) -> f32 {
         0.2126 * self.r + 0.7152 * self.g + 0.0722 * self.b
@@ -293,7 +296,11 @@ mod tests {
         assert_eq!(ColorRGB::WHITE.b, 1.0);
         assert!((ColorRGB::WHITE.luminance() - 1.0).abs() < 0.001);
 
-        let gray = ColorRGB { r: 0.5, g: 0.5, b: 0.5 };
+        let gray = ColorRGB {
+            r: 0.5,
+            g: 0.5,
+            b: 0.5,
+        };
         assert!((gray.luminance() - 0.5).abs() < 0.001);
     }
 
@@ -323,7 +330,10 @@ mod tests {
     #[test]
     fn rendering_intent_display() {
         assert_eq!(RenderingIntent::Perceptual.to_string(), "perceptual");
-        assert_eq!(RenderingIntent::RelativeColorimetric.to_string(), "relative_colorimetric");
+        assert_eq!(
+            RenderingIntent::RelativeColorimetric.to_string(),
+            "relative_colorimetric"
+        );
     }
 
     #[test]
@@ -342,31 +352,46 @@ mod tests {
 
     #[test]
     fn is_hdr_at_203_nits_is_false() {
-        let cs = ColorSpace { hdr_nits: Some(203.0), ..ColorSpace::default() };
+        let cs = ColorSpace {
+            hdr_nits: Some(203.0),
+            ..ColorSpace::default()
+        };
         assert!(!cs.is_hdr());
     }
 
     #[test]
     fn is_hdr_at_204_nits_is_true() {
-        let cs = ColorSpace { hdr_nits: Some(204.0), ..ColorSpace::default() };
+        let cs = ColorSpace {
+            hdr_nits: Some(204.0),
+            ..ColorSpace::default()
+        };
         assert!(cs.is_hdr());
     }
 
     #[test]
     fn is_hdr_at_0_nits_is_false() {
-        let cs = ColorSpace { hdr_nits: Some(0.0), ..ColorSpace::default() };
+        let cs = ColorSpace {
+            hdr_nits: Some(0.0),
+            ..ColorSpace::default()
+        };
         assert!(!cs.is_hdr());
     }
 
     #[test]
     fn is_hdr_at_10000_nits_is_true() {
-        let cs = ColorSpace { hdr_nits: Some(10000.0), ..ColorSpace::default() };
+        let cs = ColorSpace {
+            hdr_nits: Some(10000.0),
+            ..ColorSpace::default()
+        };
         assert!(cs.is_hdr());
     }
 
     #[test]
     fn is_hdr_none_nits_is_false() {
-        let cs = ColorSpace { hdr_nits: None, ..ColorSpace::default() };
+        let cs = ColorSpace {
+            hdr_nits: None,
+            ..ColorSpace::default()
+        };
         assert!(!cs.is_hdr());
     }
 
@@ -474,47 +499,79 @@ mod tests {
 
     #[test]
     fn rendering_intent_absolute_colorimetric_display() {
-        assert_eq!(RenderingIntent::AbsoluteColorimetric.to_string(), "absolute_colorimetric");
+        assert_eq!(
+            RenderingIntent::AbsoluteColorimetric.to_string(),
+            "absolute_colorimetric"
+        );
     }
 
     #[test]
     fn gamut_mapping_luminance_preserve_display() {
-        assert_eq!(GamutMapping::LuminancePreserve.to_string(), "luminance_preserve");
+        assert_eq!(
+            GamutMapping::LuminancePreserve.to_string(),
+            "luminance_preserve"
+        );
     }
 
     #[test]
     fn color_rgb_red_luminance() {
-        let red = ColorRGB { r: 1.0, g: 0.0, b: 0.0 };
+        let red = ColorRGB {
+            r: 1.0,
+            g: 0.0,
+            b: 0.0,
+        };
         assert!((red.luminance() - 0.2126).abs() < 0.001);
     }
 
     #[test]
     fn color_rgb_green_luminance() {
-        let green = ColorRGB { r: 0.0, g: 1.0, b: 0.0 };
+        let green = ColorRGB {
+            r: 0.0,
+            g: 1.0,
+            b: 0.0,
+        };
         assert!((green.luminance() - 0.7152).abs() < 0.001);
     }
 
     #[test]
     fn color_rgb_blue_luminance() {
-        let blue = ColorRGB { r: 0.0, g: 0.0, b: 1.0 };
+        let blue = ColorRGB {
+            r: 0.0,
+            g: 0.0,
+            b: 1.0,
+        };
         assert!((blue.luminance() - 0.0722).abs() < 0.001);
     }
 
     #[test]
     fn color_rgb_gray_luminance() {
-        let gray = ColorRGB { r: 0.5, g: 0.5, b: 0.5 };
+        let gray = ColorRGB {
+            r: 0.5,
+            g: 0.5,
+            b: 0.5,
+        };
         assert!((gray.luminance() - 0.5).abs() < 0.001);
     }
 
     #[test]
     fn color_rgba_with_alpha() {
-        let c = ColorRGBA { r: 1.0, g: 0.5, b: 0.0, a: 0.8 };
+        let c = ColorRGBA {
+            r: 1.0,
+            g: 0.5,
+            b: 0.0,
+            a: 0.8,
+        };
         assert_eq!(c.a, 0.8);
     }
 
     #[test]
     fn color_rgba_full_opaque() {
-        let c = ColorRGBA { r: 0.0, g: 0.0, b: 0.0, a: 1.0 };
+        let c = ColorRGBA {
+            r: 0.0,
+            g: 0.0,
+            b: 0.0,
+            a: 1.0,
+        };
         assert_eq!(c.a, 1.0);
     }
 

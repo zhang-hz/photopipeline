@@ -1,7 +1,7 @@
-use std::collections::{HashMap, HashSet, VecDeque};
 use photopipeline_core::{NodeId, PluginError, PluginId, PortId};
 use photopipeline_plugin::ParameterSet;
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet, VecDeque};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,7 +59,9 @@ pub struct TemplateNode {
     pub params: Option<HashMap<String, serde_json::Value>>,
 }
 
-fn default_true() -> bool { true }
+fn default_true() -> bool {
+    true
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplateEdge {
@@ -94,7 +96,9 @@ pub struct BatchConfig {
     pub resume: bool,
 }
 
-fn default_parallel() -> usize { 1 }
+fn default_parallel() -> usize {
+    1
+}
 
 impl PipelineTemplate {
     pub fn validate(&self) -> Result<(), String> {
@@ -120,7 +124,10 @@ impl PipelineTemplate {
 
 impl PipelineGraph {
     pub fn new() -> Self {
-        Self { nodes: Vec::new(), edges: Vec::new() }
+        Self {
+            nodes: Vec::new(),
+            edges: Vec::new(),
+        }
     }
 
     pub fn add_node(&mut self, plugin_id: String, label: String) -> NodeId {
@@ -151,21 +158,28 @@ impl PipelineGraph {
         if port_ids.is_empty() {
             return false;
         }
-        self.edges.retain(|(from, to)| !port_ids.contains(from) && !port_ids.contains(to));
+        self.edges
+            .retain(|(from, to)| !port_ids.contains(from) && !port_ids.contains(to));
         self.nodes.retain(|n| n.id != node_id);
         true
     }
 
     pub fn connect(&mut self, from_port: PortId, to_port: PortId) -> Result<(), PluginError> {
         if from_port == to_port {
-            return Err(PluginError::ValidationFailed("cannot connect a port to itself".into()));
+            return Err(PluginError::ValidationFailed(
+                "cannot connect a port to itself".into(),
+            ));
         }
-        let from_owner = self.port_owner(from_port)
+        let from_owner = self
+            .port_owner(from_port)
             .ok_or_else(|| PluginError::ValidationFailed("source port not found".into()))?;
-        let to_owner = self.port_owner(to_port)
+        let to_owner = self
+            .port_owner(to_port)
             .ok_or_else(|| PluginError::ValidationFailed("destination port not found".into()))?;
         if from_owner == to_owner {
-            return Err(PluginError::ValidationFailed("cannot connect ports on the same node".into()));
+            return Err(PluginError::ValidationFailed(
+                "cannot connect ports on the same node".into(),
+            ));
         }
         if self.edges.contains(&(from_port, to_port)) {
             return Err(PluginError::ValidationFailed("edge already exists".into()));
@@ -256,7 +270,11 @@ impl PipelineGraph {
             issues.push(format!("cycle detected: {}", e));
         }
 
-        if issues.is_empty() { Ok(()) } else { Err(issues) }
+        if issues.is_empty() {
+            Ok(())
+        } else {
+            Err(issues)
+        }
     }
 
     pub fn from_template(template: &PipelineTemplate) -> Self {
@@ -273,22 +291,26 @@ impl PipelineGraph {
                 output_ports.insert(tn.id.clone(), node.outputs[0]);
                 input_ports.insert(tn.id.clone(), node.inputs[0]);
             }
-            if let Some(params) = &tn.params {
-                if let Some(node) = graph.nodes.iter_mut().find(|n| n.id == node_id) {
-                    let mut ps = ParameterSet::new();
-                    ps.values = params.clone();
-                    node.parameter_overrides = Some(ps);
-                }
+            if let Some(params) = &tn.params
+                && let Some(node) = graph.nodes.iter_mut().find(|n| n.id == node_id)
+            {
+                let mut ps = ParameterSet::new();
+                ps.values = params.clone();
+                node.parameter_overrides = Some(ps);
             }
         }
 
         for te in &template.edges {
             if let (Some(&from_port), Some(&to_port)) =
                 (output_ports.get(&te.from), input_ports.get(&te.to))
+                && let Err(e) = graph.connect(from_port, to_port)
             {
-                if let Err(e) = graph.connect(from_port, to_port) {
-                    tracing::warn!("template edge {} -> {} connection failed: {}", te.from, te.to, e);
-                }
+                tracing::warn!(
+                    "template edge {} -> {} connection failed: {}",
+                    te.from,
+                    te.to,
+                    e
+                );
             }
         }
 
@@ -322,7 +344,9 @@ impl PipelineGraph {
 }
 
 impl Default for PipelineGraph {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -413,7 +437,10 @@ mod tests {
         let template = PipelineTemplate {
             metadata: Default::default(),
             nodes: vec![],
-            edges: vec![TemplateEdge { from: "n1".into(), to: "n2".into() }],
+            edges: vec![TemplateEdge {
+                from: "n1".into(),
+                to: "n2".into(),
+            }],
             overrides: vec![],
             groups: vec![],
             batch: None,
@@ -521,7 +548,10 @@ mod tests {
                     params: None,
                 },
             ],
-            edges: vec![TemplateEdge { from: "input".into(), to: "output".into() }],
+            edges: vec![TemplateEdge {
+                from: "input".into(),
+                to: "output".into(),
+            }],
             overrides: vec![],
             groups: vec![],
             batch: None,
@@ -650,7 +680,10 @@ mod tests {
                 enabled: true,
                 params: None,
             }],
-            edges: vec![TemplateEdge { from: "n1".into(), to: "n2".into() }],
+            edges: vec![TemplateEdge {
+                from: "n1".into(),
+                to: "n2".into(),
+            }],
             overrides: vec![],
             groups: vec![],
             batch: None,
@@ -669,7 +702,10 @@ mod tests {
                 enabled: true,
                 params: None,
             }],
-            edges: vec![TemplateEdge { from: "n2".into(), to: "n1".into() }],
+            edges: vec![TemplateEdge {
+                from: "n2".into(),
+                to: "n1".into(),
+            }],
             overrides: vec![],
             groups: vec![],
             batch: None,
@@ -949,7 +985,10 @@ mod tests {
     fn test_image_override_fields() {
         let mut params = std::collections::HashMap::new();
         params.insert("colorspace".into(), ParameterSet::new());
-        let ov = ImageOverride { image: "img1.jpg".into(), params };
+        let ov = ImageOverride {
+            image: "img1.jpg".into(),
+            params,
+        };
         assert_eq!(ov.image, "img1.jpg");
     }
 

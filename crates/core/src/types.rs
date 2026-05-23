@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::image::PixelFormat;
 use crate::color::ColorSpace;
 use crate::error::PluginError;
+use crate::image::PixelFormat;
 
 pub type PluginId = String;
 pub type NodeId = Uuid;
@@ -32,7 +32,12 @@ impl std::fmt::Display for PluginVersion {
 
 impl PluginVersion {
     pub const fn new(major: u32, minor: u32, patch: u32) -> Self {
-        Self { major, minor, patch, pre: None }
+        Self {
+            major,
+            minor,
+            patch,
+            pre: None,
+        }
     }
 }
 
@@ -54,12 +59,23 @@ impl std::fmt::Display for VersionRequirement {
 
 impl VersionRequirement {
     pub fn is_satisfied_by(&self, version: &PluginVersion) -> bool {
-        version >= &self.min_version
-            && self.max_version.as_ref().map_or(true, |max| version < max)
+        version >= &self.min_version && self.max_version.as_ref().is_none_or(|max| version < max)
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, strum::Display, strum::EnumString, PartialOrd, Ord)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    strum::Display,
+    strum::EnumString,
+    PartialOrd,
+    Ord,
+)]
 #[strum(serialize_all = "snake_case")]
 pub enum PluginCategory {
     Input,
@@ -166,8 +182,11 @@ pub struct ImageInfo {
 
 pub type PluginResult<T> = Result<T, PluginError>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, Default,
+)]
 pub enum ColorMode {
+    #[default]
     RGB,
     RGBA,
     HSL,
@@ -175,82 +194,68 @@ pub enum ColorMode {
     Lab,
 }
 
-impl Default for ColorMode {
-    fn default() -> Self { Self::RGB }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, Default,
+)]
 pub enum FilePathKind {
+    #[default]
     File,
     Directory,
     SaveFile,
 }
 
-impl Default for FilePathKind {
-    fn default() -> Self { Self::File }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, Default,
+)]
 pub enum SliderOrientation {
+    #[default]
     Horizontal,
     Vertical,
 }
 
-impl Default for SliderOrientation {
-    fn default() -> Self { Self::Horizontal }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum SliderStyle {
+    #[default]
     Continuous,
     Discrete,
     Range,
     DualHandle,
 }
 
-impl Default for SliderStyle {
-    fn default() -> Self { Self::Continuous }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum FloatWidget {
+    #[default]
     SpinBox,
     Slider,
     ComboSlider,
     DragInput,
 }
 
-impl Default for FloatWidget {
-    fn default() -> Self { Self::SpinBox }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum IntegerWidget {
+    #[default]
     SpinBox,
     Slider,
     Combo,
 }
 
-impl Default for IntegerWidget {
-    fn default() -> Self { Self::SpinBox }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum EnumDisplay {
+    #[default]
     Dropdown,
     RadioGroup,
     ButtonGroup,
     SegmentedControl,
     Tabs,
     PopupCard,
-}
-
-impl Default for EnumDisplay {
-    fn default() -> Self { Self::Dropdown }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -314,7 +319,9 @@ pub enum GuiLayout {
 }
 
 impl Default for GuiLayout {
-    fn default() -> Self { Self::Standard { sections: vec![] } }
+    fn default() -> Self {
+        Self::Standard { sections: vec![] }
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -348,7 +355,10 @@ pub enum PreviewMode {
         orientation: SplitOrientation,
         lock_zoom: bool,
     },
-    Tiled { rows: u32, cols: u32 },
+    Tiled {
+        rows: u32,
+        cols: u32,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -389,7 +399,12 @@ mod tests {
 
     #[test]
     fn plugin_version_display_with_pre() {
-        let v = PluginVersion { major: 1, minor: 2, patch: 3, pre: Some("alpha".into()) };
+        let v = PluginVersion {
+            major: 1,
+            minor: 2,
+            patch: 3,
+            pre: Some("alpha".into()),
+        };
         assert_eq!(v.to_string(), "1.2.3-alpha");
     }
 
@@ -575,21 +590,46 @@ mod tests {
 
     #[test]
     fn plugin_version_with_pre_eq_same_pre() {
-        let v1 = PluginVersion { major: 2, minor: 0, patch: 0, pre: Some("rc1".into()) };
-        let v2 = PluginVersion { major: 2, minor: 0, patch: 0, pre: Some("rc1".into()) };
+        let v1 = PluginVersion {
+            major: 2,
+            minor: 0,
+            patch: 0,
+            pre: Some("rc1".into()),
+        };
+        let v2 = PluginVersion {
+            major: 2,
+            minor: 0,
+            patch: 0,
+            pre: Some("rc1".into()),
+        };
         assert_eq!(v1, v2);
     }
 
     #[test]
     fn plugin_version_with_pre_ne_different_pre() {
-        let v1 = PluginVersion { major: 2, minor: 0, patch: 0, pre: Some("alpha".into()) };
-        let v2 = PluginVersion { major: 2, minor: 0, patch: 0, pre: Some("beta".into()) };
+        let v1 = PluginVersion {
+            major: 2,
+            minor: 0,
+            patch: 0,
+            pre: Some("alpha".into()),
+        };
+        let v2 = PluginVersion {
+            major: 2,
+            minor: 0,
+            patch: 0,
+            pre: Some("beta".into()),
+        };
         assert_ne!(v1, v2);
     }
 
     #[test]
     fn plugin_version_with_pre_lt_no_pre() {
-        let v1 = PluginVersion { major: 1, minor: 0, patch: 0, pre: Some("alpha".into()) };
+        let v1 = PluginVersion {
+            major: 1,
+            minor: 0,
+            patch: 0,
+            pre: Some("alpha".into()),
+        };
         let v2 = PluginVersion::new(1, 0, 0);
         let _ = v1 < v2 || v1 > v2;
     }
@@ -821,7 +861,10 @@ mod tests {
 
     #[test]
     fn plugin_category_custom_display() {
-        assert_eq!(PluginCategory::Custom("my_cat".into()).to_string(), "my_cat");
+        assert_eq!(
+            PluginCategory::Custom("my_cat".into()).to_string(),
+            "my_cat"
+        );
     }
 
     #[test]
@@ -834,7 +877,10 @@ mod tests {
     #[test]
     fn plugin_category_known_from_str() {
         use std::str::FromStr;
-        assert_eq!(PluginCategory::from_str("input").unwrap(), PluginCategory::Input);
+        assert_eq!(
+            PluginCategory::from_str("input").unwrap(),
+            PluginCategory::Input
+        );
     }
 
     #[test]

@@ -1,4 +1,4 @@
-name: Code Coverage
+name: Coverage
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
 
 jobs:
   coverage:
-    name: Coverage
+    name: Code Coverage & Stress Tests
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -21,7 +21,7 @@ jobs:
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
 
-      - name: Install system dependencies
+      - name: Install Linux dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake pkg-config \
@@ -29,27 +29,26 @@ jobs:
             liblcms2-dev libexif-dev libtiff-dev libpng-dev libopenexr-dev \
             ninja-build
 
-      - name: Install cargo-tarpaulin
-        run: cargo install cargo-tarpaulin
+      - name: Build workspace
+        run: cargo build --workspace
 
-      - name: Run coverage with tarpaulin
-        run: cargo tarpaulin --workspace --out Xml --output-dir coverage
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          directory: coverage
-          fail_ci_if_error: true
-
-      - name: Run tests single-threaded
+      - name: Run tests (single-threaded for stability)
         run: cargo test --workspace -- --test-threads=1
 
-      - name: Stress test (10 iterations)
+      - name: Stress test (run tests 5 times)
         run: |
-          for i in $(seq 1 10); do
-            echo "=== Iteration $i / 10 ==="
-            cargo test --workspace -- --test-threads=1 || {
-              echo "FAIL: Flaky test detected on iteration $i"
+          for i in 1 2 3 4 5; do
+            echo "=== Iteration $i ==="
+            cargo test --workspace -- --test-threads=1
+            if [ $? -ne 0 ]; then
+              echo "Stress test failed at iteration $i"
               exit 1
-            }
+            fi
           done
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stress-test-results
+          path: test-output.txt

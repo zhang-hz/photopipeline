@@ -104,18 +104,9 @@ pub enum PluginError {
 
 #[derive(Debug, Clone)]
 pub enum ValidationIssue {
-    Error {
-        param: String,
-        message: String,
-    },
-    Warning {
-        param: String,
-        message: String,
-    },
-    Info {
-        param: String,
-        message: String,
-    },
+    Error { param: String, message: String },
+    Warning { param: String, message: String },
+    Info { param: String, message: String },
 }
 
 impl std::fmt::Display for ValidationIssue {
@@ -141,14 +132,19 @@ mod tests {
 
     #[test]
     fn plugin_error_already_loaded_display() {
-        let err = PluginError::AlreadyLoaded { plugin: "p1".into() };
+        let err = PluginError::AlreadyLoaded {
+            plugin: "p1".into(),
+        };
         let msg = err.to_string();
         assert!(msg.contains("p1"));
     }
 
     #[test]
     fn plugin_error_load_failed_display() {
-        let err = PluginError::LoadFailed { plugin: "p2".into(), reason: "bad".into() };
+        let err = PluginError::LoadFailed {
+            plugin: "p2".into(),
+            reason: "bad".into(),
+        };
         let msg = err.to_string();
         assert!(msg.contains("p2"));
         assert!(msg.contains("bad"));
@@ -238,14 +234,19 @@ mod tests {
 
     #[test]
     fn plugin_error_internal_display() {
-        let err = PluginError::Internal { plugin: "p6".into(), message: "panic".into() };
+        let err = PluginError::Internal {
+            plugin: "p6".into(),
+            message: "panic".into(),
+        };
         let msg = err.to_string();
         assert!(msg.contains("panic"));
     }
 
     #[test]
     fn plugin_error_canceled_display() {
-        let err = PluginError::Canceled { plugin: "p7".into() };
+        let err = PluginError::Canceled {
+            plugin: "p7".into(),
+        };
         let msg = err.to_string();
         assert!(msg.contains("canceled"));
     }
@@ -253,7 +254,10 @@ mod tests {
     #[test]
     fn plugin_error_io_display() {
         let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file missing");
-        let err = PluginError::Io { plugin: "reader".into(), error: io_err };
+        let err = PluginError::Io {
+            plugin: "reader".into(),
+            error: io_err,
+        };
         let msg = err.to_string();
         assert!(msg.contains("IO"));
     }
@@ -262,7 +266,10 @@ mod tests {
     fn plugin_error_io_source_chain() {
         use std::error::Error;
         let io_err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied");
-        let err = PluginError::Io { plugin: "writer".into(), error: io_err };
+        let err = PluginError::Io {
+            plugin: "writer".into(),
+            error: io_err,
+        };
         let source = err.source();
         assert!(source.is_some());
     }
@@ -275,7 +282,10 @@ mod tests {
 
     #[test]
     fn plugin_error_node_execution_failed_display() {
-        let err = PluginError::NodeExecutionFailed { node: "n1".into(), message: "crash".into() };
+        let err = PluginError::NodeExecutionFailed {
+            node: "n1".into(),
+            message: "crash".into(),
+        };
         let msg = err.to_string();
         assert!(msg.contains("n1"));
         assert!(msg.contains("crash"));
@@ -326,13 +336,19 @@ mod tests {
     #[test]
     fn plugin_error_from_io_error() {
         let io_err = std::io::Error::new(std::io::ErrorKind::Other, "oh no");
-        let err = PluginError::Io { plugin: "test".into(), error: io_err };
+        let err = PluginError::Io {
+            plugin: "test".into(),
+            error: io_err,
+        };
         assert!(matches!(err, PluginError::Io { .. }));
     }
 
     #[test]
     fn validation_issue_error_display() {
-        let vi = ValidationIssue::Error { param: "q".into(), message: "too high".into() };
+        let vi = ValidationIssue::Error {
+            param: "q".into(),
+            message: "too high".into(),
+        };
         let s = vi.to_string();
         assert!(s.contains("ERROR"));
         assert!(s.contains("q"));
@@ -340,14 +356,20 @@ mod tests {
 
     #[test]
     fn validation_issue_warning_display() {
-        let vi = ValidationIssue::Warning { param: "size".into(), message: "large".into() };
+        let vi = ValidationIssue::Warning {
+            param: "size".into(),
+            message: "large".into(),
+        };
         let s = vi.to_string();
         assert!(s.contains("WARNING"));
     }
 
     #[test]
     fn validation_issue_info_display() {
-        let vi = ValidationIssue::Info { param: "note".into(), message: "ok".into() };
+        let vi = ValidationIssue::Info {
+            param: "note".into(),
+            message: "ok".into(),
+        };
         let s = vi.to_string();
         assert!(s.contains("INFO"));
     }

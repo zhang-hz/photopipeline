@@ -1,13 +1,18 @@
+#![allow(clippy::result_large_err)]
 mod commands;
 mod config;
 
 use clap::{Parser, Subcommand};
 use photopipeline_plugin::Registry;
-use tracing_subscriber::EnvFilter;
 use std::sync::Arc;
+use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
-#[command(name = "photopipeline", version, about = "Ultra-high-precision cross-platform image post-processing")]
+#[command(
+    name = "photopipeline",
+    version,
+    about = "Ultra-high-precision cross-platform image post-processing"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -44,9 +49,7 @@ enum PipelineCmd {
 #[derive(Subcommand)]
 enum PluginCmd {
     List,
-    Info {
-        plugin_id: String,
-    },
+    Info { plugin_id: String },
 }
 
 #[derive(Subcommand)]
@@ -71,8 +74,7 @@ enum BatchCmd {
 async fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("info"))
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
         )
         .init();
 
@@ -82,7 +84,11 @@ async fn main() {
     photopipeline_plugins::register_all(&registry);
 
     match cli.command {
-        Commands::Pipeline(PipelineCmd::Run { config, input, output }) => {
+        Commands::Pipeline(PipelineCmd::Run {
+            config,
+            input,
+            output,
+        }) => {
             commands::pipeline::run(&registry, &config, &input, &output).await;
         }
         Commands::Pipeline(PipelineCmd::Validate { config }) => {
@@ -94,7 +100,11 @@ async fn main() {
         Commands::Plugin(PluginCmd::Info { plugin_id }) => {
             commands::plugin::info(&registry, &plugin_id);
         }
-        Commands::Batch(BatchCmd::Run { config, pattern, output }) => {
+        Commands::Batch(BatchCmd::Run {
+            config,
+            pattern,
+            output,
+        }) => {
             commands::batch::run(&registry, &config, &pattern, &output).await;
         }
         Commands::Batch(BatchCmd::Validate { config, pattern }) => {

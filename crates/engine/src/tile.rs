@@ -38,12 +38,7 @@ impl TileEngine {
 
         let tile_count = layout.total_tiles;
 
-        let mut output = PixelBuffer::new(
-            input.width,
-            input.height,
-            input.layout,
-            input.format,
-        );
+        let mut output = PixelBuffer::new(input.width, input.height, input.layout, input.format);
         output.color_space = input.color_space.clone();
         output.icc_profile = input.icc_profile.clone();
 
@@ -58,34 +53,28 @@ impl TileEngine {
             }
 
             let fraction = (i as f32) / (tile_count.max(1) as f32);
-            progress.set_progress(fraction, &format!("processing tile {}/{}", i + 1, tile_count));
-
-            let mut tile_input = PixelBuffer::new(
-                spec.width,
-                spec.height,
-                input.layout,
-                input.format,
+            progress.set_progress(
+                fraction,
+                &format!("processing tile {}/{}", i + 1, tile_count),
             );
+
+            let mut tile_input =
+                PixelBuffer::new(spec.width, spec.height, input.layout, input.format);
             tile_input.color_space = input.color_space.clone();
             tile_input.icc_profile = input.icc_profile.clone();
 
             self.copy_tile_from_source(input, &mut tile_input, spec);
 
-            let mut tile_output = PixelBuffer::new(
-                spec.width,
-                spec.height,
-                input.layout,
-                input.format,
-            );
+            let mut tile_output =
+                PixelBuffer::new(spec.width, spec.height, input.layout, input.format);
             tile_output.color_space = input.color_space.clone();
             tile_output.icc_profile = input.icc_profile.clone();
 
-            let boxed_progress: Box<dyn ProgressSink> =
-                Box::new(TileProgressSink {
-                    _current: i,
-                    _total: tile_count as usize,
-                    _inner: tile_count as usize,
-                });
+            let boxed_progress: Box<dyn ProgressSink> = Box::new(TileProgressSink {
+                _current: i,
+                _total: tile_count as usize,
+                _inner: tile_count as usize,
+            });
 
             let _stats = processor
                 .process_pixels(&tile_input, &mut tile_output, params, boxed_progress)
@@ -125,9 +114,7 @@ impl TileEngine {
                 && dst_offset + dst_stride <= dest.data.data.len()
             {
                 dest.data.data[dst_offset..dst_offset + dst_stride]
-                    .copy_from_slice(
-                        &source.data.data[src_offset..src_offset + dst_stride],
-                    );
+                    .copy_from_slice(&source.data.data[src_offset..src_offset + dst_stride]);
             }
         }
     }
@@ -333,7 +320,9 @@ mod tests {
         struct DummyProgress;
         impl ProgressSink for DummyProgress {
             fn set_progress(&self, _fraction: f32, _message: &str) {}
-            fn is_canceled(&self) -> bool { false }
+            fn is_canceled(&self) -> bool {
+                false
+            }
         }
         assert!(!DummyProgress.is_canceled());
     }

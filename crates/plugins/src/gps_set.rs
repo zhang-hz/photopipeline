@@ -2,201 +2,234 @@ use async_trait::async_trait;
 use std::sync::LazyLock;
 
 use photopipeline_core::{
-    PluginId, PluginVersion, PluginCategory, PluginResult, PluginError,
-    Metadata, MetadataTarget, MetadataWriteReport, MetadataScope,
-    GpsData, GpxTrack, ValidationIssue, HardwareRequirement,
+    GpsData, GpxTrack, HardwareRequirement, Metadata, MetadataScope, MetadataTarget,
+    MetadataWriteReport, PluginCategory, PluginError, PluginId, PluginResult, PluginVersion,
+    ValidationIssue,
 };
 use photopipeline_plugin::{
-    Plugin, MetadataProcessor,
-    ParameterSchema, ParameterSet, ParameterSection, ParameterField, ParameterType,
-    EnumOption,
-    GuiSchema, GuiLayout, GuiSection,
-    PreviewMode, AuxView, SectionStyle,
+    AuxView, EnumOption, GuiLayout, GuiSchema, GuiSection, MetadataProcessor, ParameterField,
+    ParameterSchema, ParameterSection, ParameterSet, ParameterType, Plugin, PreviewMode,
+    SectionStyle,
 };
 
-static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| {
-    ParameterSchema {
-        version: 1,
-        sections: vec![
-            ParameterSection {
-                id: "source".into(),
-                label: "GPS Source".into(),
-                description: Some("Choose how GPS coordinates are determined".into()),
-                icon: Some("crosshair".into()),
-                collapsible: false,
-                default_collapsed: false,
-                fields: vec![
-                    ParameterField {
-                        id: "gps_mode".into(),
-                        label: "Mode".into(),
-                        description: Some("Method for assigning GPS coordinates".into()),
-                        help_url: None,
-                        field_type: ParameterType::Enum {
-                            options: vec![
-                                EnumOption {
-                                    value: "manual".into(), label: "Manual Entry".into(),
-                                    description: Some("Enter coordinates manually".into()),
-                                    icon: Some("pencil".into()), tags: vec![], recommended: true,
-                                },
-                                EnumOption {
-                                    value: "gpx_track".into(), label: "GPX Track".into(),
-                                    description: Some("Interpolate from GPX track log".into()),
-                                    icon: Some("route".into()), tags: vec![], recommended: false,
-                                },
-                                EnumOption {
-                                    value: "clear".into(), label: "Clear GPS".into(),
-                                    description: Some("Remove all GPS data".into()),
-                                    icon: Some("trash".into()), tags: vec![], recommended: false,
-                                },
-                            ],
-                            display: Default::default(),
-                        },
-                        default: serde_json::json!("manual"),
-                        required: true,
-                        advanced: false,
-                        allow_override: true,
-                        supports_expression: false,
+static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterSchema {
+    version: 1,
+    sections: vec![
+        ParameterSection {
+            id: "source".into(),
+            label: "GPS Source".into(),
+            description: Some("Choose how GPS coordinates are determined".into()),
+            icon: Some("crosshair".into()),
+            collapsible: false,
+            default_collapsed: false,
+            fields: vec![
+                ParameterField {
+                    id: "gps_mode".into(),
+                    label: "Mode".into(),
+                    description: Some("Method for assigning GPS coordinates".into()),
+                    help_url: None,
+                    field_type: ParameterType::Enum {
+                        options: vec![
+                            EnumOption {
+                                value: "manual".into(),
+                                label: "Manual Entry".into(),
+                                description: Some("Enter coordinates manually".into()),
+                                icon: Some("pencil".into()),
+                                tags: vec![],
+                                recommended: true,
+                            },
+                            EnumOption {
+                                value: "gpx_track".into(),
+                                label: "GPX Track".into(),
+                                description: Some("Interpolate from GPX track log".into()),
+                                icon: Some("route".into()),
+                                tags: vec![],
+                                recommended: false,
+                            },
+                            EnumOption {
+                                value: "clear".into(),
+                                label: "Clear GPS".into(),
+                                description: Some("Remove all GPS data".into()),
+                                icon: Some("trash".into()),
+                                tags: vec![],
+                                recommended: false,
+                            },
+                        ],
+                        display: Default::default(),
                     },
-                    ParameterField {
-                        id: "gpx_file".into(),
-                        label: "GPX File".into(),
-                        description: Some("Path to a GPX track file for interpolation".into()),
-                        help_url: None,
-                        field_type: ParameterType::FilePath {
-                            kind: Default::default(),
-                            filters: vec![
-                                ("GPX Files".into(), "*.gpx".into()),
-                                ("All Files".into(), "*".into()),
-                            ],
-                            must_exist: true,
-                        },
-                        default: serde_json::json!(""),
-                        required: false,
-                        advanced: false,
-                        allow_override: true,
-                        supports_expression: false,
+                    default: serde_json::json!("manual"),
+                    required: true,
+                    advanced: false,
+                    allow_override: true,
+                    supports_expression: false,
+                },
+                ParameterField {
+                    id: "gpx_file".into(),
+                    label: "GPX File".into(),
+                    description: Some("Path to a GPX track file for interpolation".into()),
+                    help_url: None,
+                    field_type: ParameterType::FilePath {
+                        kind: Default::default(),
+                        filters: vec![
+                            ("GPX Files".into(), "*.gpx".into()),
+                            ("All Files".into(), "*".into()),
+                        ],
+                        must_exist: true,
                     },
-                ],
-            },
-            ParameterSection {
-                id: "manual_coords".into(),
-                label: "Manual Coordinates".into(),
-                description: Some("Enter GPS coordinates directly".into()),
-                icon: Some("map-pin".into()),
-                collapsible: false,
-                default_collapsed: false,
-                fields: vec![
-                    ParameterField {
-                        id: "latitude".into(),
-                        label: "Latitude".into(),
-                        description: Some("Latitude in decimal degrees (-90 to 90)".into()),
-                        help_url: None,
-                        field_type: ParameterType::Float {
-                            min: -90.0, max: 90.0, step: 0.000001, precision: 6,
-                            unit: Some("deg".into()), logarithmic: false,
-                            style: Default::default(),
-                        },
-                        default: serde_json::json!(0.0),
-                        required: false,
-                        advanced: false,
-                        allow_override: true,
-                        supports_expression: false,
-                    },
-                    ParameterField {
-                        id: "longitude".into(),
-                        label: "Longitude".into(),
-                        description: Some("Longitude in decimal degrees (-180 to 180)".into()),
-                        help_url: None,
-                        field_type: ParameterType::Float {
-                            min: -180.0, max: 180.0, step: 0.000001, precision: 6,
-                            unit: Some("deg".into()), logarithmic: false,
-                            style: Default::default(),
-                        },
-                        default: serde_json::json!(0.0),
-                        required: false,
-                        advanced: false,
-                        allow_override: true,
-                        supports_expression: false,
-                    },
-                    ParameterField {
-                        id: "altitude".into(),
-                        label: "Altitude".into(),
-                        description: Some("Altitude in meters above sea level".into()),
-                        help_url: None,
-                        field_type: ParameterType::Float {
-                            min: -500.0, max: 9000.0, step: 0.1, precision: 1,
-                            unit: Some("m".into()), logarithmic: false,
-                            style: Default::default(),
-                        },
-                        default: serde_json::json!(0.0),
-                        required: false,
-                        advanced: false,
-                        allow_override: true,
-                        supports_expression: false,
-                    },
-                ],
-            },
-            ParameterSection {
-                id: "gpx_options".into(),
-                label: "GPX Options".into(),
-                description: Some("Configure GPX track interpolation behavior".into()),
-                icon: Some("sliders".into()),
-                collapsible: true,
-                default_collapsed: true,
-                fields: vec![
-                    ParameterField {
-                        id: "time_offset_seconds".into(),
-                        label: "Time Offset".into(),
-                        description: Some("Offset between camera clock and GPS time in seconds".into()),
-                        help_url: None,
-                        field_type: ParameterType::Integer {
-                            min: -86400, max: 86400, step: 1,
-                            unit: Some("s".into()),
-                            style: Default::default(),
-                        },
-                        default: serde_json::json!(0),
-                        required: false,
-                        advanced: false,
-                        allow_override: true,
-                        supports_expression: false,
-                    },
-                    ParameterField {
-                        id: "max_interpolation_gap".into(),
-                        label: "Max Gap".into(),
-                        description: Some("Maximum seconds between GPX points to allow interpolation".into()),
-                        help_url: None,
-                        field_type: ParameterType::Integer {
-                            min: 1, max: 3600, step: 1,
-                            unit: Some("s".into()),
-                            style: Default::default(),
-                        },
-                        default: serde_json::json!(300),
-                        required: false,
-                        advanced: true,
-                        allow_override: true,
-                        supports_expression: false,
-                    },
-                ],
-            },
-        ],
-    }
-});
-
-static GUI_SCHEMA: LazyLock<GuiSchema> = LazyLock::new(|| {
-    GuiSchema {
-        layout: GuiLayout::Standard {
-            sections: vec![
-                GuiSection { param_section_id: "source".into(), title_visible: true, style: SectionStyle::Card },
-                GuiSection { param_section_id: "manual_coords".into(), title_visible: true, style: SectionStyle::Card },
-                GuiSection { param_section_id: "gpx_options".into(), title_visible: true, style: SectionStyle::CollapsibleCard },
+                    default: serde_json::json!(""),
+                    required: false,
+                    advanced: false,
+                    allow_override: true,
+                    supports_expression: false,
+                },
             ],
         },
-        icon: Some("map-pin".into()),
-        color: Some("#10b981".into()),
-        preview: PreviewMode::None,
-        aux_views: vec![AuxView::Map],
-        min_panel_width: 340,
-    }
+        ParameterSection {
+            id: "manual_coords".into(),
+            label: "Manual Coordinates".into(),
+            description: Some("Enter GPS coordinates directly".into()),
+            icon: Some("map-pin".into()),
+            collapsible: false,
+            default_collapsed: false,
+            fields: vec![
+                ParameterField {
+                    id: "latitude".into(),
+                    label: "Latitude".into(),
+                    description: Some("Latitude in decimal degrees (-90 to 90)".into()),
+                    help_url: None,
+                    field_type: ParameterType::Float {
+                        min: -90.0,
+                        max: 90.0,
+                        step: 0.000001,
+                        precision: 6,
+                        unit: Some("deg".into()),
+                        logarithmic: false,
+                        style: Default::default(),
+                    },
+                    default: serde_json::json!(0.0),
+                    required: false,
+                    advanced: false,
+                    allow_override: true,
+                    supports_expression: false,
+                },
+                ParameterField {
+                    id: "longitude".into(),
+                    label: "Longitude".into(),
+                    description: Some("Longitude in decimal degrees (-180 to 180)".into()),
+                    help_url: None,
+                    field_type: ParameterType::Float {
+                        min: -180.0,
+                        max: 180.0,
+                        step: 0.000001,
+                        precision: 6,
+                        unit: Some("deg".into()),
+                        logarithmic: false,
+                        style: Default::default(),
+                    },
+                    default: serde_json::json!(0.0),
+                    required: false,
+                    advanced: false,
+                    allow_override: true,
+                    supports_expression: false,
+                },
+                ParameterField {
+                    id: "altitude".into(),
+                    label: "Altitude".into(),
+                    description: Some("Altitude in meters above sea level".into()),
+                    help_url: None,
+                    field_type: ParameterType::Float {
+                        min: -500.0,
+                        max: 9000.0,
+                        step: 0.1,
+                        precision: 1,
+                        unit: Some("m".into()),
+                        logarithmic: false,
+                        style: Default::default(),
+                    },
+                    default: serde_json::json!(0.0),
+                    required: false,
+                    advanced: false,
+                    allow_override: true,
+                    supports_expression: false,
+                },
+            ],
+        },
+        ParameterSection {
+            id: "gpx_options".into(),
+            label: "GPX Options".into(),
+            description: Some("Configure GPX track interpolation behavior".into()),
+            icon: Some("sliders".into()),
+            collapsible: true,
+            default_collapsed: true,
+            fields: vec![
+                ParameterField {
+                    id: "time_offset_seconds".into(),
+                    label: "Time Offset".into(),
+                    description: Some("Offset between camera clock and GPS time in seconds".into()),
+                    help_url: None,
+                    field_type: ParameterType::Integer {
+                        min: -86400,
+                        max: 86400,
+                        step: 1,
+                        unit: Some("s".into()),
+                        style: Default::default(),
+                    },
+                    default: serde_json::json!(0),
+                    required: false,
+                    advanced: false,
+                    allow_override: true,
+                    supports_expression: false,
+                },
+                ParameterField {
+                    id: "max_interpolation_gap".into(),
+                    label: "Max Gap".into(),
+                    description: Some(
+                        "Maximum seconds between GPX points to allow interpolation".into(),
+                    ),
+                    help_url: None,
+                    field_type: ParameterType::Integer {
+                        min: 1,
+                        max: 3600,
+                        step: 1,
+                        unit: Some("s".into()),
+                        style: Default::default(),
+                    },
+                    default: serde_json::json!(300),
+                    required: false,
+                    advanced: true,
+                    allow_override: true,
+                    supports_expression: false,
+                },
+            ],
+        },
+    ],
+});
+
+static GUI_SCHEMA: LazyLock<GuiSchema> = LazyLock::new(|| GuiSchema {
+    layout: GuiLayout::Standard {
+        sections: vec![
+            GuiSection {
+                param_section_id: "source".into(),
+                title_visible: true,
+                style: SectionStyle::Card,
+            },
+            GuiSection {
+                param_section_id: "manual_coords".into(),
+                title_visible: true,
+                style: SectionStyle::Card,
+            },
+            GuiSection {
+                param_section_id: "gpx_options".into(),
+                title_visible: true,
+                style: SectionStyle::CollapsibleCard,
+            },
+        ],
+    },
+    icon: Some("map-pin".into()),
+    color: Some("#10b981".into()),
+    preview: PreviewMode::None,
+    aux_views: vec![AuxView::Map],
+    min_panel_width: 340,
 });
 
 #[derive(Debug, Clone)]
@@ -206,7 +239,9 @@ pub struct GpsSetPlugin {
 
 impl GpsSetPlugin {
     pub fn new() -> Self {
-        Self { id: "photopipeline.plugins.gps_set".to_string() }
+        Self {
+            id: "photopipeline.plugins.gps_set".to_string(),
+        }
     }
 }
 
@@ -218,18 +253,43 @@ impl Default for GpsSetPlugin {
 
 #[async_trait]
 impl Plugin for GpsSetPlugin {
-    fn id(&self) -> &PluginId { &self.id }
-    fn name(&self) -> &str { "GPS Coordinate Manager" }
-    fn version(&self) -> PluginVersion { PluginVersion::new(1, 0, 0) }
-    fn category(&self) -> PluginCategory { PluginCategory::Metadata }
-    fn description(&self) -> &str { "Set GPS coordinates manually or interpolated from GPX track logs" }
-    fn tags(&self) -> &[String] { &TAGS }
-    fn requires_pixel_access(&self) -> bool { false }
-    fn produces_pixel_output(&self) -> bool { false }
-    fn supported_hardware(&self) -> HardwareRequirement { HardwareRequirement { min_ram_mb: 64, ..Default::default() } }
+    fn id(&self) -> &PluginId {
+        &self.id
+    }
+    fn name(&self) -> &str {
+        "GPS Coordinate Manager"
+    }
+    fn version(&self) -> PluginVersion {
+        PluginVersion::new(1, 0, 0)
+    }
+    fn category(&self) -> PluginCategory {
+        PluginCategory::Metadata
+    }
+    fn description(&self) -> &str {
+        "Set GPS coordinates manually or interpolated from GPX track logs"
+    }
+    fn tags(&self) -> &[String] {
+        &TAGS
+    }
+    fn requires_pixel_access(&self) -> bool {
+        false
+    }
+    fn produces_pixel_output(&self) -> bool {
+        false
+    }
+    fn supported_hardware(&self) -> HardwareRequirement {
+        HardwareRequirement {
+            min_ram_mb: 64,
+            ..Default::default()
+        }
+    }
 
-    fn parameter_schema(&self) -> &ParameterSchema { &PARAMETER_SCHEMA }
-    fn gui_schema(&self) -> &GuiSchema { &GUI_SCHEMA }
+    fn parameter_schema(&self) -> &ParameterSchema {
+        &PARAMETER_SCHEMA
+    }
+    fn gui_schema(&self) -> &GuiSchema {
+        &GUI_SCHEMA
+    }
 
     async fn initialize(&mut self, _cfg: &photopipeline_plugin::PluginConfig) -> PluginResult<()> {
         Ok(())
@@ -244,37 +304,34 @@ impl Plugin for GpsSetPlugin {
         let mode = params.get_str("gps_mode").unwrap_or("manual");
 
         if mode == "manual" {
-            if let Some(lat) = params.get("latitude") {
-                if let Some(lat_val) = lat.as_f64() {
-                    if lat_val < -90.0 || lat_val > 90.0 {
-                        issues.push(ValidationIssue::Error {
-                            param: "latitude".into(),
-                            message: "Latitude must be between -90 and 90".into(),
-                        });
-                    }
-                }
+            if let Some(lat) = params.get("latitude")
+                && let Some(lat_val) = lat.as_f64()
+                && (!(-90.0..=90.0).contains(&lat_val))
+            {
+                issues.push(ValidationIssue::Error {
+                    param: "latitude".into(),
+                    message: "Latitude must be between -90 and 90".into(),
+                });
             }
-            if let Some(lon) = params.get("longitude") {
-                if let Some(lon_val) = lon.as_f64() {
-                    if lon_val < -180.0 || lon_val > 180.0 {
-                        issues.push(ValidationIssue::Error {
-                            param: "longitude".into(),
-                            message: "Longitude must be between -180 and 180".into(),
-                        });
-                    }
-                }
+            if let Some(lon) = params.get("longitude")
+                && let Some(lon_val) = lon.as_f64()
+                && (!(-180.0..=180.0).contains(&lon_val))
+            {
+                issues.push(ValidationIssue::Error {
+                    param: "longitude".into(),
+                    message: "Longitude must be between -180 and 180".into(),
+                });
             }
         }
 
-        if mode == "gpx_track" {
-            if let Some(gpx) = params.get_str("gpx_file") {
-                if gpx.is_empty() {
-                    issues.push(ValidationIssue::Error {
-                        param: "gpx_file".into(),
-                        message: "GPX file path is required for GPX track mode".into(),
-                    });
-                }
-            }
+        if mode == "gpx_track"
+            && let Some(gpx) = params.get_str("gpx_file")
+            && gpx.is_empty()
+        {
+            issues.push(ValidationIssue::Error {
+                param: "gpx_file".into(),
+                message: "GPX file path is required for GPX track mode".into(),
+            });
         }
 
         Ok(issues)
@@ -288,13 +345,18 @@ impl MetadataProcessor for GpsSetPlugin {
     }
 
     async fn read_metadata(
-        &self, _target: &MetadataTarget, _params: &ParameterSet,
+        &self,
+        _target: &MetadataTarget,
+        _params: &ParameterSet,
     ) -> PluginResult<Metadata> {
         Ok(Metadata::default())
     }
 
     async fn write_metadata(
-        &self, target: &mut MetadataTarget, metadata: &Metadata, params: &ParameterSet,
+        &self,
+        target: &mut MetadataTarget,
+        metadata: &Metadata,
+        params: &ParameterSet,
     ) -> PluginResult<MetadataWriteReport> {
         let mode = params.get_str("gps_mode").unwrap_or("manual");
         let mut gps = GpsData::default();
@@ -319,28 +381,43 @@ impl MetadataProcessor for GpsSetPlugin {
                 let gpx_path = params.get_str("gpx_file").unwrap_or("");
                 if gpx_path.is_empty() {
                     return Err(PluginError::InvalidParameter {
-                        plugin: self.id.clone(), field: "gpx_file".into(),
+                        plugin: self.id.clone(),
+                        field: "gpx_file".into(),
                         message: "GPX file path is required".into(),
                     });
                 }
 
-                let gpx_content = std::fs::read_to_string(gpx_path)
-                    .map_err(|e| PluginError::Io { plugin: self.id.clone(), error: e })?;
+                let gpx_content =
+                    std::fs::read_to_string(gpx_path).map_err(|e| PluginError::Io {
+                        plugin: self.id.clone(),
+                        error: e,
+                    })?;
                 let track = parse_gpx(&gpx_content).unwrap_or(GpxTrack {
-                    name: None, points: vec![], duration_seconds: None, distance_meters: None,
+                    name: None,
+                    points: vec![],
+                    duration_seconds: None,
+                    distance_meters: None,
                 });
                 let time_offset = params.get_i64("time_offset_seconds").unwrap_or(0);
 
                 if let Some(ref existing_gps) = metadata.gps {
-                    let ts = existing_gps.timestamp.unwrap_or_else(|| chrono::Utc::now());
+                    let ts = existing_gps.timestamp.unwrap_or_else(chrono::Utc::now);
                     let adjusted = ts + chrono::Duration::seconds(time_offset);
 
                     if let Some(point) = track.interpolate_at(&adjusted) {
                         gps.latitude = Some(point.latitude);
                         gps.longitude = Some(point.longitude);
                         gps.altitude = point.elevation;
-                        gps.latitude_ref = Some(if point.latitude >= 0.0 { "N".into() } else { "S".into() });
-                        gps.longitude_ref = Some(if point.longitude >= 0.0 { "E".into() } else { "W".into() });
+                        gps.latitude_ref = Some(if point.latitude >= 0.0 {
+                            "N".into()
+                        } else {
+                            "S".into()
+                        });
+                        gps.longitude_ref = Some(if point.longitude >= 0.0 {
+                            "E".into()
+                        } else {
+                            "W".into()
+                        });
                         gps.timestamp = Some(adjusted);
                         gps.img_direction = point.bearing;
                         gps.speed = point.speed;
@@ -350,8 +427,16 @@ impl MetadataProcessor for GpsSetPlugin {
                     gps.latitude = Some(first.latitude);
                     gps.longitude = Some(first.longitude);
                     gps.altitude = first.elevation;
-                    gps.latitude_ref = Some(if first.latitude >= 0.0 { "N".into() } else { "S".into() });
-                    gps.longitude_ref = Some(if first.longitude >= 0.0 { "E".into() } else { "W".into() });
+                    gps.latitude_ref = Some(if first.latitude >= 0.0 {
+                        "N".into()
+                    } else {
+                        "S".into()
+                    });
+                    gps.longitude_ref = Some(if first.longitude >= 0.0 {
+                        "E".into()
+                    } else {
+                        "W".into()
+                    });
                     gps.timestamp = Some(chrono::Utc::now());
                 }
             }
@@ -391,7 +476,8 @@ impl MetadataProcessor for GpsSetPlugin {
         cmd.arg(&target.path);
 
         let output = cmd.output().map_err(|e| PluginError::Io {
-            plugin: self.id.clone(), error: e,
+            plugin: self.id.clone(),
+            error: e,
         })?;
 
         let tags_written = if output.status.success() { 8 } else { 0 };
@@ -401,14 +487,17 @@ impl MetadataProcessor for GpsSetPlugin {
             vec![]
         };
 
-        Ok(MetadataWriteReport { tags_written, tags_skipped: 0, warnings })
+        Ok(MetadataWriteReport {
+            tags_written,
+            tags_skipped: 0,
+            warnings,
+        })
     }
 }
 
 fn parse_gpx(content: &str) -> Option<GpxTrack> {
-    let re_trkpt = regex::Regex::new(
-        r#"<trkpt\s+lat="([^"]+)"\s+lon="([^"]+)"[^>]*>(.*?)</trkpt>"#
-    ).ok()?;
+    let re_trkpt =
+        regex::Regex::new(r#"<trkpt\s+lat="([^"]+)"\s+lon="([^"]+)"[^>]*>(.*?)</trkpt>"#).ok()?;
     let re_ele = regex::Regex::new(r"<ele>([^<]+)</ele>").ok()?;
     let re_time = regex::Regex::new(r"<time>([^<]+)</time>").ok()?;
     let re_name = regex::Regex::new(r"<name>([^<]+)</name>").ok()?;
@@ -419,22 +508,30 @@ fn parse_gpx(content: &str) -> Option<GpxTrack> {
         let lon: f64 = caps.get(2)?.as_str().parse().ok()?;
         let body = caps.get(3)?.as_str();
 
-        let ele = re_ele.captures(body)
+        let ele = re_ele
+            .captures(body)
             .and_then(|c| c.get(1)?.as_str().parse::<f64>().ok());
-        let ts = re_time.captures(body)
-            .and_then(|c| {
-                let s = c.get(1)?.as_str();
-                chrono::DateTime::parse_from_rfc3339(s).ok()
-                    .map(|dt| dt.with_timezone(&chrono::Utc))
-                    .or_else(|| {
-                        chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%SZ").ok()
-                            .map(|naive| chrono::DateTime::from_naive_utc_and_offset(naive, chrono::Utc))
-                    })
-            });
+        let ts = re_time.captures(body).and_then(|c| {
+            let s = c.get(1)?.as_str();
+            chrono::DateTime::parse_from_rfc3339(s)
+                .ok()
+                .map(|dt| dt.with_timezone(&chrono::Utc))
+                .or_else(|| {
+                    chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%SZ")
+                        .ok()
+                        .map(|naive| {
+                            chrono::DateTime::from_naive_utc_and_offset(naive, chrono::Utc)
+                        })
+                })
+        });
 
         points.push(photopipeline_core::GpxPoint {
-            latitude: lat, longitude: lon, elevation: ele, timestamp: ts,
-            speed: None, bearing: None,
+            latitude: lat,
+            longitude: lon,
+            elevation: ele,
+            timestamp: ts,
+            speed: None,
+            bearing: None,
         });
     }
 
@@ -442,23 +539,36 @@ fn parse_gpx(content: &str) -> Option<GpxTrack> {
         return None;
     }
 
-    let name = re_name.captures(content)
+    let name = re_name
+        .captures(content)
         .and_then(|c| c.get(1).map(|m| m.as_str().to_string()));
 
     let duration = if points.len() >= 2 {
-        points.last().and_then(|last| last.timestamp)
+        points
+            .last()
+            .and_then(|last| last.timestamp)
             .zip(points.first().and_then(|first| first.timestamp))
             .map(|(end, start)| (end - start).num_milliseconds() as f64 / 1000.0)
     } else {
         None
     };
 
-    Some(GpxTrack { name, points, duration_seconds: duration, distance_meters: None })
+    Some(GpxTrack {
+        name,
+        points,
+        duration_seconds: duration,
+        distance_meters: None,
+    })
 }
 
 static TAGS: LazyLock<Vec<String>> = LazyLock::new(|| {
     vec![
-        "metadata".into(), "gps".into(), "geo".into(), "location".into(),
-        "gpx".into(), "coordinates".into(), "track".into(),
+        "metadata".into(),
+        "gps".into(),
+        "geo".into(),
+        "location".into(),
+        "gpx".into(),
+        "coordinates".into(),
+        "track".into(),
     ]
 });

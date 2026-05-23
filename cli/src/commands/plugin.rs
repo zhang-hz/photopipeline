@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use photopipeline_plugin::Registry;
 use photopipeline_plugin::trait_def::PluginManifest;
+use std::sync::Arc;
 
 pub fn list(registry: &Arc<Registry>) {
     let manifests = registry.manifests();
@@ -10,7 +10,7 @@ pub fn list(registry: &Arc<Registry>) {
     }
 
     println!("Registered plugins ({})", manifests.len());
-    println!("{:<30} {:<12} {:<15} {}", "NAME", "VERSION", "CATEGORY", "ID");
+    println!("{:<30} {:<12} {:<15} ID", "NAME", "VERSION", "CATEGORY");
     println!("{}", "-".repeat(80));
 
     let mut sorted = manifests;

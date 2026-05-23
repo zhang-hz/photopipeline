@@ -1,17 +1,16 @@
-use std::sync::Arc;
-use std::thread;
+#![allow(clippy::result_large_err)]
 use photopipeline_core::{
-    PluginCategory, PluginVersion,
-    Metadata, ImageFormat, PixelFormat, ColorSpace,
-};
-use photopipeline_plugin::{
-    registry::Registry, PluginQuery, Plugin,
-    ParameterSet, ParameterSchema, ParameterSection, ParameterField, ParameterType,
+    ColorSpace, ImageFormat, Metadata, PixelFormat, PluginCategory, PluginVersion,
 };
 use photopipeline_engine::{
-    PipelineGraph, PipelineTemplate, TemplateNode, TemplateEdge,
-    ParameterResolver,
+    ParameterResolver, PipelineGraph, PipelineTemplate, TemplateEdge, TemplateNode,
 };
+use photopipeline_plugin::{
+    ParameterField, ParameterSchema, ParameterSection, ParameterSet, ParameterType, Plugin,
+    PluginQuery, registry::Registry,
+};
+use std::sync::Arc;
+use std::thread;
 use uuid::Uuid;
 
 #[test]
@@ -33,8 +32,8 @@ fn stress_pipeline_execution_100_times_on_same_data() {
     let template = PipelineTemplate {
         metadata: Default::default(),
         nodes: vec![TemplateNode {
-        id: "exif".into(),
-        plugin: "photopipeline.plugins.exif_rw".into(),
+            id: "exif".into(),
+            plugin: "photopipeline.plugins.exif_rw".into(),
             label: None,
             enabled: true,
             params: None,
@@ -64,11 +63,14 @@ fn stress_pipeline_execution_100_times_on_same_data() {
         struct NoopProgress;
         impl photopipeline_plugin::ProgressSink for NoopProgress {
             fn set_progress(&self, _: f32, _: &str) {}
-            fn is_canceled(&self) -> bool { false }
+            fn is_canceled(&self) -> bool {
+                false
+            }
         }
 
         let result = rt.block_on(async {
-            exec.execute(&graph, &info, None, &metadata, Box::new(NoopProgress)).await
+            exec.execute(&graph, &info, None, &metadata, Box::new(NoopProgress))
+                .await
         });
         assert!(result.is_ok());
     }
@@ -83,8 +85,11 @@ fn stress_random_parameter_values_on_plugins() {
         let defaults = plugin.parameter_schema().defaults();
         let rt = tokio::runtime::Runtime::new().unwrap();
         let result = rt.block_on(async { plugin.validate(&defaults).await });
-        assert!(result.is_ok(),
-            "default validation failed for {}", plugin.id());
+        assert!(
+            result.is_ok(),
+            "default validation failed for {}",
+            plugin.id()
+        );
     }
 }
 
@@ -154,7 +159,10 @@ fn stress_deep_merge_chain_100_levels() {
                 description: None,
                 help_url: None,
                 field_type: ParameterType::Integer {
-                    min: 0, max: 10000, step: 1, unit: None,
+                    min: 0,
+                    max: 10000,
+                    step: 1,
+                    unit: None,
                     style: Default::default(),
                 },
                 default: serde_json::json!(0),
@@ -242,7 +250,10 @@ fn stress_many_tiles_no_panic() {
     assert_eq!(count as u32, layout.total_tiles);
     for spec in layout.iter_tiles() {
         assert!(spec.x_offset + spec.width <= w, "tile exceeds width bound");
-        assert!(spec.y_offset + spec.height <= h, "tile exceeds height bound");
+        assert!(
+            spec.y_offset + spec.height <= h,
+            "tile exceeds height bound"
+        );
     }
 }
 
@@ -286,7 +297,10 @@ fn stress_many_conditions() {
                 description: None,
                 help_url: None,
                 field_type: ParameterType::Integer {
-                    min: 0, max: 255, step: 1, unit: None,
+                    min: 0,
+                    max: 255,
+                    step: 1,
+                    unit: None,
                     style: Default::default(),
                 },
                 default: serde_json::json!(128),

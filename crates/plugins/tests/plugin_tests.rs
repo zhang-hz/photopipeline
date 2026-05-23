@@ -24,7 +24,11 @@ fn all_plugins_have_valid_schema() {
     for plugin in &all {
         let schema = plugin.parameter_schema();
         assert!(schema.version > 0);
-        assert!(!schema.sections.is_empty(), "plugin {} has empty schema", plugin.id());
+        assert!(
+            !schema.sections.is_empty(),
+            "plugin {} has empty schema",
+            plugin.id()
+        );
     }
 }
 
@@ -35,7 +39,11 @@ fn all_plugins_have_valid_guischema() {
     let all = registry.all();
     for plugin in &all {
         let gui = plugin.gui_schema();
-        assert!(gui.min_panel_width > 0, "plugin {} has invalid min_panel_width", plugin.id());
+        assert!(
+            gui.min_panel_width > 0,
+            "plugin {} has invalid min_panel_width",
+            plugin.id()
+        );
     }
 }
 
@@ -48,7 +56,12 @@ fn all_plugins_validate_their_defaults() {
     for plugin in &all {
         let defaults = plugin.parameter_schema().defaults();
         let result = rt.block_on(async { plugin.validate(&defaults).await });
-        assert!(result.is_ok(), "plugin {} validation failed: {:?}", plugin.id(), result.err());
+        assert!(
+            result.is_ok(),
+            "plugin {} validation failed: {:?}",
+            plugin.id(),
+            result.err()
+        );
     }
 }
 
@@ -94,7 +107,11 @@ fn all_plugins_have_tags() {
     let registry = Registry::new();
     photopipeline_plugins::register_all(&registry);
     for plugin in &registry.all() {
-        assert!(!plugin.tags().is_empty(), "plugin {} has empty tags", plugin.id());
+        assert!(
+            !plugin.tags().is_empty(),
+            "plugin {} has empty tags",
+            plugin.id()
+        );
     }
 }
 
@@ -104,8 +121,11 @@ fn all_plugins_have_valid_categories() {
     photopipeline_plugins::register_all(&registry);
     for plugin in &registry.all() {
         let cat_str = format!("{}", plugin.category());
-        assert!(!cat_str.is_empty(),
-            "plugin {} has invalid category", plugin.id());
+        assert!(
+            !cat_str.is_empty(),
+            "plugin {} has invalid category",
+            plugin.id()
+        );
     }
 }
 
@@ -116,10 +136,16 @@ fn metadata_plugins_dont_require_pixel_access() {
     for plugin in &registry.all() {
         let id = plugin.id().to_string();
         if id == EXIF_ID || id == GPS_ID || id == TIME_ID {
-            assert!(!plugin.requires_pixel_access(),
-                "{} should not require pixel access", plugin.id());
-            assert!(!plugin.produces_pixel_output(),
-                "{} should not produce pixel output", plugin.id());
+            assert!(
+                !plugin.requires_pixel_access(),
+                "{} should not require pixel access",
+                plugin.id()
+            );
+            assert!(
+                !plugin.produces_pixel_output(),
+                "{} should not produce pixel output",
+                plugin.id()
+            );
         }
     }
 }
@@ -130,9 +156,13 @@ fn pixel_plugins_require_pixel_access() {
     photopipeline_plugins::register_all(&registry);
     for plugin in &registry.all() {
         let id = plugin.id().to_string();
-        if id == COLORSPACE_ID || id == LUT_ID || id == TRANSFORM_ID || id == LENS_ID || id == AI_ID {
-            assert!(plugin.requires_pixel_access(),
-                "{} should require pixel access", plugin.id());
+        if id == COLORSPACE_ID || id == LUT_ID || id == TRANSFORM_ID || id == LENS_ID || id == AI_ID
+        {
+            assert!(
+                plugin.requires_pixel_access(),
+                "{} should require pixel access",
+                plugin.id()
+            );
         }
     }
 }
@@ -143,7 +173,13 @@ fn format_plugins_have_manifests() {
     photopipeline_plugins::register_all(&registry);
     for plugin in &registry.all() {
         let id = plugin.id().to_string();
-        if id == HEIF_ID || id == JXL_ID || id == AVIF_ID || id == TIFF_ID || id == PNG_ID || id == RAW_ID {
+        if id == HEIF_ID
+            || id == JXL_ID
+            || id == AVIF_ID
+            || id == TIFF_ID
+            || id == PNG_ID
+            || id == RAW_ID
+        {
             let manifest = registry.manifest(plugin.id());
             assert!(manifest.is_some(), "no manifest for {}", plugin.id());
         }
@@ -184,7 +220,9 @@ fn jxl_encoder_validates_effort_range() {
 fn exif_rw_schema_not_empty() {
     let registry = Registry::new();
     photopipeline_plugins::register_all(&registry);
-    let plugin = registry.get(&EXIF_ID.to_string()).expect("exif_rw not found");
+    let plugin = registry
+        .get(&EXIF_ID.to_string())
+        .expect("exif_rw not found");
     let schema = plugin.parameter_schema();
     assert!(!schema.sections.is_empty());
 }
@@ -193,7 +231,9 @@ fn exif_rw_schema_not_empty() {
 fn gps_set_schema_not_empty() {
     let registry = Registry::new();
     photopipeline_plugins::register_all(&registry);
-    let plugin = registry.get(&GPS_ID.to_string()).expect("gps_set not found");
+    let plugin = registry
+        .get(&GPS_ID.to_string())
+        .expect("gps_set not found");
     let schema = plugin.parameter_schema();
     assert!(!schema.sections.is_empty());
 }
@@ -202,7 +242,9 @@ fn gps_set_schema_not_empty() {
 fn time_shift_schema_not_empty() {
     let registry = Registry::new();
     photopipeline_plugins::register_all(&registry);
-    let plugin = registry.get(&TIME_ID.to_string()).expect("time_shift not found");
+    let plugin = registry
+        .get(&TIME_ID.to_string())
+        .expect("time_shift not found");
     let schema = plugin.parameter_schema();
     assert!(!schema.sections.is_empty());
 }
@@ -211,7 +253,9 @@ fn time_shift_schema_not_empty() {
 fn colorspace_schema_not_empty() {
     let registry = Registry::new();
     photopipeline_plugins::register_all(&registry);
-    let plugin = registry.get(&COLORSPACE_ID.to_string()).expect("colorspace not found");
+    let plugin = registry
+        .get(&COLORSPACE_ID.to_string())
+        .expect("colorspace not found");
     let schema = plugin.parameter_schema();
     assert!(!schema.sections.is_empty());
 }
@@ -220,7 +264,9 @@ fn colorspace_schema_not_empty() {
 fn transform_schema_not_empty() {
     let registry = Registry::new();
     photopipeline_plugins::register_all(&registry);
-    let plugin = registry.get(&TRANSFORM_ID.to_string()).expect("transform not found");
+    let plugin = registry
+        .get(&TRANSFORM_ID.to_string())
+        .expect("transform not found");
     let schema = plugin.parameter_schema();
     assert!(!schema.sections.is_empty());
 }
@@ -229,7 +275,9 @@ fn transform_schema_not_empty() {
 fn ai_denoise_schema_not_empty() {
     let registry = Registry::new();
     photopipeline_plugins::register_all(&registry);
-    let plugin = registry.get(&AI_ID.to_string()).expect("ai_denoise not found");
+    let plugin = registry
+        .get(&AI_ID.to_string())
+        .expect("ai_denoise not found");
     let schema = plugin.parameter_schema();
     assert!(!schema.sections.is_empty());
 }
@@ -238,7 +286,9 @@ fn ai_denoise_schema_not_empty() {
 fn raw_input_schema_not_empty() {
     let registry = Registry::new();
     photopipeline_plugins::register_all(&registry);
-    let plugin = registry.get(&RAW_ID.to_string()).expect("raw_input not found");
+    let plugin = registry
+        .get(&RAW_ID.to_string())
+        .expect("raw_input not found");
     let schema = plugin.parameter_schema();
     assert!(!schema.sections.is_empty());
 }
@@ -249,7 +299,10 @@ fn all_plugins_have_valid_hardware_requirements() {
     photopipeline_plugins::register_all(&registry);
     for plugin in &registry.all() {
         let hw = plugin.supported_hardware();
-        assert!(hw.requires_cpu || hw.requires_gpu,
-            "plugin {} has no hardware requirements", plugin.id());
+        assert!(
+            hw.requires_cpu || hw.requires_gpu,
+            "plugin {} has no hardware requirements",
+            plugin.id()
+        );
     }
 }

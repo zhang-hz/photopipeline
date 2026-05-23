@@ -1,8 +1,8 @@
-use std::sync::Arc;
+use crate::trait_def::*;
 use dashmap::DashMap;
 use parking_lot::RwLock;
-use crate::trait_def::*;
-use photopipeline_core::{PluginId, PluginCategory, PluginResult};
+use photopipeline_core::{PluginCategory, PluginId, PluginResult};
+use std::sync::Arc;
 
 pub struct Registry {
     entries: DashMap<PluginId, RegistryEntry>,
@@ -19,6 +19,12 @@ pub struct Registry {
 struct RegistryEntry {
     plugin: Arc<dyn Plugin>,
     enabled: bool,
+}
+
+impl Default for Registry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Registry {
@@ -53,10 +59,13 @@ impl Registry {
         };
 
         self.manifests.insert(id.clone(), manifest);
-        self.entries.insert(id.clone(), RegistryEntry {
-            plugin,
-            enabled: true,
-        });
+        self.entries.insert(
+            id.clone(),
+            RegistryEntry {
+                plugin,
+                enabled: true,
+            },
+        );
         self.load_order.write().push(id);
         Ok(())
     }
@@ -97,21 +106,27 @@ impl Registry {
         self.ai_processors.get(id).map(|e| e.value().clone())
     }
 
-    pub fn get_external_tool_processor(&self, id: &PluginId) -> Option<Arc<dyn ExternalToolProcessor>> {
-        self.external_tool_processors.get(id).map(|e| e.value().clone())
+    pub fn get_external_tool_processor(
+        &self,
+        id: &PluginId,
+    ) -> Option<Arc<dyn ExternalToolProcessor>> {
+        self.external_tool_processors
+            .get(id)
+            .map(|e| e.value().clone())
     }
 
     pub fn query(&self, q: &PluginQuery) -> Vec<Arc<dyn Plugin>> {
-        self.entries.iter()
+        self.entries
+            .iter()
             .filter(|entry| {
                 let plugin = &entry.value().plugin;
                 if q.enabled_only && !entry.value().enabled {
                     return false;
                 }
-                if let Some(ref cat) = q.category {
-                    if plugin.category() != *cat {
-                        return false;
-                    }
+                if let Some(ref cat) = q.category
+                    && plugin.category() != *cat
+                {
+                    return false;
                 }
                 if !q.tags.is_empty() {
                     let plugin_tags: std::collections::HashSet<_> =
@@ -128,10 +143,10 @@ impl Registry {
                         return false;
                     }
                 }
-                if let Some(req_pixel) = q.requires_pixel {
-                    if plugin.requires_pixel_access() != req_pixel {
-                        return false;
-                    }
+                if let Some(req_pixel) = q.requires_pixel
+                    && plugin.requires_pixel_access() != req_pixel
+                {
+                    return false;
                 }
                 true
             })
@@ -140,11 +155,17 @@ impl Registry {
     }
 
     pub fn by_category(&self, cat: PluginCategory) -> Vec<Arc<dyn Plugin>> {
-        self.query(&PluginQuery { category: Some(cat), ..Default::default() })
+        self.query(&PluginQuery {
+            category: Some(cat),
+            ..Default::default()
+        })
     }
 
     pub fn all(&self) -> Vec<Arc<dyn Plugin>> {
-        self.entries.iter().map(|e| e.value().plugin.clone()).collect()
+        self.entries
+            .iter()
+            .map(|e| e.value().plugin.clone())
+            .collect()
     }
 
     pub fn manifest(&self, id: &PluginId) -> Option<PluginManifest> {
@@ -156,7 +177,9 @@ impl Registry {
     }
 
     pub fn categories(&self) -> Vec<PluginCategory> {
-        let mut cats: Vec<_> = self.manifests.iter()
+        let mut cats: Vec<_> = self
+            .manifests
+            .iter()
             .map(|m| m.value().category.clone())
             .collect();
         cats.sort();
@@ -168,7 +191,10 @@ impl Registry {
         self.entries.contains_key(id)
     }
 
-    pub fn register_metadata_processor(&self, plugin: Arc<dyn MetadataProcessor>) -> PluginResult<()> {
+    pub fn register_metadata_processor(
+        &self,
+        plugin: Arc<dyn MetadataProcessor>,
+    ) -> PluginResult<()> {
         let id = plugin.id().clone();
         self.metadata_processors.insert(id, plugin);
         Ok(())
@@ -198,7 +224,10 @@ impl Registry {
         Ok(())
     }
 
-    pub fn register_external_tool_processor(&self, plugin: Arc<dyn ExternalToolProcessor>) -> PluginResult<()> {
+    pub fn register_external_tool_processor(
+        &self,
+        plugin: Arc<dyn ExternalToolProcessor>,
+    ) -> PluginResult<()> {
         let id = plugin.id().clone();
         self.external_tool_processors.insert(id, plugin);
         Ok(())
@@ -208,12 +237,11 @@ impl Registry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{ParameterSchema, ParameterSet};
     use async_trait::async_trait;
     use photopipeline_core::{
-        HardwareRequirement, PluginId, PluginResult, PluginVersion,
-        PluginCategory, ValidationIssue,
+        HardwareRequirement, PluginCategory, PluginId, PluginResult, PluginVersion, ValidationIssue,
     };
-    use crate::{ParameterSchema, ParameterSet};
 
     #[derive(Debug)]
     struct MockPlugin {
@@ -248,21 +276,49 @@ mod tests {
 
     #[async_trait]
     impl Plugin for MockPlugin {
-        fn id(&self) -> &PluginId { &self.id }
-        fn name(&self) -> &str { &self.name }
-        fn version(&self) -> PluginVersion { self.version.clone() }
-        fn category(&self) -> PluginCategory { self.category.clone() }
-        fn description(&self) -> &str { &self.description }
-        fn tags(&self) -> &[String] { &self.tags }
-        fn requires_pixel_access(&self) -> bool { self.requires_pixel }
-        fn produces_pixel_output(&self) -> bool { false }
-        fn supported_hardware(&self) -> HardwareRequirement { self.hardware.clone() }
-        fn parameter_schema(&self) -> &ParameterSchema { &self.schema }
-        fn gui_schema(&self) -> &photopipeline_core::GuiSchema { &self.gui_schema }
+        fn id(&self) -> &PluginId {
+            &self.id
+        }
+        fn name(&self) -> &str {
+            &self.name
+        }
+        fn version(&self) -> PluginVersion {
+            self.version.clone()
+        }
+        fn category(&self) -> PluginCategory {
+            self.category.clone()
+        }
+        fn description(&self) -> &str {
+            &self.description
+        }
+        fn tags(&self) -> &[String] {
+            &self.tags
+        }
+        fn requires_pixel_access(&self) -> bool {
+            self.requires_pixel
+        }
+        fn produces_pixel_output(&self) -> bool {
+            false
+        }
+        fn supported_hardware(&self) -> HardwareRequirement {
+            self.hardware.clone()
+        }
+        fn parameter_schema(&self) -> &ParameterSchema {
+            &self.schema
+        }
+        fn gui_schema(&self) -> &photopipeline_core::GuiSchema {
+            &self.gui_schema
+        }
 
-        async fn initialize(&mut self, _cfg: &PluginConfig) -> PluginResult<()> { Ok(()) }
-        async fn shutdown(&mut self) -> PluginResult<()> { Ok(()) }
-        async fn validate(&self, _params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>> { Ok(vec![]) }
+        async fn initialize(&mut self, _cfg: &PluginConfig) -> PluginResult<()> {
+            Ok(())
+        }
+        async fn shutdown(&mut self) -> PluginResult<()> {
+            Ok(())
+        }
+        async fn validate(&self, _params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>> {
+            Ok(vec![])
+        }
     }
 
     #[test]
@@ -276,7 +332,11 @@ mod tests {
     #[test]
     fn registry_register_and_get() {
         let reg = Registry::new();
-        let plugin = Arc::new(MockPlugin::new("test.plugin", "Test Plugin", PluginCategory::Color));
+        let plugin = Arc::new(MockPlugin::new(
+            "test.plugin",
+            "Test Plugin",
+            PluginCategory::Color,
+        ));
         reg.register(plugin.clone()).unwrap();
 
         let found = reg.get(&"test.plugin".into());
@@ -287,7 +347,11 @@ mod tests {
     #[test]
     fn registry_unregister() {
         let reg = Registry::new();
-        let plugin = Arc::new(MockPlugin::new("test.plugin", "Test Plugin", PluginCategory::Color));
+        let plugin = Arc::new(MockPlugin::new(
+            "test.plugin",
+            "Test Plugin",
+            PluginCategory::Color,
+        ));
         reg.register(plugin).unwrap();
 
         let removed = reg.unregister(&"test.plugin".into());
@@ -305,8 +369,14 @@ mod tests {
     #[test]
     fn registry_manifests_list() {
         let reg = Registry::new();
-        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input))).unwrap();
-        reg.register(Arc::new(MockPlugin::new("p2", "P2", PluginCategory::Enhance))).unwrap();
+        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input)))
+            .unwrap();
+        reg.register(Arc::new(MockPlugin::new(
+            "p2",
+            "P2",
+            PluginCategory::Enhance,
+        )))
+        .unwrap();
 
         let manifests = reg.manifests();
         assert_eq!(manifests.len(), 2);
@@ -318,9 +388,16 @@ mod tests {
     #[test]
     fn registry_categories_dedup() {
         let reg = Registry::new();
-        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Color))).unwrap();
-        reg.register(Arc::new(MockPlugin::new("p2", "P2", PluginCategory::Color))).unwrap();
-        reg.register(Arc::new(MockPlugin::new("p3", "P3", PluginCategory::Transform))).unwrap();
+        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Color)))
+            .unwrap();
+        reg.register(Arc::new(MockPlugin::new("p2", "P2", PluginCategory::Color)))
+            .unwrap();
+        reg.register(Arc::new(MockPlugin::new(
+            "p3",
+            "P3",
+            PluginCategory::Transform,
+        )))
+        .unwrap();
 
         let cats = reg.categories();
         assert_eq!(cats.len(), 2);
@@ -331,8 +408,14 @@ mod tests {
     #[test]
     fn registry_query_by_category() {
         let reg = Registry::new();
-        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input))).unwrap();
-        reg.register(Arc::new(MockPlugin::new("p2", "P2", PluginCategory::Enhance))).unwrap();
+        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input)))
+            .unwrap();
+        reg.register(Arc::new(MockPlugin::new(
+            "p2",
+            "P2",
+            PluginCategory::Enhance,
+        )))
+        .unwrap();
 
         let results = reg.by_category(PluginCategory::Input);
         assert_eq!(results.len(), 1);
@@ -342,10 +425,23 @@ mod tests {
     #[test]
     fn registry_query_keyword() {
         let reg = Registry::new();
-        reg.register(Arc::new(MockPlugin::new("p1", "Denoise AI", PluginCategory::Enhance))).unwrap();
-        reg.register(Arc::new(MockPlugin::new("p2", "Sharpen", PluginCategory::Enhance))).unwrap();
+        reg.register(Arc::new(MockPlugin::new(
+            "p1",
+            "Denoise AI",
+            PluginCategory::Enhance,
+        )))
+        .unwrap();
+        reg.register(Arc::new(MockPlugin::new(
+            "p2",
+            "Sharpen",
+            PluginCategory::Enhance,
+        )))
+        .unwrap();
 
-        let q = PluginQuery { keyword: Some("denoise".into()), ..Default::default() };
+        let q = PluginQuery {
+            keyword: Some("denoise".into()),
+            ..Default::default()
+        };
         let results = reg.query(&q);
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].name(), "Denoise AI");
@@ -355,14 +451,20 @@ mod tests {
     fn registry_is_loaded() {
         let reg = Registry::new();
         assert!(!reg.is_loaded(&"p1".into()));
-        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input))).unwrap();
+        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input)))
+            .unwrap();
         assert!(reg.is_loaded(&"p1".into()));
     }
 
     #[test]
     fn registry_manifest_individual() {
         let reg = Registry::new();
-        reg.register(Arc::new(MockPlugin::new("p1", "MyPlugin", PluginCategory::Input))).unwrap();
+        reg.register(Arc::new(MockPlugin::new(
+            "p1",
+            "MyPlugin",
+            PluginCategory::Input,
+        )))
+        .unwrap();
 
         let manifest = reg.manifest(&"p1".into());
         assert!(manifest.is_some());
@@ -387,7 +489,8 @@ mod tests {
     #[test]
     fn registry_unregister_then_get_returns_none() {
         let reg = Registry::new();
-        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input))).unwrap();
+        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input)))
+            .unwrap();
         reg.unregister(&"p1".into());
         assert!(reg.get(&"p1".into()).is_none());
     }
@@ -414,8 +517,14 @@ mod tests {
     #[test]
     fn registry_query_empty_returns_all() {
         let reg = Registry::new();
-        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input))).unwrap();
-        reg.register(Arc::new(MockPlugin::new("p2", "P2", PluginCategory::Format))).unwrap();
+        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input)))
+            .unwrap();
+        reg.register(Arc::new(MockPlugin::new(
+            "p2",
+            "P2",
+            PluginCategory::Format,
+        )))
+        .unwrap();
         let results = reg.query(&PluginQuery::default());
         assert_eq!(results.len(), 2);
     }
@@ -423,15 +532,20 @@ mod tests {
     #[test]
     fn registry_query_unmatched_category_empty() {
         let reg = Registry::new();
-        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input))).unwrap();
-        let q = PluginQuery { category: Some(PluginCategory::Transform), ..Default::default() };
+        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input)))
+            .unwrap();
+        let q = PluginQuery {
+            category: Some(PluginCategory::Transform),
+            ..Default::default()
+        };
         assert!(reg.query(&q).is_empty());
     }
 
     #[test]
     fn registry_manifest_after_unregister_returns_none() {
         let reg = Registry::new();
-        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input))).unwrap();
+        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input)))
+            .unwrap();
         reg.unregister(&"p1".into());
         assert!(reg.manifest(&"p1".into()).is_none());
     }
@@ -439,9 +553,24 @@ mod tests {
     #[test]
     fn registry_categories_after_register_multiple_same() {
         let reg = Registry::new();
-        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Format))).unwrap();
-        reg.register(Arc::new(MockPlugin::new("p2", "P2", PluginCategory::Format))).unwrap();
-        reg.register(Arc::new(MockPlugin::new("p3", "P3", PluginCategory::Format))).unwrap();
+        reg.register(Arc::new(MockPlugin::new(
+            "p1",
+            "P1",
+            PluginCategory::Format,
+        )))
+        .unwrap();
+        reg.register(Arc::new(MockPlugin::new(
+            "p2",
+            "P2",
+            PluginCategory::Format,
+        )))
+        .unwrap();
+        reg.register(Arc::new(MockPlugin::new(
+            "p3",
+            "P3",
+            PluginCategory::Format,
+        )))
+        .unwrap();
         let cats = reg.categories();
         assert_eq!(cats.len(), 1);
         assert_eq!(cats[0], PluginCategory::Format);
@@ -456,7 +585,8 @@ mod tests {
     #[test]
     fn registry_is_loaded_after_unregister() {
         let reg = Registry::new();
-        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input))).unwrap();
+        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input)))
+            .unwrap();
         reg.unregister(&"p1".into());
         assert!(!reg.is_loaded(&"p1".into()));
     }
@@ -467,7 +597,10 @@ mod tests {
         let mut p = MockPlugin::new("p1", "Short", PluginCategory::Enhance);
         p.description = "advanced noise reduction for raw photos".into();
         reg.register(Arc::new(p)).unwrap();
-        let q = PluginQuery { keyword: Some("noise".into()), ..Default::default() };
+        let q = PluginQuery {
+            keyword: Some("noise".into()),
+            ..Default::default()
+        };
         let results = reg.query(&q);
         assert_eq!(results.len(), 1);
     }
@@ -475,8 +608,16 @@ mod tests {
     #[test]
     fn registry_query_keyword_not_found() {
         let reg = Registry::new();
-        reg.register(Arc::new(MockPlugin::new("p1", "Denoise", PluginCategory::Enhance))).unwrap();
-        let q = PluginQuery { keyword: Some("xyzzy".into()), ..Default::default() };
+        reg.register(Arc::new(MockPlugin::new(
+            "p1",
+            "Denoise",
+            PluginCategory::Enhance,
+        )))
+        .unwrap();
+        let q = PluginQuery {
+            keyword: Some("xyzzy".into()),
+            ..Default::default()
+        };
         assert!(reg.query(&q).is_empty());
     }
 
@@ -490,7 +631,10 @@ mod tests {
         reg.register(Arc::new(p1)).unwrap();
         reg.register(Arc::new(p2)).unwrap();
 
-        let q = PluginQuery { requires_pixel: Some(true), ..Default::default() };
+        let q = PluginQuery {
+            requires_pixel: Some(true),
+            ..Default::default()
+        };
         let results = reg.query(&q);
         assert_eq!(results.len(), 1);
     }
@@ -498,8 +642,12 @@ mod tests {
     #[test]
     fn registry_query_enabled_only() {
         let reg = Registry::new();
-        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input))).unwrap();
-        let q = PluginQuery { enabled_only: true, ..Default::default() };
+        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input)))
+            .unwrap();
+        let q = PluginQuery {
+            enabled_only: true,
+            ..Default::default()
+        };
         let results = reg.query(&q);
         assert_eq!(results.len(), 1);
     }
@@ -507,8 +655,14 @@ mod tests {
     #[test]
     fn registry_by_category_input() {
         let reg = Registry::new();
-        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input))).unwrap();
-        reg.register(Arc::new(MockPlugin::new("p2", "P2", PluginCategory::Format))).unwrap();
+        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input)))
+            .unwrap();
+        reg.register(Arc::new(MockPlugin::new(
+            "p2",
+            "P2",
+            PluginCategory::Format,
+        )))
+        .unwrap();
         let results = reg.by_category(PluginCategory::Input);
         assert_eq!(results.len(), 1);
     }
@@ -516,7 +670,12 @@ mod tests {
     #[test]
     fn registry_by_category_metadata() {
         let reg = Registry::new();
-        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Metadata))).unwrap();
+        reg.register(Arc::new(MockPlugin::new(
+            "p1",
+            "P1",
+            PluginCategory::Metadata,
+        )))
+        .unwrap();
         let results = reg.by_category(PluginCategory::Metadata);
         assert_eq!(results.len(), 1);
     }
@@ -524,7 +683,12 @@ mod tests {
     #[test]
     fn registry_by_category_external() {
         let reg = Registry::new();
-        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::External))).unwrap();
+        reg.register(Arc::new(MockPlugin::new(
+            "p1",
+            "P1",
+            PluginCategory::External,
+        )))
+        .unwrap();
         let results = reg.by_category(PluginCategory::External);
         assert_eq!(results.len(), 1);
     }
@@ -532,7 +696,8 @@ mod tests {
     #[test]
     fn registry_by_category_merge() {
         let reg = Registry::new();
-        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Merge))).unwrap();
+        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Merge)))
+            .unwrap();
         let results = reg.by_category(PluginCategory::Merge);
         assert_eq!(results.len(), 1);
     }
@@ -540,7 +705,12 @@ mod tests {
     #[test]
     fn registry_by_category_custom() {
         let reg = Registry::new();
-        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Custom("special".into())))).unwrap();
+        reg.register(Arc::new(MockPlugin::new(
+            "p1",
+            "P1",
+            PluginCategory::Custom("special".into()),
+        )))
+        .unwrap();
         let results = reg.by_category(PluginCategory::Custom("special".into()));
         assert_eq!(results.len(), 1);
     }
@@ -548,9 +718,12 @@ mod tests {
     #[test]
     fn registry_all_after_multiple_registrations() {
         let reg = Registry::new();
-        reg.register(Arc::new(MockPlugin::new("a", "A", PluginCategory::Input))).unwrap();
-        reg.register(Arc::new(MockPlugin::new("b", "B", PluginCategory::Format))).unwrap();
-        reg.register(Arc::new(MockPlugin::new("c", "C", PluginCategory::Color))).unwrap();
+        reg.register(Arc::new(MockPlugin::new("a", "A", PluginCategory::Input)))
+            .unwrap();
+        reg.register(Arc::new(MockPlugin::new("b", "B", PluginCategory::Format)))
+            .unwrap();
+        reg.register(Arc::new(MockPlugin::new("c", "C", PluginCategory::Color)))
+            .unwrap();
         assert_eq!(reg.all().len(), 3);
     }
 }

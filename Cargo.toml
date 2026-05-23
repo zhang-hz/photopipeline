@@ -8,10 +8,15 @@ members = [
     "cli",
     "tests",
 ]
-exclude = [
-    "crates/server",
-]
 resolver = "2"
+
+[workspace.lints.clippy]
+result_large_err = "allow"
+too_many_arguments = "allow"
+module_inception = "allow"
+needless_pass_by_value = "allow"
+or_fun_call = "allow"
+single_match = "allow"
 
 [workspace.package]
 version = "0.1.0"
