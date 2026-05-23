@@ -32,6 +32,14 @@ jobs:
       - name: Run GUI unit tests
         run: dotnet test gui/windows/Photopipeline.Tests/Photopipeline.Tests.csproj -c Release --no-build || true
 
+      - name: Start WinAppDriver
+        run: |
+          & "C:\Program Files (x86)\Windows Application Driver\WinAppDriver.exe" &
+          Start-Sleep -Seconds 5
+
+      - name: Run UI automation tests
+        run: dotnet test gui/windows/Photopipeline.UIAutomationTests/Photopipeline.UIAutomationTests.csproj -c Release -l "trx;LogFileName=ui-test-results.trx" || true
+
       - name: Publish application
         run: dotnet publish gui/windows/Photopipeline/Photopipeline.csproj -c Release -o publish/win-x64/ --no-build || true
 

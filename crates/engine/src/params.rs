@@ -332,7 +332,7 @@ impl ParameterResolver {
         schema.defaults()
     }
 
-    fn evaluate_condition(
+    pub fn evaluate_condition(
         &self,
         condition: &GroupCondition,
         metadata: &photopipeline_core::Metadata,

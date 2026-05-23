@@ -5,6 +5,7 @@ on:
     branches: [master, main]
   pull_request:
     branches: [master, main]
+    paths: ['benches/**', 'crates/core/**', 'crates/engine/**', 'crates/plugin/**']
 
 jobs:
   benchmark:
@@ -30,12 +31,37 @@ jobs:
             liblcms2-dev libexif-dev libtiff-dev libpng-dev libopenexr-dev \
             ninja-build
 
-      - name: Run benchmarks
+      - name: Run benchmarks (check only, no full run)
+        run: cargo bench --workspace --no-run
+
+      - name: Run benchmarks (quick mode for PR)
+        if: github.event_name == 'pull_request'
+        run: cargo bench --workspace -- --quick
+
+      - name: Fetch baseline from main
+        if: github.event_name == 'pull_request' && github.base_ref
         run: |
-          cargo bench --workspace 2>&1 | tee benchmark-output.txt || {
-            echo "No benchmarks defined in workspace"
-            echo "none" > benchmark-output.txt
+          git fetch origin "${{ github.base_ref }}" --depth 1
+          git checkout "origin/${{ github.base_ref }}"
+          cargo bench --workspace -- --quick 2>&1 | tee benchmark-baseline.txt || {
+            echo "No baseline benchmarks" | tee benchmark-baseline.txt
           }
+          git checkout -
+
+      - name: Compare against baseline
+        if: github.event_name == 'pull_request' && github.base_ref
+        run: |
+          if grep -q "No baseline" benchmark-baseline.txt; then
+            echo "Skipping comparison (no benchmark data available)"
+            exit 0
+          fi
+          echo "=== Benchmark comparison ==="
+          diff benchmark-baseline.txt benchmark-output.txt || true
+
+      - name: Run full benchmarks (on push to main)
+        if: github.event_name == 'push'
+        run: |
+          cargo bench --workspace 2>&1 | tee benchmark-output.txt
 
       - name: Upload benchmark results
         if: always()
@@ -43,23 +69,3 @@ jobs:
         with:
           name: benchmark-results
           path: benchmark-output.txt
-
-      - name: Fetch baseline from main
-        if: github.event_name == 'pull_request'
-        run: |
-          git fetch origin main
-          git checkout origin/main
-          cargo bench --workspace 2>&1 | tee benchmark-baseline.txt || {
-            echo "No baseline benchmarks" | tee benchmark-baseline.txt
-          }
-          git checkout -
-
-      - name: Compare against baseline
-        if: github.event_name == 'pull_request'
-        run: |
-          if grep -q "none" benchmark-output.txt || grep -q "No baseline" benchmark-baseline.txt; then
-            echo "Skipping comparison (no benchmark data available)"
-            exit 0
-          fi
-          echo "=== Benchmark comparison ==="
-          diff benchmark-baseline.txt benchmark-output.txt || true

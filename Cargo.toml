@@ -12,6 +12,7 @@ members = [
     "tests",
     "tests/test_harness",
     "tests/e2e",
+    "benches",
 ]
 resolver = "2"
 
