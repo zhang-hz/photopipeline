@@ -143,6 +143,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq build-essential cmake pkg-config \
+            protobuf-compiler libprotobuf-dev \
             libheif-dev libjxl-dev liblcms2-dev libtiff-dev libpng-dev ninja-build
       - name: Compile benchmarks only
         run: cargo bench --workspace --no-run
