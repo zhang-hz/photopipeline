@@ -363,7 +363,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     ],
                     display: Default::default(),
                 },
-                default: serde_json::json!("lanczos3"),
+                default: serde_json::json!("bilinear"),
                 required: false,
                 advanced: true,
                 allow_override: true,
@@ -607,7 +607,12 @@ impl PixelProcessor for TransformPlugin {
             .get("flip_vertical")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
-        let filter = params.get_str("filter_type").unwrap_or("lanczos3");
+        let default_filter = if photopipeline_halide::HalideContext::available() {
+            "lanczos3"
+        } else {
+            "bilinear"
+        };
+        let filter = params.get_str("filter_type").unwrap_or(default_filter);
 
         let mut target_w = input.width;
         let mut target_h = input.height;

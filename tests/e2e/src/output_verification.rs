@@ -84,9 +84,13 @@ fn encode_tiff(reg: &Arc<Registry>, pb: &PixelBuffer, rt: &tokio::runtime::Runti
 fn exec_transform(
     reg: &Arc<Registry>,
     pb: &PixelBuffer,
-    params: std::collections::HashMap<String, serde_json::Value>,
+    mut params: std::collections::HashMap<String, serde_json::Value>,
     rt: &tokio::runtime::Runtime,
 ) -> PixelBuffer {
+    // Default to bilinear filter (no Halide required on CI)
+    params
+        .entry("filter_type".into())
+        .or_insert(serde_json::json!("bilinear"));
     let template = PipelineTemplate {
         metadata: Default::default(),
         nodes: vec![TemplateNode {

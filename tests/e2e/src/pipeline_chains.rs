@@ -185,7 +185,7 @@ fn e2e_pixel_pipeline_transform_and_colorspace() {
                     m.insert("resize_mode".into(), serde_json::json!("absolute"));
                     m.insert("target_width".into(), serde_json::json!(128));
                     m.insert("target_height".into(), serde_json::json!(128));
-                    m.insert("filter_type".into(), serde_json::json!("lanczos3"));
+                    m.insert("filter_type".into(), serde_json::json!("bilinear"));
                     Some(m)
                 },
             },
