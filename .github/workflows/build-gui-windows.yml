@@ -22,7 +22,11 @@ jobs:
 
       - name: Install Windows App SDK workload
         continue-on-error: true
-        run: dotnet workload install maui-windows 2>/dev/null || dotnet workload install windows 2>/dev/null || echo "Workload install skipped, using SDK defaults"
+        shell: bash
+        run: |
+          dotnet workload install maui-windows 2>/dev/null || \
+          dotnet workload install windows 2>/dev/null || \
+          echo "Workload install skipped, using SDK defaults"
 
       - name: Restore NuGet packages
         run: dotnet restore gui/windows/Photopipeline/Photopipeline.csproj
