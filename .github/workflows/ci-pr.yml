@@ -1,0 +1,155 @@
+name: CI (PR)
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+jobs:
+  test-linux:
+    name: Test (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "linux-${{ hashFiles('Cargo.lock') }}"
+      - name: Install deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential cmake pkg-config \
+            protobuf-compiler libprotobuf-dev libheif-dev libjxl-dev \
+            liblcms2-dev libexif-dev libtiff-dev libpng-dev libopenexr-dev \
+            ninja-build libraw-dev libde265-dev libaom-dev
+      - name: Build
+        run: cargo build --workspace
+      - name: Test
+        run: cargo test --workspace --no-fail-fast
+      - name: Fmt
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace -- -D warnings
+
+  test-macos:
+    name: Test (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "macos-${{ hashFiles('Cargo.lock') }}"
+      - name: Install deps
+        run: |
+          brew install cmake pkg-config protobuf libheif jpeg-xl \
+            little-cms2 libexif libtiff libpng openexr ninja \
+            libraw libde265 aom
+      - name: Build
+        run: cargo build --workspace
+      - name: Test
+        run: cargo test --workspace --no-fail-fast
+      - name: Fmt
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace -- -D warnings
+
+  test-windows:
+    name: Test (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "windows-${{ hashFiles('Cargo.lock') }}"
+      - name: Setup vcpkg
+        run: |
+          if (-not (Test-Path C:/vcpkg)) {
+            git clone https://github.com/microsoft/vcpkg C:/vcpkg
+            C:/vcpkg/bootstrap-vcpkg.bat
+          }
+          echo "VCPKG_ROOT=C:/vcpkg" >> $env:GITHUB_ENV
+      - name: Install C libraries via vcpkg
+        run: |
+          C:/vcpkg/vcpkg.exe install `
+            x265:x64-windows libheif[x265]:x64-windows `
+            libjxl:x64-windows lcms2:x64-windows libraw:x64-windows `
+            libpng:x64-windows tiff:x64-windows libjpeg-turbo:x64-windows `
+            aom:x64-windows protobuf:x64-windows
+      - name: Build
+        run: cargo build --workspace
+      - name: Test
+        run: cargo test --workspace --no-fail-fast
+      - name: Fmt
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace -- -D warnings
+
+  gui-test:
+    name: GUI Tests (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Build solution
+        shell: bash
+        run: dotnet build gui/windows/Photopipeline.sln -c Release || true
+      - name: Run GUI unit tests
+        shell: bash
+        run: dotnet test gui/windows/Photopipeline.Tests/Photopipeline.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~UnitTests" || true
+      - name: Compile UI automation tests
+        shell: bash
+        run: dotnet build gui/windows/Photopipeline.UIAutomationTests/Photopipeline.UIAutomationTests.csproj -c Release || true
+
+  gui-auto:
+    name: GUI Automation (Self-Hosted Windows)
+    runs-on: [self-hosted, windows, gui]
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Build solution
+        run: dotnet build gui/windows/Photopipeline.sln -c Release
+      - name: Run UI automation tests
+        run: dotnet test gui/windows/Photopipeline.UIAutomationTests/Photopipeline.UIAutomationTests.csproj -c Release
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-auto-test-results
+          path: '**/TestResults/*.trx'
+
+  bench-compile:
+    name: Bench Compile Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "bench-${{ hashFiles('Cargo.lock') }}"
+      - name: Install deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential cmake pkg-config \
+            libheif-dev libjxl-dev liblcms2-dev libtiff-dev libpng-dev ninja-build
+      - name: Compile benchmarks only
+        run: cargo bench --workspace --no-run

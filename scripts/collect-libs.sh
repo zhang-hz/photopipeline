@@ -48,12 +48,20 @@ case "$(uname -s)" in
             fi
         done
 
-        install_name_tool -add_rpath "@executable_path/../lib" "$BINARY" 2>/dev/null || true
+        install_name_tool -add_rpath "@executable_path/../Frameworks" "$BINARY" 2>/dev/null || true
         ;;
 
     MINGW*|MSYS*|CYGWIN*)
         echo "Platform: Windows"
-        echo "DLL search path is the executable directory. Copy DLLs next to .exe."
+        echo "Copying DLLs from build environment..."
+        for dll_dir in "/mingw64/bin" "/usr/local/bin" "${VCPKG_ROOT:-}/installed/x64-windows/bin"; do
+            if [ -d "$dll_dir" ]; then
+                echo "  Searching $dll_dir..."
+                cp -v "$dll_dir"/libstdc++*.dll "$OUTDIR/" 2>/dev/null || true
+                cp -v "$dll_dir"/libgcc*.dll "$OUTDIR/" 2>/dev/null || true
+                cp -v "$dll_dir"/libwinpthread*.dll "$OUTDIR/" 2>/dev/null || true
+            fi
+        done
         ;;
 
     *)

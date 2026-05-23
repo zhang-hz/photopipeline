@@ -24,7 +24,7 @@ build_x265() {
         curl -fsSL "https://bitbucket.org/multicoreware/x265_git/downloads/x265_3.6.tar.gz" | tar xz -C "${VENDOR_DIR}"
         mv "${VENDOR_DIR}/x265_3.6" "${SRC}" 2>/dev/null || true
     fi
-    if [ -f "${INSTALL_DIR}/lib/libx265.so" ]; then
+    if [ -f "${INSTALL_DIR}/lib/libx265.so" ] || [ -f "${INSTALL_DIR}/lib/libx265.dylib" ]; then
         echo "x265 already built, skipping"
         return
     fi
@@ -50,7 +50,7 @@ build_libde265() {
         echo "Downloading libde265 v1.0.15..."
         curl -fsSL "https://github.com/strukturag/libde265/releases/download/v1.0.15/libde265-1.0.15.tar.gz" | tar xz -C "${VENDOR_DIR}"
     fi
-    if [ -f "${INSTALL_DIR}/lib/libde265.so" ]; then
+    if [ -f "${INSTALL_DIR}/lib/libde265.so" ] || [ -f "${INSTALL_DIR}/lib/libde265.dylib" ]; then
         echo "libde265 already built, skipping"
         return
     fi
@@ -74,7 +74,7 @@ build_libheif() {
         echo "Downloading libheif v1.18.2..."
         curl -fsSL "https://github.com/strukturag/libheif/archive/refs/tags/v1.18.2.tar.gz" | tar xz -C "${VENDOR_DIR}"
     fi
-    if [ -f "${INSTALL_DIR}/lib/libheif.so" ]; then
+    if [ -f "${INSTALL_DIR}/lib/libheif.so" ] || [ -f "${INSTALL_DIR}/lib/libheif.dylib" ]; then
         echo "libheif already built, skipping"
         return
     fi
@@ -106,7 +106,7 @@ build_libaom() {
         curl -fsSL "https://github.com/AOMediaCodec/libaom/archive/refs/tags/v3.9.0.tar.gz" | tar xz -C "${VENDOR_DIR}"
         mv "${VENDOR_DIR}/libaom-3.9.0" "${SRC}" 2>/dev/null || true
     fi
-    if [ -f "${INSTALL_DIR}/lib/libaom.so" ]; then
+    if [ -f "${INSTALL_DIR}/lib/libaom.so" ] || [ -f "${INSTALL_DIR}/lib/libaom.dylib" ]; then
         echo "libaom already built, skipping"
         return
     fi
@@ -132,7 +132,7 @@ build_libjxl() {
         echo "Downloading libjxl v0.11.0..."
         curl -fsSL "https://github.com/libjxl/libjxl/archive/refs/tags/v0.11.0.tar.gz" | tar xz -C "${VENDOR_DIR}"
     fi
-    if [ -f "${INSTALL_DIR}/lib/libjxl.so" ]; then
+    if [ -f "${INSTALL_DIR}/lib/libjxl.so" ] || [ -f "${INSTALL_DIR}/lib/libjxl.dylib" ]; then
         echo "libjxl already built, skipping"
         return
     fi
@@ -153,8 +153,10 @@ build_libjxl() {
         -DJPEGXL_FORCE_SYSTEM_BROTLI=OFF
     cmake --build . --parallel "${NPROC}" --target jxl jxl_threads
     # Manual install of libjxl (cmake --install may not work for sub-targets)
-    cp lib/libjxl.so* "${INSTALL_DIR}/lib/"
-    cp lib/libjxl_threads.so* "${INSTALL_DIR}/lib/"
+        cp lib/libjxl*.so* "${INSTALL_DIR}/lib/" 2>/dev/null || true
+        cp lib/libjxl*.dylib* "${INSTALL_DIR}/lib/" 2>/dev/null || true
+        cp lib/libjxl_threads*.so* "${INSTALL_DIR}/lib/" 2>/dev/null || true
+        cp lib/libjxl_threads*.dylib* "${INSTALL_DIR}/lib/" 2>/dev/null || true
     mkdir -p "${INSTALL_DIR}/include/jxl"
     cp ../lib/include/jxl/*.h "${INSTALL_DIR}/include/jxl/"
     echo "libjxl v0.11.0 built"
@@ -167,7 +169,7 @@ build_lcms2() {
         echo "Downloading lcms2 v2.16..."
         curl -fsSL "https://github.com/mm2/Little-CMS/archive/refs/tags/lcms2.16.tar.gz" | tar xz -C "${VENDOR_DIR}"
     fi
-    if [ -f "${INSTALL_DIR}/lib/liblcms2.so" ]; then
+    if [ -f "${INSTALL_DIR}/lib/liblcms2.so" ] || [ -f "${INSTALL_DIR}/lib/liblcms2.dylib" ]; then
         echo "lcms2 already built, skipping"
         return
     fi
@@ -191,7 +193,7 @@ build_libraw() {
         echo "Downloading LibRaw v0.21.3..."
         curl -fsSL "https://github.com/LibRaw/LibRaw/archive/refs/tags/0.21.3.tar.gz" | tar xz -C "${VENDOR_DIR}"
     fi
-    if [ -f "${INSTALL_DIR}/lib/libraw.so" ]; then
+    if [ -f "${INSTALL_DIR}/lib/libraw.so" ] || [ -f "${INSTALL_DIR}/lib/libraw.dylib" ]; then
         echo "LibRaw already built, skipping"
         return
     fi
@@ -217,7 +219,7 @@ build_libpng() {
         echo "Downloading libpng v1.6.43..."
         curl -fsSL "https://download.sourceforge.net/libpng/libpng-1.6.43.tar.xz" | tar xJ -C "${VENDOR_DIR}"
     fi
-    if [ -f "${INSTALL_DIR}/lib/libpng16.so" ]; then
+    if [ -f "${INSTALL_DIR}/lib/libpng16.so" ] || [ -f "${INSTALL_DIR}/lib/libpng16.dylib" ]; then
         echo "libpng already built, skipping"
         return
     fi
@@ -241,7 +243,7 @@ build_libtiff() {
         echo "Downloading libtiff v4.6.0..."
         curl -fsSL "https://download.osgeo.org/libtiff/tiff-4.6.0.tar.gz" | tar xz -C "${VENDOR_DIR}"
     fi
-    if [ -f "${INSTALL_DIR}/lib/libtiff.so" ]; then
+    if [ -f "${INSTALL_DIR}/lib/libtiff.so" ] || [ -f "${INSTALL_DIR}/lib/libtiff.dylib" ]; then
         echo "libtiff already built, skipping"
         return
     fi
@@ -267,7 +269,7 @@ build_libjpeg_turbo() {
         curl -fsSL "https://github.com/libjpeg-turbo/libjpeg-turbo/archive/refs/tags/3.0.0.tar.gz" | tar xz -C "${VENDOR_DIR}"
         mv "${VENDOR_DIR}/libjpeg-turbo-3.0.0" "${SRC}" 2>/dev/null || true
     fi
-    if [ -f "${INSTALL_DIR}/lib/libjpeg.so" ]; then
+    if [ -f "${INSTALL_DIR}/lib/libjpeg.so" ] || [ -f "${INSTALL_DIR}/lib/libjpeg.dylib" ]; then
         echo "libjpeg-turbo already built, skipping"
         return
     fi
@@ -302,6 +304,6 @@ echo ""
 echo "=== All vendor libraries built ==="
 echo "Install prefix: ${INSTALL_DIR}"
 echo "Libraries:"
-ls -la "${INSTALL_DIR}/lib/"*.so* 2>/dev/null || echo "  (no .so files found)"
+ls -la "${INSTALL_DIR}/lib/"*.{so,dylib}* 2>/dev/null || echo "  (no library files found)"
 echo ""
 echo "Done at $(date)"

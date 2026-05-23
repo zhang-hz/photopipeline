@@ -1,0 +1,164 @@
+name: CI (Release)
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  release-linux:
+    name: Release (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cache vendor builds
+        uses: actions/cache@v4
+        with:
+          path: vendor/install/
+          key: vendor-linux-${{ hashFiles('vendor/build-all.sh') }}
+          restore-keys: vendor-linux-
+      - name: Install build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential cmake pkg-config \
+            curl nasm ninja-build
+      - name: Build vendor libraries
+        run: |
+          chmod +x vendor/build-all.sh
+          ./vendor/build-all.sh
+      - name: Build release
+        run: |
+          export PKG_CONFIG_PATH="$PWD/vendor/install/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+          cargo build --release --workspace
+      - name: Collect libraries
+        run: |
+          chmod +x scripts/collect-libs.sh
+          mkdir -p release/bin release/lib
+          cp target/release/photopipeline release/bin/
+          ./scripts/collect-libs.sh target/release/photopipeline release/lib/
+      - name: Smoke test
+        run: |
+          export LD_LIBRARY_PATH="$PWD/release/lib:${LD_LIBRARY_PATH:-}"
+          ./release/bin/photopipeline --version
+          ./release/bin/photopipeline --help
+          cat > /tmp/test_pipeline.toml << 'EOF'
+          [metadata]
+          name = "Smoke Test"
+          version = "1.0"
+          [[nodes]]
+          id = "transform"
+          plugin = "photopipeline.plugins.transform"
+          enabled = true
+          EOF
+          LD_LIBRARY_PATH="$PWD/release/lib" ./release/bin/photopipeline pipeline validate -c /tmp/test_pipeline.toml
+      - name: Package
+        run: tar -czf "photopipeline-${{ github.ref_name }}-linux-x86_64.tar.gz" -C release .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: photopipeline-linux
+          path: photopipeline-${{ github.ref_name }}-linux-x86_64.tar.gz
+
+  release-macos:
+    name: Release (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cache vendor builds
+        uses: actions/cache@v4
+        with:
+          path: vendor/install/
+          key: vendor-macos-${{ hashFiles('vendor/build-all.sh') }}
+          restore-keys: vendor-macos-
+      - name: Install build tools
+        run: brew install cmake pkg-config curl nasm ninja
+      - name: Build vendor libraries
+        run: |
+          chmod +x vendor/build-all.sh
+          ./vendor/build-all.sh
+      - name: Build release
+        run: |
+          export PKG_CONFIG_PATH="$PWD/vendor/install/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+          cargo build --release --workspace
+      - name: Create app bundle
+        run: |
+          mkdir -p "Photopipeline.app/Contents/MacOS"
+          mkdir -p "Photopipeline.app/Contents/Frameworks"
+          cp target/release/photopipeline "Photopipeline.app/Contents/MacOS/"
+          ./scripts/collect-libs.sh "Photopipeline.app/Contents/MacOS/photopipeline" "Photopipeline.app/Contents/Frameworks"
+      - name: Smoke test
+        run: |
+          DYLD_LIBRARY_PATH="Photopipeline.app/Contents/Frameworks" \
+          ./Photopipeline.app/Contents/MacOS/photopipeline --version
+      - name: Package DMG
+        run: |
+          hdiutil create -volname Photopipeline \
+            -srcfolder Photopipeline.app \
+            -ov -format UDZO \
+            "photopipeline-${{ github.ref_name }}-macos.dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: photopipeline-macos
+          path: photopipeline-${{ github.ref_name }}-macos.dmg
+
+  release-windows:
+    name: Release (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Setup vcpkg
+        run: |
+          if (-not (Test-Path C:/vcpkg)) {
+            git clone https://github.com/microsoft/vcpkg C:/vcpkg
+            C:/vcpkg/bootstrap-vcpkg.bat
+          }
+          echo "VCPKG_ROOT=C:/vcpkg" >> $env:GITHUB_ENV
+      - name: Cache vcpkg
+        uses: actions/cache@v4
+        with:
+          path: C:/vcpkg/installed
+          key: vcpkg-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: vcpkg-release-
+      - name: Install C libraries via vcpkg
+        run: |
+          C:/vcpkg/vcpkg.exe install `
+            x265:x64-windows libheif[x265]:x64-windows `
+            libjxl:x64-windows lcms2:x64-windows libraw:x64-windows `
+            libpng:x64-windows tiff:x64-windows libjpeg-turbo:x64-windows `
+            aom:x64-windows protobuf:x64-windows
+      - name: Build release
+        run: cargo build --release --workspace
+      - name: Package
+        run: |
+          mkdir release
+          copy target\release\photopipeline.exe release\
+          if (Test-Path "C:/vcpkg/installed/x64-windows/bin") {
+            Copy-Item C:/vcpkg/installed/x64-windows/bin/*.dll release\ -ErrorAction SilentlyContinue
+          }
+          Compress-Archive -Path release\* -DestinationPath "photopipeline-${{ github.ref_name }}-windows-x86_64.zip"
+      - name: Smoke test
+        run: |
+          $env:PATH = "$pwd\release;$env:PATH"
+          .\release\photopipeline.exe --version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: photopipeline-windows
+          path: photopipeline-${{ github.ref_name }}-windows-x86_64.zip
+
+  publish:
+    name: Publish Release
+    needs: [release-linux, release-macos, release-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Photopipeline ${{ github.ref_name }}"
+          files: photopipeline-*/*
+          generate_release_notes: true
