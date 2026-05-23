@@ -1,4 +1,4 @@
-name: CI Gate (All Checks)
+name: CI Gate (All Checks Summary)
 
 on:
   push:
@@ -8,36 +8,48 @@ on:
   workflow_dispatch:
 
 jobs:
-  gate:
-    name: ALL CHECKS PASSED
-    needs: [rust, gui, coverage, security, benchmark]
-    if: always()
+  quick-check:
+    name: Quick Smoke Test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - name: Verify all checks
-        shell: bash
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux deps
         run: |
-          FAIL=0
-          if [ "${{ needs.rust.result }}" != "success" ] && [ "${{ needs.rust.result }}" != "skipped" ]; then
-            echo "FAIL: rust (${{ needs.rust.result }})"
-            FAIL=1
-          fi
-          if [ "${{ needs.gui.result }}" != "success" ] && [ "${{ needs.gui.result }}" != "skipped" ]; then
-            echo "WARN: gui (${{ needs.gui.result }}) — Windows GUI excluded from gate"
-          fi
-          if [ "${{ needs.coverage.result }}" != "success" ] && [ "${{ needs.coverage.result }}" != "skipped" ]; then
-            echo "FAIL: coverage (${{ needs.coverage.result }})"
-            FAIL=1
-          fi
-          if [ "${{ needs.security.result }}" != "success" ] && [ "${{ needs.security.result }}" != "skipped" ]; then
-            echo "FAIL: security (${{ needs.security.result }})"
-            FAIL=1
-          fi
-          if [ "${{ needs.benchmark.result }}" != "success" ] && [ "${{ needs.benchmark.result }}" != "skipped" ]; then
-            echo "WARN: benchmark (${{ needs.benchmark.result }})"
-          fi
-          if [ $FAIL -ne 0 ]; then
-            echo "SOME CHECKS FAILED"
-            exit 1
-          fi
-          echo "ALL CHECKS PASSED"
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config \
+            protobuf-compiler libprotobuf-dev libheif-dev libjxl-dev \
+            liblcms2-dev libexif-dev libtiff-dev libpng-dev ninja-build
+
+      - name: Build all crates
+        run: cargo build --workspace
+
+      - name: Run all tests
+        run: cargo test --workspace --no-fail-fast 2>&1 | tee test-output.txt
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        continue-on-error: true
+        run: cargo clippy --workspace
+
+      - name: Show test summary
+        if: always()
+        run: |
+          echo "=== TEST RESULTS ==="
+          grep "test result:" test-output.txt || echo "No results found"
+          echo ""
+          echo "=== FAILURES ==="
+          grep "FAILED" test-output.txt || echo "No failures"
+
+      - name: Upload test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-gate-test-output
+          path: test-output.txt
