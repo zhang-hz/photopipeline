@@ -3,8 +3,8 @@ use std::sync::LazyLock;
 
 use photopipeline_core::{
     ChannelLayout, ColorSpace, GpuBackend, HardwareRequirement, PerfTimer, PixelBuffer,
-    PixelFormat, PluginCategory, PluginId, PluginResult, PluginVersion, ProcessingStats,
-    ValidationIssue,
+    PixelFormat, PluginCategory, PluginError, PluginId, PluginResult, PluginVersion,
+    ProcessingStats, ValidationIssue,
 };
 use photopipeline_plugin::{
     AuxView, EnumOption, GuiLayout, GuiSchema, GuiSection, ParameterField, ParameterSchema,
@@ -748,9 +748,11 @@ impl PixelProcessor for TransformPlugin {
                         Err(_) => {}
                     }
                 }
-                bilinear_resize(
-                    input, output, target_w, target_h, channels, in_stride, out_stride,
-                );
+                return Err(PluginError::Internal {
+                    plugin: self.id.clone(),
+                    message: "Lanczos3 resize requires Halide runtime. Install Halide 14.0+."
+                        .into(),
+                });
             }
             _ => {
                 bilinear_resize(

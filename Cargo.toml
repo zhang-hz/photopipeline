@@ -64,9 +64,10 @@ indicatif = "0.17"
 assertables = "0.9"
 
 # C FFI bindings (optional, CI only)
-libheif-sys = { version = "0.1" }
-libjxl-sys = { version = "0.1" }
-lcms2-sys = { version = "6" }
+libheif-sys = { version = "5" }
+libjxl-sys = { version = "0.7" }
+lcms2-sys = { version = "4" }
+libraw-sys = { version = "0.1" }
 kamadak-exif = "0.5"
 
 [profile.release]

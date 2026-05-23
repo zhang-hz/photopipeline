@@ -4,10 +4,10 @@ version.workspace = true
 edition.workspace = true
 
 [features]
-libheif-native = []
-libjxl-native = []
-libraw-native = []
-lcms2-native = []
+libheif-native = ["dep:libheif-sys"]
+libjxl-native = ["dep:libjxl-sys"]
+libraw-native = ["dep:libraw-sys"]
+lcms2-native = ["dep:lcms2-sys"]
 
 [dependencies]
 photopipeline-core = { path = "../core" }
@@ -30,6 +30,10 @@ rav1e = { version = "0.7", default-features = false, features = ["threading"] }
 imgref = "1"
 png = "0.17"
 rgb = "0.8"
+libheif-sys = { workspace = true, optional = true }
+libjxl-sys = { workspace = true, optional = true }
+libraw-sys = { workspace = true, optional = true }
+lcms2-sys = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio.workspace = true

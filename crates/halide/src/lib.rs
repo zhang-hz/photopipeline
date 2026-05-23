@@ -81,7 +81,7 @@ impl HalideContext {
         #[cfg(not(halide_found))]
         {
             let _ = (input, width, height, channels, src, dst);
-            return Err("Halide runtime not available".into());
+            return Err("Halide runtime not available. Install Halide 14.0+ or build with the halide-runtime feature.".into());
         }
         #[cfg(halide_found)]
         {
@@ -134,7 +134,7 @@ impl HalideContext {
         #[cfg(not(halide_found))]
         {
             let _ = (input, in_w, in_h, channels, out_w, out_h, filter);
-            return Err("Halide runtime not available".into());
+            return Err("Halide runtime not available. Install Halide 14.0+ or build with the halide-runtime feature.".into());
         }
         #[cfg(halide_found)]
         {
@@ -185,7 +185,7 @@ impl HalideContext {
         #[cfg(not(halide_found))]
         {
             let _ = (input, width, height, channels, algorithm, max_luminance);
-            return Err("Halide runtime not available".into());
+            return Err("Halide runtime not available. Install Halide 14.0+ or build with the halide-runtime feature.".into());
         }
         #[cfg(halide_found)]
         {

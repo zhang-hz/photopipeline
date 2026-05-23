@@ -88,12 +88,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.VCPKG_ROOT }}/installed
-          key: vcpkg-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('.github/workflows/ci-main.yml') }}
           restore-keys: vcpkg-${{ runner.os }}-
       - name: Install C libraries via vcpkg
         run: |
           & "$env:VCPKG_ROOT/vcpkg.exe" install --clean-after-build `
-            x265 libheif[x265] libjxl lcms2 libraw `
+            x265 libheif[x265] libjxl lcms libraw `
             libpng tiff libjpeg-turbo aom protobuf
       - name: Build
         run: cargo build --workspace
