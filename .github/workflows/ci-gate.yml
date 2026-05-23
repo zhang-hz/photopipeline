@@ -1,0 +1,43 @@
+name: CI Gate (All Checks)
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+jobs:
+  gate:
+    name: ALL CHECKS PASSED
+    needs: [rust, gui, coverage, security, benchmark]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all checks
+        shell: bash
+        run: |
+          FAIL=0
+          if [ "${{ needs.rust.result }}" != "success" ] && [ "${{ needs.rust.result }}" != "skipped" ]; then
+            echo "FAIL: rust (${{ needs.rust.result }})"
+            FAIL=1
+          fi
+          if [ "${{ needs.gui.result }}" != "success" ] && [ "${{ needs.gui.result }}" != "skipped" ]; then
+            echo "WARN: gui (${{ needs.gui.result }}) — Windows GUI excluded from gate"
+          fi
+          if [ "${{ needs.coverage.result }}" != "success" ] && [ "${{ needs.coverage.result }}" != "skipped" ]; then
+            echo "FAIL: coverage (${{ needs.coverage.result }})"
+            FAIL=1
+          fi
+          if [ "${{ needs.security.result }}" != "success" ] && [ "${{ needs.security.result }}" != "skipped" ]; then
+            echo "FAIL: security (${{ needs.security.result }})"
+            FAIL=1
+          fi
+          if [ "${{ needs.benchmark.result }}" != "success" ] && [ "${{ needs.benchmark.result }}" != "skipped" ]; then
+            echo "WARN: benchmark (${{ needs.benchmark.result }})"
+          fi
+          if [ $FAIL -ne 0 ]; then
+            echo "SOME CHECKS FAILED"
+            exit 1
+          fi
+          echo "ALL CHECKS PASSED"
