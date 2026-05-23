@@ -59,7 +59,7 @@ impl VersionRequirement {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, strum::Display, strum::EnumString)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, strum::Display, strum::EnumString, PartialOrd, Ord)]
 #[strum(serialize_all = "snake_case")]
 pub enum PluginCategory {
     Input,
@@ -364,4 +364,161 @@ pub enum AuxView {
     MetadataTable,
     ProgressBar,
     StatusText,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plugin_version_comparison() {
+        let v1 = PluginVersion::new(1, 0, 0);
+        let v2 = PluginVersion::new(1, 1, 0);
+        let v3 = PluginVersion::new(2, 0, 0);
+        assert!(v1 < v2);
+        assert!(v2 < v3);
+        assert!(v1 < v3);
+        assert_eq!(v1, PluginVersion::new(1, 0, 0));
+    }
+
+    #[test]
+    fn plugin_version_display() {
+        let v = PluginVersion::new(1, 2, 3);
+        assert_eq!(v.to_string(), "1.2.3");
+    }
+
+    #[test]
+    fn plugin_version_display_with_pre() {
+        let v = PluginVersion { major: 1, minor: 2, patch: 3, pre: Some("alpha".into()) };
+        assert_eq!(v.to_string(), "1.2.3-alpha");
+    }
+
+    #[test]
+    fn version_requirement_satisfied_by_exact() {
+        let req = VersionRequirement {
+            min_version: PluginVersion::new(1, 0, 0),
+            max_version: None,
+        };
+        assert!(req.is_satisfied_by(&PluginVersion::new(1, 0, 0)));
+        assert!(req.is_satisfied_by(&PluginVersion::new(2, 0, 0)));
+        assert!(!req.is_satisfied_by(&PluginVersion::new(0, 9, 0)));
+    }
+
+    #[test]
+    fn version_requirement_satisfied_by_range() {
+        let req = VersionRequirement {
+            min_version: PluginVersion::new(1, 0, 0),
+            max_version: Some(PluginVersion::new(2, 0, 0)),
+        };
+        assert!(req.is_satisfied_by(&PluginVersion::new(1, 0, 0)));
+        assert!(req.is_satisfied_by(&PluginVersion::new(1, 5, 0)));
+        assert!(!req.is_satisfied_by(&PluginVersion::new(2, 0, 0)));
+        assert!(!req.is_satisfied_by(&PluginVersion::new(2, 1, 0)));
+        assert!(!req.is_satisfied_by(&PluginVersion::new(0, 9, 0)));
+    }
+
+    #[test]
+    fn version_requirement_display() {
+        let req = VersionRequirement {
+            min_version: PluginVersion::new(1, 0, 0),
+            max_version: None,
+        };
+        assert_eq!(req.to_string(), ">=1.0.0");
+
+        let req2 = VersionRequirement {
+            min_version: PluginVersion::new(1, 0, 0),
+            max_version: Some(PluginVersion::new(2, 0, 0)),
+        };
+        assert_eq!(req2.to_string(), ">=1.0.0,<2.0.0");
+    }
+
+    #[test]
+    fn pixel_format_bytes_per_channel() {
+        use crate::image::PixelFormat;
+        assert_eq!(PixelFormat::U8.bytes_per_channel(), 1);
+        assert_eq!(PixelFormat::U16.bytes_per_channel(), 2);
+        assert_eq!(PixelFormat::F16.bytes_per_channel(), 2);
+        assert_eq!(PixelFormat::U32.bytes_per_channel(), 4);
+        assert_eq!(PixelFormat::F32.bytes_per_channel(), 4);
+    }
+
+    #[test]
+    fn pixel_format_is_float() {
+        use crate::image::PixelFormat;
+        assert!(!PixelFormat::U8.is_float());
+        assert!(!PixelFormat::U16.is_float());
+        assert!(PixelFormat::F16.is_float());
+        assert!(!PixelFormat::U32.is_float());
+        assert!(PixelFormat::F32.is_float());
+    }
+
+    #[test]
+    fn pixel_format_is_high_precision() {
+        use crate::image::PixelFormat;
+        assert!(!PixelFormat::U8.is_high_precision());
+        assert!(PixelFormat::U16.is_high_precision());
+        assert!(PixelFormat::F16.is_high_precision());
+        assert!(PixelFormat::U32.is_high_precision());
+        assert!(PixelFormat::F32.is_high_precision());
+    }
+
+    #[test]
+    fn pixel_format_max_value_u16() {
+        use crate::image::PixelFormat;
+        assert_eq!(PixelFormat::U8.max_value_u16(), 255);
+        assert_eq!(PixelFormat::U16.max_value_u16(), 65535);
+        assert_eq!(PixelFormat::F16.max_value_u16(), 65535);
+        assert_eq!(PixelFormat::U32.max_value_u16(), 65535);
+        assert_eq!(PixelFormat::F32.max_value_u16(), 65535);
+    }
+
+    #[test]
+    fn channel_layout_channel_count() {
+        use crate::image::ChannelLayout;
+        assert_eq!(ChannelLayout::Gray.channel_count(), 1);
+        assert_eq!(ChannelLayout::GrayAlpha.channel_count(), 2);
+        assert_eq!(ChannelLayout::RGB.channel_count(), 3);
+        assert_eq!(ChannelLayout::RGBA.channel_count(), 4);
+        assert_eq!(ChannelLayout::Planar(5).channel_count(), 5);
+        assert_eq!(ChannelLayout::Custom(7).channel_count(), 7);
+    }
+
+    #[test]
+    fn channel_layout_is_interleaved() {
+        use crate::image::ChannelLayout;
+        assert!(ChannelLayout::Gray.is_interleaved());
+        assert!(ChannelLayout::GrayAlpha.is_interleaved());
+        assert!(ChannelLayout::RGB.is_interleaved());
+        assert!(ChannelLayout::RGBA.is_interleaved());
+        assert!(!ChannelLayout::Planar(3).is_interleaved());
+        assert!(!ChannelLayout::Custom(4).is_interleaved());
+    }
+
+    #[test]
+    fn gpu_backend_display() {
+        assert_eq!(GpuBackend::None.to_string(), "None");
+        assert_eq!(GpuBackend::CUDA.to_string(), "CUDA");
+        assert_eq!(GpuBackend::Vulkan.to_string(), "Vulkan");
+        assert_eq!(GpuBackend::OpenCL.to_string(), "OpenCL");
+        assert_eq!(GpuBackend::Auto.to_string(), "Auto");
+    }
+
+    #[test]
+    fn ai_backend_display() {
+        assert_eq!(AiBackend::ONNX.to_string(), "ONNX");
+        assert_eq!(AiBackend::TensorRT.to_string(), "TensorRT");
+        assert_eq!(AiBackend::CoreML.to_string(), "CoreML");
+        assert_eq!(AiBackend::OpenVINO.to_string(), "OpenVINO");
+        assert_eq!(AiBackend::Burn.to_string(), "Burn");
+    }
+
+    #[test]
+    fn image_format_display() {
+        assert_eq!(ImageFormat::JPEG.to_string(), "JPEG");
+        assert_eq!(ImageFormat::PNG.to_string(), "PNG");
+        assert_eq!(ImageFormat::HEIF.to_string(), "HEIF");
+        assert_eq!(ImageFormat::AVIF.to_string(), "AVIF");
+        assert_eq!(ImageFormat::JXL.to_string(), "JXL");
+        assert_eq!(ImageFormat::Unknown("custom".into()).to_string(), "custom");
+    }
 }

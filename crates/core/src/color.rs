@@ -205,3 +205,138 @@ pub struct ColorRGBA {
     pub b: f32,
     pub a: f32,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn color_space_srgb_preset() {
+        assert_eq!(ColorSpace::SRGB.primaries, ColorPrimaries::SRGB);
+        assert_eq!(ColorSpace::SRGB.transfer, TransferFunction::SRGB);
+        assert_eq!(ColorSpace::SRGB.white_point, WhitePoint::D65);
+        assert_eq!(ColorSpace::SRGB.hdr_nits, None);
+    }
+
+    #[test]
+    fn color_space_adobe_rgb_preset() {
+        assert_eq!(ColorSpace::ADOBE_RGB.primaries, ColorPrimaries::AdobeRGB);
+        assert_eq!(ColorSpace::ADOBE_RGB.transfer, TransferFunction::Gamma22);
+        assert_eq!(ColorSpace::ADOBE_RGB.white_point, WhitePoint::D65);
+        assert_eq!(ColorSpace::ADOBE_RGB.hdr_nits, None);
+    }
+
+    #[test]
+    fn color_space_display_p3_preset() {
+        assert_eq!(ColorSpace::DISPLAY_P3.primaries, ColorPrimaries::DisplayP3);
+        assert_eq!(ColorSpace::DISPLAY_P3.transfer, TransferFunction::SRGB);
+        assert_eq!(ColorSpace::DISPLAY_P3.white_point, WhitePoint::D65);
+        assert_eq!(ColorSpace::DISPLAY_P3.hdr_nits, None);
+    }
+
+    #[test]
+    fn color_space_rec2020_pq_preset() {
+        assert_eq!(ColorSpace::REC2020_PQ.primaries, ColorPrimaries::BT2020);
+        assert_eq!(ColorSpace::REC2020_PQ.transfer, TransferFunction::PQ);
+        assert_eq!(ColorSpace::REC2020_PQ.white_point, WhitePoint::D65);
+        assert_eq!(ColorSpace::REC2020_PQ.hdr_nits, Some(1000.0));
+    }
+
+    #[test]
+    fn color_space_aces_cg_preset() {
+        assert_eq!(ColorSpace::ACES_CG.primaries, ColorPrimaries::ACEScg);
+        assert_eq!(ColorSpace::ACES_CG.transfer, TransferFunction::Linear);
+        assert_eq!(ColorSpace::ACES_CG.white_point, WhitePoint::D60);
+        assert_eq!(ColorSpace::ACES_CG.hdr_nits, None);
+    }
+
+    #[test]
+    fn color_space_linear_srgb_preset() {
+        assert_eq!(ColorSpace::LINEAR_SRGB.primaries, ColorPrimaries::SRGB);
+        assert_eq!(ColorSpace::LINEAR_SRGB.transfer, TransferFunction::Linear);
+        assert_eq!(ColorSpace::LINEAR_SRGB.white_point, WhitePoint::D65);
+        assert_eq!(ColorSpace::LINEAR_SRGB.hdr_nits, None);
+    }
+
+    #[test]
+    fn color_space_is_hdr() {
+        assert!(!ColorSpace::SRGB.is_hdr());
+        assert!(!ColorSpace::ADOBE_RGB.is_hdr());
+        assert!(ColorSpace::REC2020_PQ.is_hdr());
+
+        let low_hdr = ColorSpace {
+            primaries: ColorPrimaries::BT2020,
+            transfer: TransferFunction::PQ,
+            white_point: WhitePoint::D65,
+            hdr_nits: Some(200.0),
+        };
+        assert!(!low_hdr.is_hdr());
+
+        let just_above = ColorSpace {
+            primaries: ColorPrimaries::BT2020,
+            transfer: TransferFunction::PQ,
+            white_point: WhitePoint::D65,
+            hdr_nits: Some(204.0),
+        };
+        assert!(just_above.is_hdr());
+    }
+
+    #[test]
+    fn color_rgb_luminance() {
+        assert_eq!(ColorRGB::BLACK.r, 0.0);
+        assert_eq!(ColorRGB::BLACK.g, 0.0);
+        assert_eq!(ColorRGB::BLACK.b, 0.0);
+        assert!((ColorRGB::BLACK.luminance() - 0.0).abs() < 0.001);
+
+        assert_eq!(ColorRGB::WHITE.r, 1.0);
+        assert_eq!(ColorRGB::WHITE.g, 1.0);
+        assert_eq!(ColorRGB::WHITE.b, 1.0);
+        assert!((ColorRGB::WHITE.luminance() - 1.0).abs() < 0.001);
+
+        let gray = ColorRGB { r: 0.5, g: 0.5, b: 0.5 };
+        assert!((gray.luminance() - 0.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn color_primaries_display() {
+        assert_eq!(ColorPrimaries::SRGB.to_string(), "sRGB");
+        assert_eq!(ColorPrimaries::DisplayP3.to_string(), "display_p3");
+        assert_eq!(ColorPrimaries::BT2020.to_string(), "bt2020");
+        assert_eq!(ColorPrimaries::ACES.to_string(), "aces");
+    }
+
+    #[test]
+    fn transfer_function_display() {
+        assert_eq!(TransferFunction::Linear.to_string(), "linear");
+        assert_eq!(TransferFunction::SRGB.to_string(), "srgb");
+        assert_eq!(TransferFunction::PQ.to_string(), "pq");
+        assert_eq!(TransferFunction::HLG.to_string(), "hlg");
+    }
+
+    #[test]
+    fn white_point_display() {
+        assert_eq!(WhitePoint::D50.to_string(), "d50");
+        assert_eq!(WhitePoint::D65.to_string(), "d65");
+        assert_eq!(WhitePoint::DCI.to_string(), "dci");
+    }
+
+    #[test]
+    fn rendering_intent_display() {
+        assert_eq!(RenderingIntent::Perceptual.to_string(), "perceptual");
+        assert_eq!(RenderingIntent::RelativeColorimetric.to_string(), "relative_colorimetric");
+    }
+
+    #[test]
+    fn gamut_mapping_display() {
+        assert_eq!(GamutMapping::Clip.to_string(), "clip");
+        assert_eq!(GamutMapping::Compress.to_string(), "compress");
+    }
+
+    #[test]
+    fn color_space_default_is_srgb() {
+        let cs = ColorSpace::default();
+        assert_eq!(cs.primaries, ColorPrimaries::SRGB);
+        assert_eq!(cs.transfer, TransferFunction::SRGB);
+        assert!(!cs.is_hdr());
+    }
+}

@@ -286,7 +286,9 @@ impl PipelineGraph {
             if let (Some(&from_port), Some(&to_port)) =
                 (output_ports.get(&te.from), input_ports.get(&te.to))
             {
-                drop(graph.connect(from_port, to_port));
+                if let Err(e) = graph.connect(from_port, to_port) {
+                    tracing::warn!("template edge {} -> {} connection failed: {}", te.from, te.to, e);
+                }
             }
         }
 
@@ -417,5 +419,276 @@ mod tests {
             batch: None,
         };
         assert!(template.validate().is_err());
+    }
+
+    #[test]
+    fn test_graph_new_is_empty() {
+        let graph = PipelineGraph::new();
+        assert!(graph.nodes.is_empty());
+        assert!(graph.edges.is_empty());
+    }
+
+    #[test]
+    fn test_graph_node_has_ports() {
+        let mut graph = PipelineGraph::new();
+        let id = graph.add_node("p1".into(), "node".into());
+        let node = graph.node(id).unwrap();
+        assert!(!node.inputs.is_empty());
+        assert!(!node.outputs.is_empty());
+    }
+
+    #[test]
+    fn test_diamond_topological_order() {
+        let mut graph = PipelineGraph::new();
+        let a = graph.add_node("a".into(), "A".into());
+        let b = graph.add_node("b".into(), "B".into());
+        let c = graph.add_node("c".into(), "C".into());
+        let d = graph.add_node("d".into(), "D".into());
+
+        let out_a = graph.node(a).unwrap().outputs[0];
+        let in_b = graph.node(b).unwrap().inputs[0];
+        let in_c = graph.node(c).unwrap().inputs[0];
+        let out_b = graph.node(b).unwrap().outputs[0];
+        let out_c = graph.node(c).unwrap().outputs[0];
+        let in_d1 = graph.node(d).unwrap().inputs[0];
+        let in_d2 = graph.node(d).unwrap().outputs[0];
+
+        graph.connect(out_a, in_b).unwrap();
+        graph.connect(out_a, in_c).unwrap();
+        graph.connect(out_b, in_d1).unwrap();
+        graph.connect(out_c, in_d2).unwrap();
+
+        let order = graph.topological_order().unwrap();
+        assert_eq!(order.len(), 4);
+        let pos_a = order.iter().position(|&id| id == a).unwrap();
+        let pos_b = order.iter().position(|&id| id == b).unwrap();
+        let pos_c = order.iter().position(|&id| id == c).unwrap();
+        let pos_d = order.iter().position(|&id| id == d).unwrap();
+        assert!(pos_a < pos_b);
+        assert!(pos_a < pos_c);
+        assert!(pos_b < pos_d);
+        assert!(pos_c < pos_d);
+    }
+
+    #[test]
+    fn test_validate_graph_ok() {
+        let mut graph = PipelineGraph::new();
+        let n1 = graph.add_node("p1".into(), "n1".into());
+        let n2 = graph.add_node("p2".into(), "n2".into());
+        let out1 = graph.node(n1).unwrap().outputs[0];
+        let in2 = graph.node(n2).unwrap().inputs[0];
+        graph.connect(out1, in2).unwrap();
+        assert!(graph.validate_graph().is_ok());
+    }
+
+    #[test]
+    fn test_validate_graph_detects_cycle() {
+        let mut graph = PipelineGraph::new();
+        let n1 = graph.add_node("p1".into(), "n1".into());
+        let n2 = graph.add_node("p2".into(), "n2".into());
+        let n3 = graph.add_node("p3".into(), "n3".into());
+        let out1 = graph.node(n1).unwrap().outputs[0];
+        let in2 = graph.node(n2).unwrap().inputs[0];
+        let out2 = graph.node(n2).unwrap().outputs[0];
+        let in3 = graph.node(n3).unwrap().inputs[0];
+        let out3 = graph.node(n3).unwrap().outputs[0];
+        let in1 = graph.node(n1).unwrap().inputs[0];
+
+        graph.connect(out1, in2).unwrap();
+        graph.connect(out2, in3).unwrap();
+        // connect already detects cycles at graph build time
+        let result = graph.connect(out3, in1);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_template_into_graph() {
+        let template = PipelineTemplate {
+            metadata: Default::default(),
+            nodes: vec![
+                TemplateNode {
+                    id: "input".into(),
+                    plugin: "input.plugin".into(),
+                    label: None,
+                    enabled: true,
+                    params: None,
+                },
+                TemplateNode {
+                    id: "output".into(),
+                    plugin: "output.plugin".into(),
+                    label: Some("Output".into()),
+                    enabled: true,
+                    params: None,
+                },
+            ],
+            edges: vec![TemplateEdge { from: "input".into(), to: "output".into() }],
+            overrides: vec![],
+            groups: vec![],
+            batch: None,
+        };
+
+        let graph = template.into_graph();
+        assert_eq!(graph.nodes.len(), 2);
+        assert_eq!(graph.edges.len(), 1);
+    }
+
+    #[test]
+    fn test_template_node_params_to_graph() {
+        let mut params_map = std::collections::HashMap::new();
+        params_map.insert("key".into(), serde_json::json!("value"));
+        let template = PipelineTemplate {
+            metadata: Default::default(),
+            nodes: vec![TemplateNode {
+                id: "n1".into(),
+                plugin: "p1".into(),
+                label: None,
+                enabled: true,
+                params: Some(params_map),
+            }],
+            edges: vec![],
+            overrides: vec![],
+            groups: vec![],
+            batch: None,
+        };
+
+        let graph = template.into_graph();
+        let node = &graph.nodes[0];
+        assert!(node.parameter_overrides.is_some());
+        let ps = node.parameter_overrides.as_ref().unwrap();
+        assert_eq!(ps.get_str("key"), Some("value"));
+    }
+
+    #[test]
+    fn test_graph_disconnect_nonexistent() {
+        let mut graph = PipelineGraph::new();
+        let n1 = graph.add_node("p1".into(), "n1".into());
+        let fake_port = uuid::Uuid::new_v4();
+        let out1 = graph.node(n1).unwrap().outputs[0];
+        assert!(!graph.disconnect(fake_port, out1));
+    }
+
+    #[test]
+    fn test_graph_self_connect_fails() {
+        let mut graph = PipelineGraph::new();
+        let n1 = graph.add_node("p1".into(), "n1".into());
+        let port = graph.node(n1).unwrap().outputs[0];
+        let result = graph.connect(port, port);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_graph_duplicate_edge_rejected() {
+        let mut graph = PipelineGraph::new();
+        let n1 = graph.add_node("p1".into(), "n1".into());
+        let n2 = graph.add_node("p2".into(), "n2".into());
+        let out1 = graph.node(n1).unwrap().outputs[0];
+        let in2 = graph.node(n2).unwrap().inputs[0];
+        assert!(graph.connect(out1, in2).is_ok());
+        assert!(graph.connect(out1, in2).is_err());
+    }
+
+    #[test]
+    fn test_graph_port_owner() {
+        let mut graph = PipelineGraph::new();
+        let id = graph.add_node("p1".into(), "n1".into());
+        let node = graph.node(id).unwrap();
+        assert_eq!(graph.port_owner(node.outputs[0]), Some(id));
+        assert_eq!(graph.port_owner(uuid::Uuid::new_v4()), None);
+    }
+
+    #[test]
+    fn test_graph_node_mut() {
+        let mut graph = PipelineGraph::new();
+        let id = graph.add_node("p1".into(), "n1".into());
+        {
+            let node = graph.node_mut(id).unwrap();
+            node.enabled = false;
+        }
+        assert!(!graph.node(id).unwrap().enabled);
+    }
+
+    #[test]
+    fn test_graph_remove_nonexistent_node() {
+        let mut graph = PipelineGraph::new();
+        assert!(!graph.remove_node(uuid::Uuid::new_v4()));
+    }
+
+    #[test]
+    fn test_graph_remove_node_cleans_edges() {
+        let mut graph = PipelineGraph::new();
+        let n1 = graph.add_node("p1".into(), "n1".into());
+        let n2 = graph.add_node("p2".into(), "n2".into());
+        let out1 = graph.node(n1).unwrap().outputs[0];
+        let in2 = graph.node(n2).unwrap().inputs[0];
+        graph.connect(out1, in2).unwrap();
+        assert_eq!(graph.edges.len(), 1);
+        graph.remove_node(n2);
+        assert_eq!(graph.edges.len(), 0);
+    }
+
+    #[test]
+    fn test_template_validate_empty_nodes() {
+        let template = PipelineTemplate {
+            metadata: Default::default(),
+            nodes: vec![],
+            edges: vec![],
+            overrides: vec![],
+            groups: vec![],
+            batch: None,
+        };
+        assert!(template.validate().is_err());
+    }
+
+    #[test]
+    fn test_template_validate_bad_edge_target() {
+        let template = PipelineTemplate {
+            metadata: Default::default(),
+            nodes: vec![TemplateNode {
+                id: "n1".into(),
+                plugin: "p1".into(),
+                label: None,
+                enabled: true,
+                params: None,
+            }],
+            edges: vec![TemplateEdge { from: "n1".into(), to: "n2".into() }],
+            overrides: vec![],
+            groups: vec![],
+            batch: None,
+        };
+        assert!(template.validate().is_err());
+    }
+
+    #[test]
+    fn test_template_validate_bad_edge_source() {
+        let template = PipelineTemplate {
+            metadata: Default::default(),
+            nodes: vec![TemplateNode {
+                id: "n1".into(),
+                plugin: "p1".into(),
+                label: None,
+                enabled: true,
+                params: None,
+            }],
+            edges: vec![TemplateEdge { from: "n2".into(), to: "n1".into() }],
+            overrides: vec![],
+            groups: vec![],
+            batch: None,
+        };
+        assert!(template.validate().is_err());
+    }
+
+    #[test]
+    fn test_serialize_deserialize_pipeline_graph() {
+        let mut graph = PipelineGraph::new();
+        let n1 = graph.add_node("p1".into(), "n1".into());
+        let n2 = graph.add_node("p2".into(), "n2".into());
+        let out1 = graph.node(n1).unwrap().outputs[0];
+        let in2 = graph.node(n2).unwrap().inputs[0];
+        graph.connect(out1, in2).unwrap();
+
+        let json = serde_json::to_string(&graph).unwrap();
+        let deserialized: PipelineGraph = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.nodes.len(), 2);
+        assert_eq!(deserialized.edges.len(), 1);
     }
 }

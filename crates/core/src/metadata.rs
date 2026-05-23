@@ -216,7 +216,10 @@ impl GpxTrack {
         }
 
         match (before, after) {
-            (Some(b), Some(a)) if b.timestamp != a.timestamp => {
+            (Some(b), Some(a)) if b.timestamp == a.timestamp => {
+                Some(GpxPoint { timestamp: Some(*timestamp), ..*b })
+            }
+            (Some(b), Some(a)) => {
                 let t0 = b.timestamp.unwrap().timestamp_millis() as f64;
                 let t1 = a.timestamp.unwrap().timestamp_millis() as f64;
                 let t = target_ts as f64;
@@ -266,5 +269,235 @@ fn interpolate_bearing(a: Option<f64>, b: Option<f64>, frac: f64) -> Option<f64>
         (Some(va), None) => Some(va),
         (None, Some(vb)) => Some(vb),
         (None, None) => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    #[test]
+    fn gps_data_has_coordinates() {
+        let gps = GpsData::default();
+        assert!(!gps.has_coordinates());
+
+        let gps = GpsData {
+            latitude: Some(34.0522),
+            longitude: None,
+            ..Default::default()
+        };
+        assert!(!gps.has_coordinates());
+
+        let gps = GpsData {
+            latitude: Some(34.0522),
+            longitude: Some(-118.2437),
+            ..Default::default()
+        };
+        assert!(gps.has_coordinates());
+    }
+
+    #[test]
+    fn gps_data_coordinate_tuple() {
+        let gps = GpsData::default();
+        assert_eq!(gps.coordinate_tuple(), None);
+
+        let gps = GpsData {
+            latitude: Some(34.0522),
+            longitude: Some(-118.2437),
+            ..Default::default()
+        };
+        assert_eq!(gps.coordinate_tuple(), Some((34.0522, -118.2437)));
+    }
+
+    #[test]
+    fn metadata_default_is_empty() {
+        let m = Metadata::default();
+        assert!(m.exif.is_none());
+        assert!(m.xmp.is_none());
+        assert!(m.iptc.is_none());
+        assert!(m.gps.is_none());
+        assert!(m.custom.is_empty());
+    }
+
+    #[test]
+    fn gpx_track_interpolate_exact_match() {
+        let t1 = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
+        let t2 = Utc.with_ymd_and_hms(2024, 1, 1, 13, 0, 0).unwrap();
+        let track = GpxTrack {
+            name: None,
+            points: vec![
+                GpxPoint {
+                    latitude: 40.0,
+                    longitude: -74.0,
+                    elevation: Some(10.0),
+                    timestamp: Some(t1),
+                    speed: Some(5.0),
+                    bearing: Some(90.0),
+                },
+                GpxPoint {
+                    latitude: 41.0,
+                    longitude: -73.0,
+                    elevation: Some(20.0),
+                    timestamp: Some(t2),
+                    speed: Some(10.0),
+                    bearing: Some(180.0),
+                },
+            ],
+            duration_seconds: None,
+            distance_meters: None,
+        };
+
+        let result = track.interpolate_at(&t1);
+        assert!(result.is_some());
+        let pt = result.unwrap();
+        assert!((pt.latitude - 40.0).abs() < 0.0001);
+        assert!((pt.longitude - (-74.0)).abs() < 0.0001);
+    }
+
+    #[test]
+    fn gpx_track_interpolate_midpoint() {
+        let t1 = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
+        let t2 = Utc.with_ymd_and_hms(2024, 1, 1, 14, 0, 0).unwrap();
+        let t_mid = Utc.with_ymd_and_hms(2024, 1, 1, 13, 0, 0).unwrap();
+        let track = GpxTrack {
+            name: None,
+            points: vec![
+                GpxPoint {
+                    latitude: 40.0,
+                    longitude: -74.0,
+                    elevation: Some(10.0),
+                    timestamp: Some(t1),
+                    speed: Some(5.0),
+                    bearing: Some(0.0),
+                },
+                GpxPoint {
+                    latitude: 42.0,
+                    longitude: -72.0,
+                    elevation: Some(20.0),
+                    timestamp: Some(t2),
+                    speed: Some(15.0),
+                    bearing: Some(90.0),
+                },
+            ],
+            duration_seconds: None,
+            distance_meters: None,
+        };
+
+        let result = track.interpolate_at(&t_mid);
+        assert!(result.is_some());
+        let pt = result.unwrap();
+        assert!((pt.latitude - 41.0).abs() < 0.0001);
+        assert!((pt.longitude - (-73.0)).abs() < 0.0001);
+        assert!((pt.elevation.unwrap() - 15.0).abs() < 0.0001);
+        assert!((pt.speed.unwrap() - 10.0).abs() < 0.0001);
+    }
+
+    #[test]
+    fn gpx_track_interpolate_before_first() {
+        let t1 = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
+        let t_before = Utc.with_ymd_and_hms(2024, 1, 1, 11, 0, 0).unwrap();
+        let track = GpxTrack {
+            name: None,
+            points: vec![
+                GpxPoint {
+                    latitude: 40.0,
+                    longitude: -74.0,
+                    elevation: Some(10.0),
+                    timestamp: Some(t1),
+                    speed: Some(5.0),
+                    bearing: Some(90.0),
+                },
+            ],
+            duration_seconds: None,
+            distance_meters: None,
+        };
+
+        let result = track.interpolate_at(&t_before);
+        assert!(result.is_some());
+        let pt = result.unwrap();
+        assert!((pt.latitude - 40.0).abs() < 0.0001);
+        assert!(pt.timestamp == Some(t_before));
+    }
+
+    #[test]
+    fn gpx_track_interpolate_after_last() {
+        let t1 = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
+        let t_after = Utc.with_ymd_and_hms(2024, 1, 1, 13, 0, 0).unwrap();
+        let track = GpxTrack {
+            name: None,
+            points: vec![
+                GpxPoint {
+                    latitude: 40.0,
+                    longitude: -74.0,
+                    elevation: Some(10.0),
+                    timestamp: Some(t1),
+                    speed: Some(5.0),
+                    bearing: Some(90.0),
+                },
+            ],
+            duration_seconds: None,
+            distance_meters: None,
+        };
+
+        let result = track.interpolate_at(&t_after);
+        assert!(result.is_some());
+        let pt = result.unwrap();
+        assert!((pt.latitude - 40.0).abs() < 0.0001);
+        assert!(pt.timestamp == Some(t_after));
+    }
+
+    #[test]
+    fn gpx_track_interpolate_empty() {
+        let track = GpxTrack {
+            name: None,
+            points: vec![],
+            duration_seconds: None,
+            distance_meters: None,
+        };
+        let t = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
+        assert_eq!(track.interpolate_at(&t), None);
+    }
+
+    #[test]
+    fn interpolate_f64_both_some() {
+        assert_eq!(interpolate_f64(Some(0.0), Some(10.0), 0.5), Some(5.0));
+    }
+
+    #[test]
+    fn interpolate_f64_one_some() {
+        assert_eq!(interpolate_f64(Some(5.0), None, 0.5), Some(5.0));
+        assert_eq!(interpolate_f64(None, Some(5.0), 0.5), Some(5.0));
+    }
+
+    #[test]
+    fn interpolate_f64_both_none() {
+        assert_eq!(interpolate_f64(None, None, 0.5), None);
+    }
+
+    #[test]
+    fn interpolate_bearing_short_arc() {
+        let result = interpolate_bearing(Some(10.0), Some(20.0), 0.5);
+        assert!(result.is_some());
+        assert!((result.unwrap() - 15.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn interpolate_bearing_cross_0() {
+        let result = interpolate_bearing(Some(350.0), Some(10.0), 0.5);
+        assert!(result.is_some());
+        let v = result.unwrap();
+        assert!((v - 0.0).abs() < 0.001 || (v - 360.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn interpolate_bearing_one_none() {
+        assert_eq!(interpolate_bearing(Some(45.0), None, 0.5), Some(45.0));
+        assert_eq!(interpolate_bearing(None, Some(45.0), 0.5), Some(45.0));
+    }
+
+    #[test]
+    fn interpolate_bearing_both_none() {
+        assert_eq!(interpolate_bearing(None, None, 0.5), None);
     }
 }

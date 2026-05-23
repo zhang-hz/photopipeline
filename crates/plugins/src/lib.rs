@@ -15,20 +15,81 @@ pub mod raw_input;
 
 use std::sync::Arc;
 use photopipeline_plugin::registry::Registry;
+use photopipeline_plugin::{
+    Plugin, MetadataProcessor, PixelProcessor, FormatProcessor,
+    AiProcessor,
+};
 
 pub fn register_all(registry: &Registry) {
-    registry.register(Arc::new(exif_rw::ExifRwPlugin::new())).ok();
-    registry.register(Arc::new(gps_set::GpsSetPlugin::new())).ok();
-    registry.register(Arc::new(time_shift::TimeShiftPlugin::new())).ok();
-    registry.register(Arc::new(colorspace::ColorSpacePlugin::new())).ok();
-    registry.register(Arc::new(lut3d::Lut3dPlugin::new())).ok();
-    registry.register(Arc::new(transform::TransformPlugin::new())).ok();
-    registry.register(Arc::new(lens_correct::LensCorrectPlugin::new())).ok();
-    registry.register(Arc::new(ai_denoise::AiDenoisePlugin::new())).ok();
-    registry.register(Arc::new(heif_encoder::HeifEncoderPlugin::new())).ok();
-    registry.register(Arc::new(jxl_encoder::JxlEncoderPlugin::new())).ok();
-    registry.register(Arc::new(avif_encoder::AvifEncoderPlugin::new())).ok();
-    registry.register(Arc::new(tiff_encoder::TiffEncoderPlugin::new())).ok();
-    registry.register(Arc::new(png_encoder::PngEncoderPlugin::new())).ok();
-    registry.register(Arc::new(raw_input::RawInputPlugin::new())).ok();
+    {
+        let p: Arc<exif_rw::ExifRwPlugin> = Arc::new(exif_rw::ExifRwPlugin::new());
+        let _ = registry.register(p.clone() as Arc<dyn Plugin>);
+        let _ = registry.register_metadata_processor(p.clone() as Arc<dyn MetadataProcessor>);
+    }
+    {
+        let p: Arc<gps_set::GpsSetPlugin> = Arc::new(gps_set::GpsSetPlugin::new());
+        let _ = registry.register(p.clone() as Arc<dyn Plugin>);
+        let _ = registry.register_metadata_processor(p.clone() as Arc<dyn MetadataProcessor>);
+    }
+    {
+        let p: Arc<time_shift::TimeShiftPlugin> = Arc::new(time_shift::TimeShiftPlugin::new());
+        let _ = registry.register(p.clone() as Arc<dyn Plugin>);
+        let _ = registry.register_metadata_processor(p.clone() as Arc<dyn MetadataProcessor>);
+    }
+    {
+        let p: Arc<colorspace::ColorSpacePlugin> = Arc::new(colorspace::ColorSpacePlugin::new());
+        let _ = registry.register(p.clone() as Arc<dyn Plugin>);
+        let _ = registry.register_pixel_processor(p.clone() as Arc<dyn PixelProcessor>);
+    }
+    {
+        let p: Arc<lut3d::Lut3dPlugin> = Arc::new(lut3d::Lut3dPlugin::new());
+        let _ = registry.register(p.clone() as Arc<dyn Plugin>);
+        let _ = registry.register_pixel_processor(p.clone() as Arc<dyn PixelProcessor>);
+    }
+    {
+        let p: Arc<transform::TransformPlugin> = Arc::new(transform::TransformPlugin::new());
+        let _ = registry.register(p.clone() as Arc<dyn Plugin>);
+        let _ = registry.register_pixel_processor(p.clone() as Arc<dyn PixelProcessor>);
+    }
+    {
+        let p: Arc<lens_correct::LensCorrectPlugin> = Arc::new(lens_correct::LensCorrectPlugin::new());
+        let _ = registry.register(p.clone() as Arc<dyn Plugin>);
+        let _ = registry.register_pixel_processor(p.clone() as Arc<dyn PixelProcessor>);
+    }
+    {
+        let p: Arc<ai_denoise::AiDenoisePlugin> = Arc::new(ai_denoise::AiDenoisePlugin::new());
+        let _ = registry.register(p.clone() as Arc<dyn Plugin>);
+        let _ = registry.register_pixel_processor(p.clone() as Arc<dyn PixelProcessor>);
+        let _ = registry.register_ai_processor(p.clone() as Arc<dyn AiProcessor>);
+    }
+    {
+        let p: Arc<heif_encoder::HeifEncoderPlugin> = Arc::new(heif_encoder::HeifEncoderPlugin::new());
+        let _ = registry.register(p.clone() as Arc<dyn Plugin>);
+        let _ = registry.register_format_processor(p.clone() as Arc<dyn FormatProcessor>);
+    }
+    {
+        let p: Arc<jxl_encoder::JxlEncoderPlugin> = Arc::new(jxl_encoder::JxlEncoderPlugin::new());
+        let _ = registry.register(p.clone() as Arc<dyn Plugin>);
+        let _ = registry.register_format_processor(p.clone() as Arc<dyn FormatProcessor>);
+    }
+    {
+        let p: Arc<avif_encoder::AvifEncoderPlugin> = Arc::new(avif_encoder::AvifEncoderPlugin::new());
+        let _ = registry.register(p.clone() as Arc<dyn Plugin>);
+        let _ = registry.register_format_processor(p.clone() as Arc<dyn FormatProcessor>);
+    }
+    {
+        let p: Arc<tiff_encoder::TiffEncoderPlugin> = Arc::new(tiff_encoder::TiffEncoderPlugin::new());
+        let _ = registry.register(p.clone() as Arc<dyn Plugin>);
+        let _ = registry.register_format_processor(p.clone() as Arc<dyn FormatProcessor>);
+    }
+    {
+        let p: Arc<png_encoder::PngEncoderPlugin> = Arc::new(png_encoder::PngEncoderPlugin::new());
+        let _ = registry.register(p.clone() as Arc<dyn Plugin>);
+        let _ = registry.register_format_processor(p.clone() as Arc<dyn FormatProcessor>);
+    }
+    {
+        let p: Arc<raw_input::RawInputPlugin> = Arc::new(raw_input::RawInputPlugin::new());
+        let _ = registry.register(p.clone() as Arc<dyn Plugin>);
+        let _ = registry.register_format_processor(p.clone() as Arc<dyn FormatProcessor>);
+    }
 }

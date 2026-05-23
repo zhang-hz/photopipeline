@@ -283,3 +283,232 @@ impl ParameterSet {
         self.values.iter()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_schema() -> ParameterSchema {
+        ParameterSchema {
+            version: 1,
+            sections: vec![
+                ParameterSection {
+                    id: "basic".into(),
+                    label: "Basic".into(),
+                    description: None,
+                    icon: None,
+                    collapsible: false,
+                    default_collapsed: false,
+                    fields: vec![
+                        ParameterField {
+                            id: "brightness".into(),
+                            label: "Brightness".into(),
+                            description: None,
+                            help_url: None,
+                            field_type: ParameterType::Float {
+                                min: -1.0,
+                                max: 1.0,
+                                step: 0.01,
+                                precision: 2,
+                                unit: None,
+                                logarithmic: false,
+                                style: FloatWidget::default(),
+                            },
+                            default: serde_json::json!(0.0),
+                            required: false,
+                            advanced: false,
+                            allow_override: true,
+                            supports_expression: false,
+                        },
+                        ParameterField {
+                            id: "enabled".into(),
+                            label: "Enabled".into(),
+                            description: None,
+                            help_url: None,
+                            field_type: ParameterType::Boolean {
+                                label_true: None,
+                                label_false: None,
+                            },
+                            default: serde_json::json!(true),
+                            required: false,
+                            advanced: false,
+                            allow_override: true,
+                            supports_expression: false,
+                        },
+                    ],
+                },
+                ParameterSection {
+                    id: "advanced".into(),
+                    label: "Advanced".into(),
+                    description: None,
+                    icon: None,
+                    collapsible: true,
+                    default_collapsed: true,
+                    fields: vec![ParameterField {
+                        id: "threshold".into(),
+                        label: "Threshold".into(),
+                        description: None,
+                        help_url: None,
+                        field_type: ParameterType::Integer {
+                            min: 0,
+                            max: 255,
+                            step: 1,
+                            unit: None,
+                            style: IntegerWidget::default(),
+                        },
+                        default: serde_json::json!(128),
+                        required: false,
+                        advanced: true,
+                        allow_override: true,
+                        supports_expression: false,
+                    }],
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn parameter_schema_defaults_fills_all_fields() {
+        let schema = make_schema();
+        let defaults = schema.defaults();
+        assert!(defaults.get("brightness").is_some());
+        assert!(defaults.get("enabled").is_some());
+        assert!(defaults.get("threshold").is_some());
+        assert_eq!(defaults.get_f64("brightness"), Some(0.0));
+        assert_eq!(defaults.get_bool("enabled"), Some(true));
+        assert_eq!(defaults.get_i64("threshold"), Some(128));
+    }
+
+    #[test]
+    fn parameter_schema_field_lookup() {
+        let schema = make_schema();
+        let field = schema.field("basic", "brightness");
+        assert!(field.is_some());
+        assert_eq!(field.unwrap().label, "Brightness");
+
+        let field = schema.field("advanced", "threshold");
+        assert!(field.is_some());
+        assert_eq!(field.unwrap().label, "Threshold");
+
+        let field = schema.field("basic", "nonexistent");
+        assert!(field.is_none());
+
+        let field = schema.field("nonexistent", "brightness");
+        assert!(field.is_none());
+    }
+
+    #[test]
+    fn parameter_schema_field_multiple_sections() {
+        let schema = make_schema();
+        let field = schema.field("basic", "enabled");
+        assert!(field.is_some());
+        let field = schema.field("advanced", "threshold");
+        assert!(field.is_some());
+    }
+
+    #[test]
+    fn parameter_set_insert_and_get() {
+        let mut ps = ParameterSet::new();
+        ps.insert("key1".into(), serde_json::json!("value1"));
+        ps.insert("key2".into(), serde_json::json!(42));
+
+        assert_eq!(ps.get_str("key1"), Some("value1"));
+        assert_eq!(ps.get_i64("key2"), Some(42));
+        assert!(ps.get("key3").is_none());
+    }
+
+    #[test]
+    fn parameter_set_get_str() {
+        let mut ps = ParameterSet::new();
+        ps.insert("name".into(), serde_json::json!("hello"));
+        assert_eq!(ps.get_str("name"), Some("hello"));
+        assert_eq!(ps.get_str("missing"), None);
+    }
+
+    #[test]
+    fn parameter_set_get_i64() {
+        let mut ps = ParameterSet::new();
+        ps.insert("count".into(), serde_json::json!(100));
+        assert_eq!(ps.get_i64("count"), Some(100));
+        assert_eq!(ps.get_i64("missing"), None);
+    }
+
+    #[test]
+    fn parameter_set_get_f64() {
+        let mut ps = ParameterSet::new();
+        ps.insert("ratio".into(), serde_json::json!(1.5));
+        assert!((ps.get_f64("ratio").unwrap() - 1.5).abs() < 0.001);
+        assert_eq!(ps.get_f64("missing"), None);
+    }
+
+    #[test]
+    fn parameter_set_get_bool() {
+        let mut ps = ParameterSet::new();
+        ps.insert("flag".into(), serde_json::json!(true));
+        assert_eq!(ps.get_bool("flag"), Some(true));
+        ps.insert("flag2".into(), serde_json::json!(false));
+        assert_eq!(ps.get_bool("flag2"), Some(false));
+        assert_eq!(ps.get_bool("missing"), None);
+    }
+
+    #[test]
+    fn parameter_set_get_wrong_type_returns_none() {
+        let mut ps = ParameterSet::new();
+        ps.insert("key".into(), serde_json::json!("not_a_number"));
+        assert_eq!(ps.get_i64("key"), None);
+        assert_eq!(ps.get_f64("key"), None);
+        assert_eq!(ps.get_bool("key"), None);
+    }
+
+    #[test]
+    fn parameter_set_merge_shallow_override() {
+        let mut base = ParameterSet::new();
+        base.insert("a".into(), serde_json::json!(1));
+        base.insert("b".into(), serde_json::json!(2));
+
+        let mut overrides = ParameterSet::new();
+        overrides.insert("b".into(), serde_json::json!(99));
+        overrides.insert("c".into(), serde_json::json!(3));
+
+        base.merge(&overrides);
+
+        assert_eq!(base.get_i64("a"), Some(1));
+        assert_eq!(base.get_i64("b"), Some(99));
+        assert_eq!(base.get_i64("c"), Some(3));
+    }
+
+    #[test]
+    fn parameter_set_merge_does_not_remove() {
+        let mut base = ParameterSet::new();
+        base.insert("keep".into(), serde_json::json!("value"));
+        let other = ParameterSet::new();
+        base.merge(&other);
+        assert_eq!(base.get_str("keep"), Some("value"));
+    }
+
+    #[test]
+    fn parameter_set_iter() {
+        let mut ps = ParameterSet::new();
+        ps.insert("x".into(), serde_json::json!(1));
+        ps.insert("y".into(), serde_json::json!(2));
+        let mut keys: Vec<&String> = ps.iter().map(|(k, _)| k).collect();
+        keys.sort();
+        assert_eq!(keys, vec!["x", "y"]);
+    }
+
+    #[test]
+    fn parameter_schema_empty() {
+        let schema = ParameterSchema::empty();
+        assert_eq!(schema.version, 1);
+        assert!(schema.sections.is_empty());
+        assert!(schema.defaults().values.is_empty());
+        assert!(schema.all_fields().is_empty());
+    }
+
+    #[test]
+    fn parameter_schema_all_fields() {
+        let schema = make_schema();
+        let fields = schema.all_fields();
+        assert_eq!(fields.len(), 3);
+    }
+}

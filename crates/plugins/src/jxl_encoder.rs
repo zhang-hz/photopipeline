@@ -285,7 +285,7 @@ impl FormatProcessor for JxlEncoderPlugin {
         cmd_args.push("7".to_string());
 
         let pid = std::process::id();
-        let tmp_input = std::env::temp_dir().join(format!("pp_jxl_in_{}.png", pid));
+        let tmp_input = std::env::temp_dir().join(format!("pp_jxl_in_{}.ppm", pid));
         let tmp_output = std::env::temp_dir().join(format!("pp_jxl_out_{}.jxl", pid));
 
         write_temp_rgb(&tmp_input, image)?;
@@ -336,21 +336,22 @@ fn write_temp_rgb(path: &std::path::Path, image: &PixelBuffer) -> PluginResult<(
         plugin: PluginId::from("jxl_encoder"),
         error: e,
     })?;
+    writeln!(f, "P6\n{} {}\n255", image.width, image.height).map_err(|e| PluginError::Io {
+        plugin: PluginId::from("jxl_encoder"),
+        error: e,
+    })?;
 
-    let header: Vec<u8> = vec![
-        0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A,
-        0, 0, 0, 13, b'I', b'H', b'D', b'R',
-    ];
-    f.write_all(&header).map_err(|_e| PluginError::EncodingFailed("Failed to write temp PNG header".into()))?;
-
-    let w = image.width.to_be_bytes();
-    let h = image.height.to_be_bytes();
-    f.write_all(&w).map_err(|_e| PluginError::EncodingFailed("write failed".into()))?;
-    f.write_all(&h).map_err(|_e| PluginError::EncodingFailed("write failed".into()))?;
-    f.write_all(&[8, 2, 0, 0, 0]).map_err(|_e| PluginError::EncodingFailed("write failed".into()))?;
-
-    f.write_all(&image.data.data).map_err(|_e| PluginError::EncodingFailed("write failed".into()))?;
-    f.write_all(b"IEND").map_err(|_e| PluginError::EncodingFailed("write failed".into()))?;
+    let stride = image.width as usize * 3;
+    for y in 0..image.height as usize {
+        let row_start = y * stride;
+        let row_end = row_start + stride;
+        if row_end <= image.data.data.len() {
+            f.write_all(&image.data.data[row_start..row_end]).map_err(|e| PluginError::Io {
+                plugin: PluginId::from("jxl_encoder"),
+                error: e,
+            })?;
+        }
+    }
     Ok(())
 }
 

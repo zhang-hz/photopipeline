@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use std::process::Command;
 use std::sync::LazyLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use photopipeline_core::{
     PluginId, PluginVersion, PluginCategory, PluginResult, PluginError,
@@ -246,7 +247,7 @@ impl Plugin for HeifEncoderPlugin {
         let path = params.get_str("heif_enc_path").unwrap_or("heif-enc");
         if !path.is_empty() {
             let check = Command::new(path).arg("--version").output();
-            if check.is_err() || check.unwrap().status.success() == false {
+            if check.is_err() || !check.unwrap().status.success() {
                 issues.push(ValidationIssue::Warning {
                     param: "heif_enc_path".into(),
                     message: format!("heif-enc binary '{}' not found or not functional", path),
@@ -400,8 +401,6 @@ fn write_ppm(path: &std::path::Path, image: &PixelBuffer) -> PluginResult<()> {
     }
     Ok(())
 }
-
-use std::sync::atomic::{AtomicU64, Ordering};
 
 static TMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 

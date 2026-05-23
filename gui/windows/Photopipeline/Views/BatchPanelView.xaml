@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Photopipeline.Views.BatchPanelView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid Margin="8" RowSpacing="6">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Batch Processing"
+                       Style="{StaticResource SubtitleTextBlockStyle}"
+                       VerticalAlignment="Center" />
+            <Button Grid.Column="1" ToolTipService.ToolTip="Batch Settings"
+                    Width="28" Height="28" Padding="0">
+                <SymbolIcon Symbol="Setting" />
+            </Button>
+        </Grid>
+
+        <Grid Grid.Row="1" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Queue:" VerticalAlignment="Center"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <TextBlock Grid.Column="1" x:Name="QueueCountText" Text="0 items"
+                       VerticalAlignment="Center" HorizontalAlignment="Right"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        </Grid>
+
+        <Grid Grid.Row="2" Margin="0,4,0,4">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="4" />
+            </Grid.RowDefinitions>
+            <ProgressBar x:Name="BatchProgressBar"
+                         Value="0" Maximum="100"
+                         MinHeight="4"
+                         CornerRadius="2" />
+            <TextBlock Grid.Row="1" Margin="0,2,0,0">
+                <Run x:Name="CompletedText" Text="0" />
+                <Run Text=" / " />
+                <Run x:Name="TotalText" Text="0" />
+                <Run Text=" completed" />
+            </TextBlock>
+        </Grid>
+
+        <Grid Grid.Row="3" Margin="0,4,0,4">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Column="0" Text="Elapsed:"
+                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+            <TextBlock Grid.Column="1" x:Name="ElapsedTimeText"
+                       Text="00:00:00" HorizontalAlignment="Right" />
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Remaining:"
+                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+            <TextBlock Grid.Row="1" Grid.Column="1" x:Name="RemainingTimeText"
+                       Text="--:--:--" HorizontalAlignment="Right" />
+        </Grid>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+            <Button x:Name="StartButton" Style="{StaticResource AccentButtonStyle}"
+                    HorizontalAlignment="Stretch">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <SymbolIcon Symbol="Play" />
+                    <TextBlock Text="Start" />
+                </StackPanel>
+            </Button>
+            <Button x:Name="PauseButton" HorizontalAlignment="Stretch">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <SymbolIcon Symbol="Pause" />
+                    <TextBlock Text="Pause" />
+                </StackPanel>
+            </Button>
+            <Button x:Name="StopButton" HorizontalAlignment="Stretch">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <SymbolIcon Symbol="Stop" />
+                    <TextBlock Text="Stop" />
+                </StackPanel>
+            </Button>
+        </StackPanel>
+
+        <Grid Grid.Row="5" ColumnSpacing="8" Margin="0,8,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Output:" VerticalAlignment="Center"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <ComboBox Grid.Column="2" x:Name="FormatComboBox"
+                      SelectedIndex="0"
+                      MinWidth="80"
+                      ToolTipService.ToolTip="Output file format">
+                <ComboBoxItem Content="TIFF" />
+                <ComboBoxItem Content="JPEG" />
+                <ComboBoxItem Content="PNG" />
+                <ComboBoxItem Content="WebP" />
+                <ComboBoxItem Content="HEIF" />
+            </ComboBox>
+        </Grid>
+    </Grid>
+</UserControl>

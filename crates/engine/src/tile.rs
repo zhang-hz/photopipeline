@@ -22,7 +22,7 @@ impl TileEngine {
         }
     }
 
-    pub fn process_tiled_sequential(
+    pub async fn process_tiled(
         &self,
         processor: &dyn PixelProcessor,
         input: &PixelBuffer,
@@ -87,9 +87,9 @@ impl TileEngine {
                     _inner: tile_count as usize,
                 });
 
-            let _stats = futures::executor::block_on(
-                processor.process_pixels(&tile_input, &mut tile_output, params, boxed_progress),
-            )?;
+            let _stats = processor
+                .process_pixels(&tile_input, &mut tile_output, params, boxed_progress)
+                .await?;
 
             results.push(TileResult {
                 spec: spec.clone(),
@@ -176,5 +176,66 @@ impl ProgressSink for TileProgressSink {
 
     fn is_canceled(&self) -> bool {
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tile_engine_construction() {
+        let engine = TileEngine::new(512, 32, 4);
+        assert_eq!(engine.default_tile_size, 512);
+        assert_eq!(engine.overlap, 32);
+        assert_eq!(engine.max_parallel, 4);
+    }
+
+    #[test]
+    fn tile_engine_default() {
+        let engine = TileEngine::default();
+        assert_eq!(engine.default_tile_size, 1024);
+        assert_eq!(engine.overlap, 64);
+        assert!(engine.max_parallel >= 1);
+    }
+
+    #[test]
+    fn tile_engine_clone() {
+        let engine = TileEngine::new(1024, 64, 2);
+        let cloned = engine.clone();
+        assert_eq!(cloned.default_tile_size, engine.default_tile_size);
+        assert_eq!(cloned.overlap, engine.overlap);
+        assert_eq!(cloned.max_parallel, engine.max_parallel);
+    }
+
+    #[test]
+    fn tile_layout_for_tile_engine_params() {
+        let layout = photopipeline_core::TileLayout::new(1920, 1080, 512, 64);
+        let tiles: Vec<_> = layout.iter_tiles().collect();
+        assert!(!tiles.is_empty());
+        assert_eq!(tiles.len() as u32, layout.total_tiles);
+    }
+
+    #[test]
+    fn tile_counts_various_sizes() {
+        let layout = photopipeline_core::TileLayout::new(256, 256, 256, 0);
+        assert_eq!(layout.total_tiles, 1);
+
+        let layout = photopipeline_core::TileLayout::new(512, 512, 256, 0);
+        assert_eq!(layout.total_tiles, 4);
+
+        let layout = photopipeline_core::TileLayout::new(800, 600, 256, 0);
+        assert_eq!(layout.total_tiles, 12);
+    }
+
+    #[test]
+    fn tile_boundaries_within_image() {
+        let layout = photopipeline_core::TileLayout::new(1920, 1080, 512, 0);
+        for spec in layout.iter_tiles() {
+            assert!(spec.x_offset < 1920);
+            assert!(spec.y_offset < 1080);
+            assert!(spec.x_offset + spec.width <= 1920);
+            assert!(spec.y_offset + spec.height <= 1080);
+        }
     }
 }

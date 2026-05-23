@@ -231,8 +231,23 @@ impl Plugin for AvifEncoderPlugin {
     async fn shutdown(&mut self) -> PluginResult<()> { Ok(()) }
 
     async fn validate(&self, params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>> {
-        let issues = Vec::new();
-        let _quality = params.get("quality").and_then(|v| v.as_f64()).unwrap_or(85.0);
+        let mut issues = Vec::new();
+        if let Some(q) = params.get("quality").and_then(|v| v.as_f64()) {
+            if q < 0.0 || q > 100.0 {
+                issues.push(ValidationIssue::Error {
+                    param: "quality".into(),
+                    message: "Quality must be between 0 and 100".into(),
+                });
+            }
+        }
+        if let Some(s) = params.get_i64("speed") {
+            if s < 0 || s > 10 {
+                issues.push(ValidationIssue::Error {
+                    param: "speed".into(),
+                    message: "Speed must be between 0 and 10".into(),
+                });
+            }
+        }
         Ok(issues)
     }
 }

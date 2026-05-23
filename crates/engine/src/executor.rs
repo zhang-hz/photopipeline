@@ -204,7 +204,7 @@ impl NodeExecutor {
         &self,
         ctx: &mut ExecutionContext,
         node: &crate::graph::PipelineNode,
-        _params: &photopipeline_plugin::ParameterSet,
+        params: &photopipeline_plugin::ParameterSet,
     ) -> PluginResult<ProcessingStats> {
         let input = ctx
             .buffer
@@ -219,26 +219,35 @@ impl NodeExecutor {
         output.color_space = input.color_space.clone();
         output.icc_profile = input.icc_profile.clone();
 
-        let input_pixels = input.pixel_count();
-        let output_pixels = output.pixel_count();
+        let processor = self
+            .registry
+            .get_pixel_processor(&node.plugin_id)
+            .ok_or_else(|| PluginError::NotFound(node.plugin_id.clone()))?;
+
+        struct InlineProgress;
+        impl photopipeline_plugin::ProgressSink for InlineProgress {
+            fn set_progress(&self, _fraction: f32, _message: &str) {}
+            fn is_canceled(&self) -> bool { false }
+        }
+
+        let stats = processor
+            .process_pixels(input, &mut output, params, Box::new(InlineProgress))
+            .await?;
 
         ctx.buffer = Some(output);
 
-        Ok(ProcessingStats {
-            elapsed_ms: 0,
-            cpu_time_ms: 0,
-            gpu_time_ms: None,
-            peak_memory_mb: 0,
-            input_pixels,
-            output_pixels,
-        })
+        Ok(stats)
     }
 
     async fn process_metadata_node(
         &self,
-        _node: &crate::graph::PipelineNode,
+        node: &crate::graph::PipelineNode,
         _params: &photopipeline_plugin::ParameterSet,
     ) -> PluginResult<ProcessingStats> {
+        if let Some(_processor) = self.registry.get_metadata_processor(&node.plugin_id) {
+            tracing::debug!("metadata processor '{}' invoked", node.plugin_id);
+        }
+
         Ok(ProcessingStats {
             elapsed_ms: 0,
             cpu_time_ms: 0,

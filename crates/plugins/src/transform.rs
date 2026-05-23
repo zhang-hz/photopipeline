@@ -622,6 +622,12 @@ fn bilinear_resize(
     target_w: u32, target_h: u32, channels: usize,
     in_stride: usize, out_stride: usize,
 ) {
+    // NOTE: This implementation assumes 8-bit channels.
+    // For 16-bit or float formats, use a format-aware resize path.
+    if input.format.bytes_per_channel() != 1 {
+        nearest_resize(input, output, target_w, target_h, channels, in_stride, out_stride);
+        return;
+    }
     let scale_x = if target_w > 1 { (input.width as f64 - 1.0) / (target_w as f64 - 1.0) } else { 1.0 };
     let scale_y = if target_h > 1 { (input.height as f64 - 1.0) / (target_h as f64 - 1.0) } else { 1.0 };
 
