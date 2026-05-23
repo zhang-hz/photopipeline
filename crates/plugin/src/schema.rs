@@ -511,4 +511,345 @@ mod tests {
         let fields = schema.all_fields();
         assert_eq!(fields.len(), 3);
     }
+
+    #[test]
+    fn parameter_type_string_serialization_roundtrip() {
+        let pt = ParameterType::String {
+            max_length: 256,
+            pattern: Some("[a-z]+".into()),
+            placeholder: None,
+        };
+        let json = serde_json::to_string(&pt).unwrap();
+        let pt2: ParameterType = serde_json::from_str(&json).unwrap();
+        let json2 = serde_json::to_string(&pt2).unwrap();
+        assert_eq!(json, json2);
+    }
+
+    #[test]
+    fn parameter_type_integer_serialization_roundtrip() {
+        let pt = ParameterType::Integer {
+            min: 0, max: 100, step: 1,
+            unit: Some("px".into()),
+            style: Default::default(),
+        };
+        let json = serde_json::to_string(&pt).unwrap();
+        let _pt2: ParameterType = serde_json::from_str(&json).unwrap();
+        assert!(json.contains("\"integer\""));
+    }
+
+    #[test]
+    fn parameter_type_float_serialization_roundtrip() {
+        let pt = ParameterType::Float {
+            min: 0.0, max: 1.0, step: 0.1,
+            precision: 2, unit: None,
+            logarithmic: true, style: Default::default(),
+        };
+        let json = serde_json::to_string(&pt).unwrap();
+        let _pt2: ParameterType = serde_json::from_str(&json).unwrap();
+        assert!(json.contains("\"float\""));
+    }
+
+    #[test]
+    fn parameter_type_boolean_serialization_roundtrip() {
+        let pt = ParameterType::Boolean { label_true: Some("On".into()), label_false: None };
+        let json = serde_json::to_string(&pt).unwrap();
+        let _pt2: ParameterType = serde_json::from_str(&json).unwrap();
+        assert!(json.contains("\"boolean\""));
+    }
+
+    #[test]
+    fn parameter_type_enum_serialization_roundtrip() {
+        let pt = ParameterType::Enum {
+            options: vec![EnumOption {
+                value: "a".into(), label: "A".into(),
+                description: None, icon: None, tags: vec![],
+                recommended: true,
+            }],
+            display: Default::default(),
+        };
+        let json = serde_json::to_string(&pt).unwrap();
+        let _pt2: ParameterType = serde_json::from_str(&json).unwrap();
+        assert!(json.contains("\"enum\""));
+    }
+
+    #[test]
+    fn parameter_type_color_serialization_roundtrip() {
+        let pt = ParameterType::Color { mode: ColorMode::RGB, show_alpha: true };
+        let json = serde_json::to_string(&pt).unwrap();
+        let _pt2: ParameterType = serde_json::from_str(&json).unwrap();
+        assert!(json.contains("\"color\""));
+    }
+
+    #[test]
+    fn parameter_type_file_path_serialization_roundtrip() {
+        let pt = ParameterType::FilePath {
+            kind: FilePathKind::File,
+            filters: vec![],
+            must_exist: true,
+        };
+        let json = serde_json::to_string(&pt).unwrap();
+        let _pt2: ParameterType = serde_json::from_str(&json).unwrap();
+        assert!(json.contains("\"file_path\""));
+    }
+
+    #[test]
+    fn parameter_type_coordinate_serialization_roundtrip() {
+        let pt = ParameterType::Coordinate { alt_required: true, direction_required: false };
+        let json = serde_json::to_string(&pt).unwrap();
+        let _pt2: ParameterType = serde_json::from_str(&json).unwrap();
+        assert!(json.contains("\"coordinate\""));
+    }
+
+    #[test]
+    fn parameter_type_slider_serialization_roundtrip() {
+        let pt = ParameterType::Slider {
+            min: 0.0, max: 100.0, step: 5.0,
+            show_ticks: true, ticks: Some(vec![0.0, 50.0, 100.0]),
+            show_value: true, orientation: Default::default(), style: Default::default(),
+        };
+        let json = serde_json::to_string(&pt).unwrap();
+        let _pt2: ParameterType = serde_json::from_str(&json).unwrap();
+        assert!(json.contains("\"slider\""));
+    }
+
+    #[test]
+    fn parameter_type_combo_slider_serialization_roundtrip() {
+        let pt = ParameterType::ComboSlider {
+            min: 0.0, max: 10.0, step: 0.5,
+            presets: vec![("Low".into(), 1.0), ("High".into(), 9.0)],
+            unit: Some("dB".into()),
+        };
+        let json = serde_json::to_string(&pt).unwrap();
+        let _pt2: ParameterType = serde_json::from_str(&json).unwrap();
+        assert!(json.contains("\"combo_slider\""));
+    }
+
+    #[test]
+    fn parameter_type_expression_serialization_roundtrip() {
+        let pt = ParameterType::Expression {
+            variables: vec![VariableDef {
+                name: "iso".into(), description: "ISO value".into(),
+                var_type: "number".into(), example: Some("400".into()),
+            }],
+        };
+        let json = serde_json::to_string(&pt).unwrap();
+        let _pt2: ParameterType = serde_json::from_str(&json).unwrap();
+        assert!(json.contains("\"expression\""));
+    }
+
+    #[test]
+    fn parameter_type_preset_serialization_roundtrip() {
+        let pt = ParameterType::Preset {
+            preset_schema_ref: "lut_schema".into(),
+            builtin_presets: vec![NamedPreset {
+                name: "warm".into(), description: None,
+                params: Default::default(),
+            }],
+            allow_custom: true, allow_import: false,
+        };
+        let json = serde_json::to_string(&pt).unwrap();
+        let _pt2: ParameterType = serde_json::from_str(&json).unwrap();
+        assert!(json.contains("\"preset\""));
+    }
+
+    #[test]
+    fn parameter_type_array_serialization_roundtrip() {
+        let inner = ParameterField {
+            id: "elem".into(), label: "Elem".into(), description: None, help_url: None,
+            field_type: ParameterType::String { max_length: 100, pattern: None, placeholder: None },
+            default: serde_json::json!(""), required: false, advanced: false,
+            allow_override: true, supports_expression: false,
+        };
+        let pt = ParameterType::Array {
+            element: Box::new(inner),
+            min_items: 0,
+            max_items: Some(10),
+        };
+        let json = serde_json::to_string(&pt).unwrap();
+        let _pt2: ParameterType = serde_json::from_str(&json).unwrap();
+        assert!(json.contains("\"array\""));
+    }
+
+    #[test]
+    fn parameter_type_map_widget_serialization_roundtrip() {
+        let pt = ParameterType::MapWidget {
+            show_track: true, show_photos: false, allow_manual_pin: true,
+        };
+        let json = serde_json::to_string(&pt).unwrap();
+        let _pt2: ParameterType = serde_json::from_str(&json).unwrap();
+        assert!(json.contains("\"map_widget\""));
+    }
+
+    #[test]
+    fn parameter_type_before_after_serialization_roundtrip() {
+        let pt = ParameterType::BeforeAfter {
+            zoom_levels: vec![1.0, 2.0, 4.0],
+            show_histogram: true,
+        };
+        let json = serde_json::to_string(&pt).unwrap();
+        let _pt2: ParameterType = serde_json::from_str(&json).unwrap();
+        assert!(json.contains("\"before_after\""));
+    }
+
+    #[test]
+    fn parameter_type_separator_serialization_roundtrip() {
+        let pt = ParameterType::Separator { label: Some("divider".into()) };
+        let json = serde_json::to_string(&pt).unwrap();
+        let _pt2: ParameterType = serde_json::from_str(&json).unwrap();
+        assert!(json.contains("\"separator\""));
+    }
+
+    #[test]
+    fn parameter_type_section_serialization_roundtrip() {
+        let inner = ParameterField {
+            id: "sub".into(), label: "Sub".into(), description: None, help_url: None,
+            field_type: ParameterType::Boolean { label_true: None, label_false: None },
+            default: serde_json::json!(false), required: false, advanced: false,
+            allow_override: true, supports_expression: false,
+        };
+        let pt = ParameterType::Section { fields: vec![inner] };
+        let json = serde_json::to_string(&pt).unwrap();
+        let _pt2: ParameterType = serde_json::from_str(&json).unwrap();
+        assert!(json.contains("\"section\""));
+    }
+
+    #[test]
+    fn parameter_field_default_allow_override() {
+        let field = ParameterField {
+            id: "f".into(), label: "F".into(), description: None, help_url: None,
+            field_type: ParameterType::Boolean { label_true: None, label_false: None },
+            default: serde_json::json!(true), required: false, advanced: false,
+            allow_override: true, supports_expression: false,
+        };
+        assert!(field.allow_override);
+    }
+
+    #[test]
+    fn parameter_field_default_supports_expression() {
+        let field = ParameterField {
+            id: "f2".into(), label: "F2".into(), description: None, help_url: None,
+            field_type: ParameterType::String { max_length: 100, pattern: None, placeholder: None },
+            default: serde_json::json!(""), required: false, advanced: false,
+            allow_override: true, supports_expression: false,
+        };
+        assert!(!field.supports_expression);
+    }
+
+    #[test]
+    fn parameter_field_required_true() {
+        let field = ParameterField {
+            id: "req".into(), label: "Req".into(), description: None, help_url: None,
+            field_type: ParameterType::String { max_length: 10, pattern: None, placeholder: None },
+            default: serde_json::json!(""), required: true, advanced: false,
+            allow_override: true, supports_expression: false,
+        };
+        assert!(field.required);
+    }
+
+    #[test]
+    fn parameter_field_advanced_true() {
+        let field = ParameterField {
+            id: "adv".into(), label: "Adv".into(), description: None, help_url: None,
+            field_type: ParameterType::Integer { min: 0, max: 10, step: 1, unit: None, style: Default::default() },
+            default: serde_json::json!(0), required: false, advanced: true,
+            allow_override: true, supports_expression: false,
+        };
+        assert!(field.advanced);
+    }
+
+    #[test]
+    fn parameter_set_get_str_on_non_string_returns_none() {
+        let mut ps = ParameterSet::new();
+        ps.insert("num".into(), serde_json::json!(42));
+        assert_eq!(ps.get_str("num"), None);
+    }
+
+    #[test]
+    fn parameter_set_get_i64_on_float_returns_none() {
+        let mut ps = ParameterSet::new();
+        ps.insert("fl".into(), serde_json::json!(3.14));
+        assert_eq!(ps.get_i64("fl"), None);
+    }
+
+    #[test]
+    fn parameter_set_get_f64_on_integer_returns_some() {
+        let mut ps = ParameterSet::new();
+        ps.insert("int".into(), serde_json::json!(42));
+        assert!(ps.get_f64("int").is_some());
+    }
+
+    #[test]
+    fn parameter_set_merge_with_empty_no_change() {
+        let mut base = ParameterSet::new();
+        base.insert("k".into(), serde_json::json!(1));
+        let empty = ParameterSet::new();
+        base.merge(&empty);
+        assert_eq!(base.get_i64("k"), Some(1));
+    }
+
+    #[test]
+    fn parameter_set_merge_no_overlap() {
+        let mut base = ParameterSet::new();
+        base.insert("a".into(), serde_json::json!(1));
+        let mut other = ParameterSet::new();
+        other.insert("b".into(), serde_json::json!(2));
+        base.merge(&other);
+        assert_eq!(base.get_i64("a"), Some(1));
+        assert_eq!(base.get_i64("b"), Some(2));
+    }
+
+    #[test]
+    fn parameter_set_iter_after_merge() {
+        let mut base = ParameterSet::new();
+        base.insert("x".into(), serde_json::json!(1));
+        let mut other = ParameterSet::new();
+        other.insert("y".into(), serde_json::json!(2));
+        base.merge(&other);
+        let count = base.iter().count();
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn parameter_schema_field_invalid_section() {
+        let schema = make_schema();
+        assert!(schema.field("nonexistent", "brightness").is_none());
+    }
+
+    #[test]
+    fn parameter_schema_field_invalid_field() {
+        let schema = make_schema();
+        assert!(schema.field("basic", "nonexistent").is_none());
+    }
+
+    #[test]
+    fn parameter_schema_defaults_with_empty_schema() {
+        let schema = ParameterSchema::empty();
+        let defaults = schema.defaults();
+        assert!(defaults.values.is_empty());
+    }
+
+    #[test]
+    fn enum_option_default_recommended_false() {
+        let opt = EnumOption {
+            value: "v".into(), label: "L".into(),
+            description: None, icon: None, tags: vec![],
+            recommended: false,
+        };
+        assert!(!opt.recommended);
+    }
+
+    #[test]
+    fn named_preset_serde_roundtrip() {
+        let mut params = std::collections::HashMap::new();
+        params.insert("brightness".into(), serde_json::json!(0.5));
+        let preset = NamedPreset {
+            name: "vivid".into(),
+            description: Some("Vivid colors".into()),
+            params,
+        };
+        let json = serde_json::to_string(&preset).unwrap();
+        let preset2: NamedPreset = serde_json::from_str(&json).unwrap();
+        assert_eq!(preset2.name, "vivid");
+        assert_eq!(preset2.params.get("brightness").and_then(|v| v.as_f64()), Some(0.5));
+    }
 }

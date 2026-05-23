@@ -1,0 +1,65 @@
+name: Benchmarks
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  benchmark:
+    name: Benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config \
+            protobuf-compiler libprotobuf-dev libheif-dev libjxl-dev \
+            liblcms2-dev libexif-dev libtiff-dev libpng-dev libopenexr-dev \
+            ninja-build
+
+      - name: Run benchmarks
+        run: |
+          cargo bench --workspace 2>&1 | tee benchmark-output.txt || {
+            echo "No benchmarks defined in workspace"
+            echo "none" > benchmark-output.txt
+          }
+
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmark-output.txt
+
+      - name: Fetch baseline from main
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin main
+          git checkout origin/main
+          cargo bench --workspace 2>&1 | tee benchmark-baseline.txt || {
+            echo "No baseline benchmarks" | tee benchmark-baseline.txt
+          }
+          git checkout -
+
+      - name: Compare against baseline
+        if: github.event_name == 'pull_request'
+        run: |
+          if grep -q "none" benchmark-output.txt || grep -q "No baseline" benchmark-baseline.txt; then
+            echo "Skipping comparison (no benchmark data available)"
+            exit 0
+          fi
+          echo "=== Benchmark comparison ==="
+          diff benchmark-baseline.txt benchmark-output.txt || true

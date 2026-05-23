@@ -2,132 +2,201 @@
 
 All notable changes to the Photopipeline project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## v0.1.0 (2026-05-23)
+## [0.1.0] — 2026-05-23
 
 ### Added
 
-#### Core Crate — 核心类型体系 (`photopipeline-core`)
-- **ImageBuffer / PixelBuffer**: 16bit+ 像素缓冲区，含 AlignedBuffer（页对齐支持 GPU 映射）
-- **PixelFormat 枚举**: U8 / U16 / U32 / F16 / F32 五种格式
-- **ChannelLayout**: Gray / GrayAlpha / RGB / RGBA / Planar(n) / Custom(n)
-- **ColorSpace 类型**: 原色 + 传递函数 + 白点 + HDR nit 值
-  - 内置预设: sRGB / Adobe RGB / Display P3 / Rec.2020 PQ / ACEScg / Linear sRGB
-  - 10 种原色: BT.709 / BT.2020 / Display P3 / sRGB / Adobe RGB / ProPhoto / ACES / ACEScg / CIE XYZ / DCI P3 / Rec.2100
-  - 11 种传递函数: Linear / sRGB / Gamma 2.2-2.8 / PQ / HLG / SLog3 / LogC / Custom
-  - 8 种白点: D50 / D55 / D60 / D65 / D75 / DCI / E / Custom
-- **Metadata 类型体系**: ExifData / XmpData / IptcData / GpsData / CustomTag
-- **GpxTrack / GpxPoint**: GPX 轨迹解析与时间戳插值
-- **TileLayout**: 分块布局及迭代器（支持重叠）
+#### Core Crate (`photopipeline-core`)
 
-#### Plugin System — 插件框架 (`photopipeline-plugin`)
-- **6 种能力 Trait**: Plugin / MetadataProcessor / PixelProcessor / FormatProcessor / GpuProcessor / AiProcessor / ExternalToolProcessor
-- **Schema 驱动**: ParameterSchema / ParameterSection / ParameterField
-- **18 种参数类型**: String / Integer / Float / Boolean / Enum / Color / FilePath / Coordinate / Slider / ComboSlider / Expression / Preset / Array / MapWidget / BeforeAfter / Separator / Section
-- **GuiSchema**: 声明式 GUI 布局（Standard + Custom）、预览模式（Live / BeforeAfter / Tiled）、辅助视图（Histogram / Waveform / Vectorscope / Map 等 10 种）
-- **ParameterSet**: 参数值容器（支持 JSON 值存取与浅合并）
-- **Registry**: 线程安全的全局插件注册表（基于 DashMap）
-- **PluginQuery**: 按分类/标签/关键词/像素需求查询插件
-- **PluginLoader 体系**: BuiltinPluginLoader / NativePluginLoader / ExternalToolPluginLoader
-- **PluginLoaderManager**: 自动发现并加载插件
-- **ProgressSink**: 进度报告与取消 trait
+- **ImageBuffer / PixelBuffer**: 16-bit+ pixel buffer with `AlignedBuffer` (page-aligned for GPU mapping).
+- **PixelFormat** enum: `U8`, `U16`, `U32`, `F16`, `F32` — all with `bytes_per_channel()`, `is_float()`, `is_high_precision()`, `max_value_u16()` helpers.
+- **ChannelLayout**: `Gray`, `GrayAlpha`, `RGB`, `RGBA`, `Planar(n)`, `Custom(n)` — with `channel_count()` and `is_interleaved()`.
+- **ColorSpace** type with `ColorPrimaries` + `TransferFunction` + `WhitePoint` + optional `hdr_nits`.
+  - 11 colour primaries: BT.709, BT.2020, Display P3, sRGB, Adobe RGB, ProPhoto, ACES, ACEScg, CIE XYZ, DCI P3, Rec.2100.
+  - 11 transfer functions: Linear, sRGB, Gamma22–28, PQ, HLG, SLog3, LogC, Custom(f64).
+  - 8 white points: D50, D55, D60, D65, D75, DCI, E, Custom(f32, f32).
+  - Preset colour spaces: `SRGB`, `ADOBE_RGB`, `DISPLAY_P3`, `REC2020_PQ`, `ACES_CG`, `LINEAR_SRGB`.
+- **RenderingIntent** and **GamutMapping** enums for ICC‑based colour conversion.
+- **ColorConversionSpec**: full specification for colour space transforms including ICC profile and OCIO config.
+- **Metadata** type hierarchy: `Metadata`, `ExifData`, `XmpData`, `IptcData`, `GpsData`, `CustomTag`, plus raw tag types for each standard.
+- **GpxTrack / GpxPoint**: GPX track parsing with timestamp‑based linear interpolation (position, elevation, speed, bearing).
+- **TileLayout**: tile grid computation with overlap support, `TileSpec` iterator, and edge‑tile boundary handling.
+- **AlignedBuffer**: byte buffer with `as_u16_slice()` and `as_f32_slice()` accessors via `bytemuck`.
+- **PluginError**: 23‑variant error enum (`NotFound`, `AlreadyLoaded`, `LoadFailed`, `VersionMismatch`, `InvalidParameter`, `MissingTool`, `GpuNotAvailable`, `GpuOutOfMemory`, `ExpressionError`, `Timeout`, `Internal`, `Canceled`, `Io`, `ValidationFailed`, `NodeExecutionFailed`, `CircularDependency`, `FileNotFound`, `UnsupportedFormat`, `EncodingFailed`, `DecodingFailed`, `Config`, `Other`).
+- **ValidationIssue**: `Error`, `Warning`, `Info` with parameter reference and message.
+- **PluginVersion**: semver struct with `new()`, `Display`, and comparison operators.
+- **VersionRequirement**: semver range with `is_satisfied_by()`.
+- **PluginCategory**: `Input`, `Metadata`, `Color`, `Transform`, `Enhance`, `Merge`, `Format`, `External`, `Custom(String)`.
+- **GpuBackend** and **AiBackend**: enumerating CUDA, Metal, Vulkan, DirectX, OpenCL, ROCm, OpenVINO, ONNX, TensorRT, CoreML, Burn.
+- **ImageInfo**: image metadata struct (id, path, filename, format, dimensions, file size, pixel format, colour space).
+- **ProcessingStats**: timing and memory statistics for a processing operation.
+- **ImageFormat** enum: HEIF, HEIC, AVIF, JXL, PNG, TIFF, JPEG, WEBP, OpenEXR, RAW, DNG, PPM, PGM, BMP, Unknown.
+- **DecodeOptions / EncodeOptions**: format‑agnostic decode and encode parameter structs.
+- **ChromaSubsampling**: `Yuv444`, `Yuv422`, `Yuv420`.
+- **HardwareRequirement / PluginConfig / FormatProbe**: supporting types.
+- **Tensor / TensorDtype**: AI inference tensor with F32, F16, I8, U8 dtypes.
+- **GuiSchema** types: `GuiLayout`, `GuiSection`, `GuiRow`, `GuiCell`, `PreviewMode`, `AuxView`, `SectionStyle`, `RowHeight`, `LabelPosition`, `SplitOrientation`, `SliderStyle`, `SliderOrientation`, `FloatWidget`, `IntegerWidget`, `EnumDisplay`, `ColorMode`, `FilePathKind`.
 
-#### Pipeline Engine — 管线引擎 (`photopipeline-engine`)
-- **PipelineGraph**: DAG 有向无环图结构
-  - `add_node` / `remove_node` — 节点增删
-  - `connect` / `disconnect` — 边操作（含自环/重复检测）
-  - `topological_order` — 拓扑排序（Kahn 算法，检测环）
-  - `validate_graph` — 图完整性校验
-  - `from_template` — 从 TOML 模板构建图
-- **PipelineTemplate**: TOML 管线配置的可序列化结构
-  - 节点 / 边 / 图像覆盖 / 分组规则 / 批量配置
-  - `validate()` 方法
-- **NodeExecutor**: 管线执行引擎
-  - 按拓扑顺序执行节点
-  - 像素/元数据节点分离处理
-  - 参数校验 + 表达式求值
-- **ParameterResolver**: 四级参数优先级系统
-  - 插件默认 < 模板默认 < 分组覆盖 < 图像覆盖
-  - 分组条件: ExifEq / ExifGte / ExifLte / GpsNear / Always / And / Or / Expression
-  - Haversine 公式 GPS 距离计算
-- **ExpressionEngine**: 参数表达式引擎
-  - 变量命名空间: `exif.*`（iso / aperture / shutter / focal_length / make / model / lens）+ `image.*`（filename / width / height / filesize）
-  - 比较运算符: `>` / `<` / `>=` / `<=` / `==` / `!=`
-  - 三元运算符: `condition ? true_value : false_value`
-  - 字符串字面值与数值字面值支持
-- **TileEngine**: 分块处理引擎
-  - 默认 1024px tile + 64px 重叠
-  - 自动并行度检测
+#### Plugin System (`photopipeline-plugin`)
 
-#### 14 个内置插件
-1. **exif_rw**: EXIF/XMP/IPTC/GPS 元数据读写（ExifTool 后端）
-2. **gps_set**: GPS 坐标管理（手动 / GPX 轨迹插值 / 清除）
-3. **time_shift**: 拍摄时间调整与时区转换
-4. **colorspace**: 色彩空间转换（ICC Profile + 渲染意图）
-5. **lut3d**: 3D LUT 色彩调色（.cube / .3dl / .look / .csp）
-6. **transform**: 缩放/旋转/裁剪/翻转（双线性/Lanczos3/最近邻）
-7. **lens_correct**: 镜头畸变/TCA/暗角校正（LensFun）
-8. **ai_denoise**: AI 降噪（ONNX Runtime，支持 CUDA/TensorRT/CoreML/OpenVINO）
-9. **raw_input**: RAW 文件输入（ARW/CR2/CR3/NEF/DNG/RAF/ORF/RW2/PEF 等 15 种格式）
-10. **heif_encoder**: HEIF/HEIC 10-bit 编码（libheif + x265）
-11. **jxl_encoder**: JPEG XL 16-bit 编码（libjxl，支持无损）
-12. **avif_encoder**: AVIF（AV1）编码（libavif + aom）
-13. **tiff_encoder**: TIFF/BigTIFF 编码（无压缩/LZW/Deflate/PackBits）
-14. **png_encoder**: PNG 16-bit 编码（Deflate，含 ICC/EXIF chunk）
+- **Plugin** base trait: `id()`, `name()`, `version()`, `category()`, `description()`, `tags()`, `requires_pixel_access()`, `produces_pixel_output()`, `supported_hardware()`, `parameter_schema()`, `gui_schema()`, `initialize()`, `shutdown()`, `validate()`.
+- **MetadataProcessor** trait: `metadata_scope()`, `read_metadata()`, `write_metadata()`.
+- **PixelProcessor** trait: `supported_input_formats()`, `supported_output_formats()`, `supported_color_spaces()`, `required_gpu_backend()`, `process_pixels()`.
+- **FormatProcessor** trait: `format_id()`, `supported_extensions()`, `can_decode()`, `can_encode()`, `decode()`, `encode()`.
+- **GpuProcessor** trait: `supported_backends()`, `gpu_memory_required()`, `process_gpu()`.
+- **AiProcessor** trait: `model_info()`, `supported_backends()`, `load_model()`, `unload_model()`, `infer()`.
+- **ExternalToolProcessor** trait: `tool_id()`, `tool_version_requirement()`, `trusted()`, `check_available()`, `execute()`.
+- **ProgressSink** trait: `set_progress(fraction, message)`, `is_canceled()`.
+- **Registry**: thread‑safe global plugin registry backed by `DashMap`. Supports registration of all 6 capability traits plus base Plugin, query by category/tags/keyword/pixel‑requirement, unregistration, manifest listing.
+- **ParameterSchema**: schema‑driven parameter definition with `ParameterSection` and `ParameterField`.
+- **18 ParameterType** variants: `String`, `Integer`, `Float`, `Boolean`, `Enum`, `Color`, `FilePath`, `Coordinate`, `Slider`, `ComboSlider`, `Expression`, `Preset`, `Array`, `MapWidget`, `BeforeAfter`, `Separator`, `Section`.
+- **ParameterSet**: JSON‑value parameter container with typed getters (`get_str`, `get_i64`, `get_f64`, `get_bool`) and shallow `merge()`.
+- **EnumOption**, **VariableDef**, **NamedPreset**: supporting schema types.
+- **PluginLoader** trait and three implementations: `BuiltinPluginLoader`, `NativePluginLoader` (reads `.toml` manifest from `.so`/`.dll` directory), `ExternalToolPluginLoader`.
+- **PluginLoaderManager**: scans search paths, probes loaders, discovers and registers plugins.
+- **PluginManifest**: serializable plugin metadata structure.
+- **PluginQuery**: filter struct for Registry queries.
+- **PluginConfig**: plugin configuration with settings and search paths.
+- **ModelInfo / ModelSource**: AI model metadata with `Bundled`, `ExternalFile`, `HuggingFace`, `Url` sources.
+- **ToolAvailability**: external tool check result.
+- **NodePanelDefinition**, **PanelSection**, **PanelWidget**, **DropdownOption**, **CardOption**, **ContextBarConfig**: GUI schema types for auto‑generated plugin panels.
 
-#### CLI 应用 (`photopipeline-cli`)
-- **pipeline 子命令**: `run`（执行管线）/ `validate`（验证配置）
-- **plugin 子命令**: `list`（列出插件）/ `info`（插件详情）
-- **batch 子命令**: `run`（批量处理）/ `validate`（批量验证）
-- TOML 配置加载，进度条指示
+#### Pipeline Engine (`photopipeline-engine`)
+
+- **PipelineGraph**: DAG structure with `add_node()`, `remove_node()`, `connect()`, `disconnect()`, `topological_order()` (Kahn's algorithm with cycle detection), `has_cycle()`, `validate_graph()`, `from_template()`.
+- **PipelineNode**: node with UUID id, label, plugin reference, enabled flag, input/output ports, parameter overrides.
+- **PipelineTemplate**: TOML‑serializable pipeline definition with `TemplateMetadata`, `TemplateNode`, `TemplateEdge`, `ImageOverride`, `ParamGroup`, `BatchConfig`.
+  - `validate()`: checks node count, edge source/target existence.
+  - `into_graph()`: converts template to executable `PipelineGraph`.
+- **NodeExecutor**: executes a `PipelineGraph` in topological order.
+  - Separates pixel and metadata node execution (`process_pixel_node` / `process_metadata_node`).
+  - Parameter validation per node; halts on validation errors.
+  - Progress reporting and cancellation support.
+- **ParameterResolver**: 4‑level parameter resolution system.
+  - Level 0: plugin built‑in defaults.
+  - Level 1: template‑level defaults.
+  - Level 2: group overrides (last matching wins).
+  - Level 3: per‑image overrides (highest priority).
+  - `resolve()` merges all levels, evaluates inline expressions.
+  - `resolve_single()` for non‑batch (single image) use.
+- **GroupCondition**: condition types for group‑based overrides.
+  - `ExifEq`, `ExifGte`, `ExifLte`, `GpsNear`, `Always`, `And`, `Or`, `Expression`.
+  - **Haversine** formula for GPS distance calculation.
+- **ExpressionEngine**: inline expression evaluator.
+  - Variables: `exif.iso`, `exif.aperture`, `exif.shutter`, `exif.focal_length`, `exif.make`, `exif.model`, `exif.lens`, `image.filename`, `image.width`, `image.height`, `image.filesize`.
+  - Operators: `>`, `<`, `>=`, `<=`, `==`, `!=`.
+  - Ternary: `condition ? true_value : false_value` (nestable via balanced bracket matching).
+  - String and numeric literal support; epsilon‑based float comparison.
+- **TileEngine**: tile‑based processing for large images.
+  - Default tile size: 1024, overlap: 64, parallelism: auto‑detected.
+  - `process_tiled()`: copies source tiles, processes each, blits results back.
+  - `copy_tile_from_source()` / `blit_tile_to_output()`: safe bounds‑checked slice copying.
+
+#### 14 Built‑in Plugins
+
+1. **exif_rw** — EXIF/XMP/IPTC/GPS metadata read/write via ExifTool subprocess
+2. **gps_set** — GPS coordinate management: manual, GPX track interpolation, clear
+3. **time_shift** — capture time adjustment and timezone conversion
+4. **colorspace** — colour space conversion with ICC profile support and rendering intents
+5. **lut3d** — 3D LUT colour grading (.cube, .3dl, .look, .csp)
+6. **transform** — resize, rotate, crop, flip with bilinear/Lanczos3/nearest filters
+7. **lens_correct** — lens distortion, TCA, vignetting correction via LensFun
+8. **ai_denoise** — AI image denoising via ONNX Runtime (CUDA/TensorRT/CoreML/OpenVINO backends)
+9. **raw_input** — RAW file input (ARW, CR2, CR3, NEF, DNG, RAF, ORF, RW2, PEF, and more)
+10. **heif_encoder** — HEIF/HEIC 10‑bit encoding (libheif + x265)
+11. **jxl_encoder** — JPEG XL 16‑bit encoding (libjxl; lossless and visually lossless modes)
+12. **avif_encoder** — AVIF encoding (libheif + aom)
+13. **tiff_encoder** — TIFF/BigTIFF encoding (none, LZW, deflate, packbits compression)
+14. **png_encoder** — PNG 16‑bit encoding (deflate; ICC and EXIF chunk support)
+
+#### CLI Application (`photopipeline-cli`)
+
+- **pipeline** subcommand: `run` (execute pipeline), `validate` (validate pipeline config).
+- **plugin** subcommand: `list` (list all registered plugins), `info <PLUGIN_ID>` (show plugin details).
+- **batch** subcommand: `run` (batch processing with glob pattern), `validate` (batch config validation).
+- TOML configuration loading via `serde` + `toml`.
+- Progress bar indication via `indicatif`.
 
 #### gRPC Server (`photopipeline-server`)
-- **Protobuf 3 定义**: pipeline.proto / image.proto / batch.proto
-- **3 个服务**: PipelineService / ImageService / BatchService
-- **tonic 实现**: 流式 RPC（Execute / Decode / Encode / GetProgress）
-- 基于 tokio 的异步运行时，优雅关闭支持
 
-#### Halide 生成器源文件（C++）
-- `colorspace_generator.cpp`: 色彩空间转换 Halide 管线
-- `resize_generator.cpp`: 图像缩放 Halide 管线（Lanczos3）
-- `tonemap_generator.cpp`: HDR 色调映射 Halide 管线
-- `CMakeLists.txt`: 构建配置（CI 编译）
+- **Protobuf definitions**: `pipeline.proto`, `image.proto`, `batch.proto`.
+- **PipelineService**: `CreatePipeline`, `Execute` (streaming), `Validate`, `GetNodeSchema`.
+- **ImageService**: `Load`, `Decode` (streaming), `Encode` (streaming), `GetThumbnail`.
+- **BatchService**: `SubmitBatch`, `GetProgress` (streaming), `Cancel`.
+- **tonic** implementation with Tokio async runtime.
 
-#### OIIO FFI 绑定
-- `crates/oiio/`: feature-gated OpenImageIO FFI
-- `OIIO_read_image` / `OIIO_write_image` / `OIIO_free_image` 外部函数声明
+#### Protobuf Message Types
+
+- **PipelineSpec**, **PipelineNode**, **PipelineEdge**, **PipelineId** — pipeline creation and execution.
+- **ExecuteRequest**, **ExecuteProgress** — streaming execution progress with stage tracking.
+- **ValidationResult**, **ValidationIssue** — parameter validation feedback.
+- **NodeSchema** — plugin schema transfer to GUI clients.
+- **ImagePath**, **ImageInfo**, **MetadataInfo** — image metadata.
+- **DecodeRequest**, **PixelDataChunk** — streaming image decode.
+- **EncodeRequest**, **EncodeProgress** — streaming image encode.
+- **BatchSpec**, **BatchId**, **BatchProgress** — batch job submission and progress monitoring.
+
+#### Halide Generators (C++)
+
+- `colorspace_generator.cpp` — colour space transformation kernel.
+- `resize_generator.cpp` — image resize kernel (Lanczos3).
+- `tonemap_generator.cpp` — HDR tone‑mapping kernel.
+- `CMakeLists.txt` — build configuration for CI compilation.
+
+#### OIIO FFI Bindings
+
+- `crates/oiio/`: feature‑gated OpenImageIO FFI wrappers.
+- `OIIO_read_image`, `OIIO_write_image`, `OIIO_free_image` extern declarations.
 
 #### External Crate
-- `crates/external/`: 外部工具封装入口（ExifTool / libvips / 商业 API stubs）
+
+- `crates/external/`: external tool wrapper stubs (ExifTool, libvips, commercial API hooks).
 
 #### GUI
-- **WinUI 3 GUI**（Windows）：.NET 8 项目骨架
-- **GTK4 + Rust GUI**（Linux）：项目骨架
-- **SwiftUI GUI**（macOS）：项目骨架
+
+- **WinUI 3** (.NET 8) — Windows desktop application project skeleton.
+- **SwiftUI** — macOS desktop application project skeleton.
+- **GTK4 + Rust** — Linux desktop application project skeleton.
 
 #### CI/CD
-- **build-halide.yml**: Halide 平台矩阵构建（linux/windows/macos）
-- **build-rust.yml**: Rust workspace 跨平台构建
-- **release.yml**: 全平台发布打包（AppImage / MSIX / DMG）
 
-#### 测试
-- **Core**: 67 个单元测试（PixelBuffer/AlignedBuffer/TileLayout/ColorSpace/ColorRGB/Metadata/GPS/GPX 插值/Version/Format/Backend 等）
-- **Plugin**: 20 个单元测试（Registry 注册/查询/注销/Manifest/Schema 默认值/字段查找/ParameterSet 存取合并）
-- **Engine**: 43 个单元测试（Graph 增删改连/拓扑排序/环检测/校验/序列化/Template/ParameterResolver 解析合并/条件求值/三元表达式/各组条件匹配/优先级）
-- **Plugins**: 所有 14 个插件内嵌校验逻辑
-- **CLI 集成测试**: `integration_test.rs` 包含 10 个集成测试（插件注册数/分类/图构建/序列化/校验/查询/显示）
-- **总计**: 168+ 个单元测试
+- **build-halide.yml** — cross‑platform Halide generator compilation (Linux, Windows, macOS matrix).
+- **build-rust.yml** — cross‑platform Rust workspace build (linux‑x86_64, linux‑aarch64, windows‑x86_64, macos‑arm64, macos‑x86_64 matrix).
+- **release.yml** — full release packaging pipeline (AppImage, MSIX, DMG).
+
+#### Testing
+
+- **Core**: 67 unit tests covering PixelBuffer, AlignedBuffer, TileLayout, ColorSpace, ColorRGB, Metadata, GPS, GPX interpolation, Version, Format, Backend display, schema defaults.
+- **Plugin**: 20 unit tests covering Registry registration/query/unregistration, Manifest listing, Schema defaults/field lookup, ParameterSet get/set/merge/iterate.
+- **Engine**: 43 unit tests covering Graph add/remove/connect/disconnect, topological sort, cycle detection, graph validation, serialization, Template validation/construction, ParameterResolver resolution/merging, condition evaluation (ExifEq/Gte/Lte/GpsNear/And/Or/Expression), expression engine (variable resolution, comparisons, ternary, literals, quoted strings), full priority chain.
+- **Plugins**: validation logic embedded in all 14 built‑in plugins.
+- **CLI**: 10 integration tests covering plugin counts, categories, graph construction, serialization, validation, query, display.
+- **Total**: 168+ unit tests + 10 integration tests.
 
 ### Infrastructure
-- Cargo workspace 结构（10 个 crate）
-- `justfile` 任务运行器（build / check / test / lint / fmt / clean / run-pipeline / run-server）
-- tracing 结构化日志
-- tokio 异步运行时
-- 依赖矩阵: serde（序列化）、clap（CLI）、tonic（gRPC）、dashmap（并发 Map）、parking_lot（同步原语）、chrono（时间）、uuid（标识符）、regex（正则）、glob（文件匹配）、indicatif（进度条）、bytemuck（零拷贝转换）
+
+- Cargo workspace structure (6 workspace members + 1 excluded crate).
+- `justfile` task runner: `just build`, `just check`, `just test`, `just lint`, `just fmt`, `just clean`, `just run-pipeline`, `just run-server`.
+- `tracing` structured logging with `tracing-subscriber` env‑filter.
+- `tokio` async runtime for engine, server, and CLI.
+- `serde` + `serde_json` for serialization of all core types.
+- `clap` for CLI argument parsing.
+- `tonic` + `prost` for gRPC server and protobuf code generation.
+- `dashmap` for concurrent plugin registry.
+- `parking_lot` for synchronisation primitives.
+- `chrono` for EXIF datetime handling and GPX interpolation.
+- `uuid` for node/image/batch/port identifiers.
+- `regex` for expression engine tokenisation.
+- `glob` for batch file pattern matching.
+- `indicatif` for CLI progress bars.
+- `bytemuck` for zero‑copy byte slicing.
+- `strum` for enum display and string conversion.
+- `derive_builder` for builder pattern structs.
 
 ---
 

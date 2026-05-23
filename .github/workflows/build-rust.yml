@@ -1,19 +1,61 @@
 name: Build Rust
+
 on: [push, pull_request]
+
 jobs:
   build:
+    name: Build (${{ matrix.os }})
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: sudo apt-get update && sudo apt-get install -y build-essential cmake pkg-config protobuf-compiler libprotobuf-dev libheif-dev libjxl-dev liblcms2-dev libexif-dev libtiff-dev libpng-dev libopenexr-dev ninja-build
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Linux dependencies
         if: runner.os == 'Linux'
-      - run: brew install cmake pkg-config protobuf libheif jpeg-xl little-cms2 libexif libtiff libpng openexr ninja
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config \
+            protobuf-compiler libprotobuf-dev libheif-dev libjxl-dev \
+            liblcms2-dev libexif-dev libtiff-dev libpng-dev libopenexr-dev \
+            ninja-build
+
+      - name: Install macOS dependencies
         if: runner.os == 'macOS'
-      - run: choco install -y cmake protoc
+        run: brew install cmake pkg-config protobuf libheif jpeg-xl little-cms2 libexif libtiff libpng openexr ninja
+
+      - name: Install Windows dependencies
         if: runner.os == 'Windows'
-      - run: cargo build --workspace --exclude photopipeline-server
-      - run: cargo test --workspace --exclude photopipeline-server
+        run: choco install -y cmake protoc
+
+      - name: Build workspace
+        run: cargo build --workspace
+
+      - name: Run tests
+        run: cargo test --workspace 2>&1 | tee test-output.txt
+
+      - name: Run clippy
+        run: cargo clippy --workspace -- -D warnings
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Upload test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output-${{ matrix.os }}
+          path: test-output.txt

@@ -1,20 +1,52 @@
 # Photopipeline API 参考
 
+> 按 Crate 组织的完整公共 API 文档。涵盖 `photopipeline-core`、`photopipeline-plugin`、`photopipeline-engine`、CLI、gRPC 服务和 Protobuf 消息定义。
+
+---
+
 ## 目录
 
-1. [Core Crate — 核心类型](#1-core-crate--核心类型)
-2. [Plugin Crate — 插件框架](#2-plugin-crate--插件框架)
-3. [Engine Crate — 管线引擎](#3-engine-crate--管线引擎)
-4. [CLI — 命令与参数](#4-cli--命令与参数)
+1. [Core Crate — `photopipeline-core`](#1-core-crate--photopipeline-core)
+   - 1.1 [类型别名](#11-类型别名)
+   - 1.2 [PixelBuffer 与图像数据](#12-pixelbuffer-与图像数据)
+   - 1.3 [AlignedBuffer 与 GpuBuffer](#13-alignedbuffer-与-gpubuffer)
+   - 1.4 [PixelFormat 枚举](#14-pixelformat-枚举)
+   - 1.5 [ChannelLayout 枚举](#15-channellayout-枚举)
+   - 1.6 [Tile 分块类型](#16-tile-分块类型)
+   - 1.7 [色彩空间类型](#17-色彩空间类型)
+   - 1.8 [元数据类型](#18-元数据类型)
+   - 1.9 [通用类型](#19-通用类型)
+   - 1.10 [错误类型](#110-错误类型)
+   - 1.11 [GUI Schema 类型](#111-gui-schema-类型)
+2. [Plugin Crate — `photopipeline-plugin`](#2-plugin-crate--photopipeline-plugin)
+   - 2.1 [基础 Plugin Trait](#21-基础-plugin-trait)
+   - 2.2 [能力 Trait（6 种）](#22-能力-trait6-种)
+   - 2.3 [ProgressSink](#23-progresssink)
+   - 2.4 [ParameterSchema](#24-parameterschema)
+   - 2.5 [ParameterType（18 种）](#25-parametertype18-种)
+   - 2.6 [ParameterSet](#26-parameterset)
+   - 2.7 [Registry](#27-registry)
+   - 2.8 [PluginLoader](#28-pluginloader)
+   - 2.9 [PluginManifest 与 PluginQuery](#29-pluginmanifest-与-pluginquery)
+   - 2.10 [ModelInfo 与 ModelSource](#210-modelinfo-与-modelsource)
+   - 2.11 [GUI 面板类型](#211-gui-面板类型)
+3. [Engine Crate — `photopipeline-engine`](#3-engine-crate--photopipeline-engine)
+   - 3.1 [PipelineGraph (DAG)](#31-pipelinegraph-dag)
+   - 3.2 [PipelineTemplate](#32-pipelinetemplate)
+   - 3.3 [NodeExecutor](#33-nodeexecutor)
+   - 3.4 [ParameterResolver](#34-parameterresolver)
+   - 3.5 [ExpressionEngine](#35-expressionengine)
+   - 3.6 [TileEngine](#36-tileengine)
+4. [CLI 命令接口](#4-cli-命令接口)
 5. [gRPC 服务接口](#5-grpc-服务接口)
 6. [Protobuf 消息定义](#6-protobuf-消息定义)
 
 ---
 
-## 1. Core Crate — 核心类型
+## 1. Core Crate — `photopipeline-core`
 
-Crate 名称：`photopipeline-core`
-路径：`crates/core/src/`
+**路径：** `crates/core/src/`
+**导出：** `color`、`error`、`image`、`metadata`、`types`
 
 ### 1.1 类型别名
 
@@ -27,42 +59,78 @@ pub type PortId = Uuid;
 pub type GroupId = Uuid;
 ```
 
-### 1.2 ImageBuffer、PixelBuffer、AlignedBuffer
+### 1.2 PixelBuffer 与图像数据
+
+#### PixelBuffer
 
 ```rust
+#[derive(Debug, Clone)]
 pub struct PixelBuffer {
     pub width: u32,
     pub height: u32,
-    pub layout: ChannelLayout,         // Gray | GrayAlpha | RGB | RGBA | Planar(u8) | Custom(u8)
-    pub format: PixelFormat,           // U8 | U16 | U32 | F16 | F32
+    pub layout: ChannelLayout,
+    pub format: PixelFormat,
     pub color_space: ColorSpace,
     pub icc_profile: Option<Vec<u8>>,
     pub data: AlignedBuffer,
 }
+```
 
-impl PixelBuffer {
-    pub fn new(width: u32, height: u32, layout: ChannelLayout, format: PixelFormat) -> Self;
-    pub fn byte_size(&self) -> usize;
-    pub fn pixel_count(&self) -> u64;
-    pub fn u16_samples(&self, channel: usize) -> Option<&[u16]>;
-    pub fn gpu_handle(&self) -> Option<GpuBufferHandle>;
+| 方法 | 签名 | 说明 |
+|---|---|---|
+| `new` | `(width, height, layout, format) -> Self` | 根据参数分配对齐缓冲区 |
+| `byte_size` | `() -> usize` | 返回缓冲区字节大小 |
+| `pixel_count` | `() -> u64` | 返回 `width × height` |
+| `u16_samples` | `(channel: usize) -> Option<&[u16]>` | 返回 planar 格式的单通道 u16 切片 |
+| `gpu_handle` | `() -> Option<GpuBufferHandle>` | 返回 GPU 缓冲区句柄（当前返回 `None`） |
+
+#### GpuBufferHandle
+
+```rust
+#[derive(Debug, Clone)]
+pub struct GpuBufferHandle {
+    pub handle: u64,
+    pub size_bytes: u64,
+    pub backend: GpuBackend,
 }
 ```
 
+#### ImageDimensions
+
 ```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ImageDimensions {
+    pub width: u32,
+    pub height: u32,
+}
+```
+
+| 方法 | 说明 |
+|---|---|
+| `pixel_count() -> u64` | 返回像素总数 |
+
+### 1.3 AlignedBuffer 与 GpuBuffer
+
+#### AlignedBuffer
+
+```rust
+#[derive(Debug, Clone)]
 pub struct AlignedBuffer {
     pub data: Vec<u8>,
     pub alignment: usize,
 }
-
-impl AlignedBuffer {
-    pub fn new(size: usize, alignment: usize) -> Self;
-    pub fn as_u16_slice(&self) -> &[u16];
-    pub fn as_f32_slice(&self) -> &[f32];
-}
 ```
 
+| 方法 | 说明 |
+|---|---|
+| `new(size, alignment) -> Self` | 创建零填充对齐字节缓冲区 |
+| `as_u16_slice() -> &[u16]` | 通过 `bytemuck` 转换为 u16 切片 |
+| `as_f32_slice() -> &[f32]` | 通过 `bytemuck` 转换为 f32 切片 |
+
+#### GpuBuffer
+
 ```rust
+#[derive(Debug, Clone)]
 pub struct GpuBuffer {
     pub handle: u64,
     pub size_bytes: u64,
@@ -70,9 +138,29 @@ pub struct GpuBuffer {
 }
 ```
 
-### 1.3 PixelFormat
+#### Tensor
 
 ```rust
+#[derive(Debug, Clone)]
+pub struct Tensor {
+    pub shape: Vec<usize>,
+    pub data: Vec<f32>,
+    pub dtype: TensorDtype,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TensorDtype {
+    F32,
+    F16,
+    I8,
+    U8,
+}
+```
+
+### 1.4 PixelFormat 枚举
+
+```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Display, EnumString)]
 pub enum PixelFormat {
     U8,
     U16,
@@ -80,34 +168,37 @@ pub enum PixelFormat {
     F16,
     F32,
 }
-
-impl PixelFormat {
-    pub fn bytes_per_channel(&self) -> usize;
-    pub fn is_float(&self) -> bool;
-    pub fn is_high_precision(&self) -> bool;  // 非 U8
-    pub fn max_value_u16(&self) -> u16;
-}
 ```
 
-### 1.4 ChannelLayout
+| 方法 | 返回 | 说明 |
+|---|---|---|
+| `bytes_per_channel()` | `usize` | U8=1, U16/F16=2, U32/F32=4 |
+| `is_float()` | `bool` | F16 或 F32 返回 true |
+| `is_high_precision()` | `bool` | 非 U8 返回 true |
+| `max_value_u16()` | `u16` | U8=255, 其他=65535 |
+
+### 1.5 ChannelLayout 枚举
 
 ```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ChannelLayout {
-    Gray,          // 1 通道
-    GrayAlpha,     // 2 通道
-    RGB,           // 3 通道
-    RGBA,          // 4 通道
-    Planar(u8),    // n 通道平面
-    Custom(u8),    // n 通道自定义
-}
-
-impl ChannelLayout {
-    pub fn channel_count(&self) -> u8;
-    pub fn is_interleaved(&self) -> bool;
+    Gray,         // 1 通道
+    GrayAlpha,    // 2 通道
+    RGB,          // 3 通道
+    RGBA,         // 4 通道
+    Planar(u8),   // n 通道平面排列
+    Custom(u8),   // n 通道自定义排列
 }
 ```
 
-### 1.5 Tile / 分块
+| 方法 | 返回 | 说明 |
+|---|---|---|
+| `channel_count()` | `u8` | 返回通道数 |
+| `is_interleaved()` | `bool` | 交错排列（Gray/GrayAlpha/RGB/RGBA）返回 true |
+
+### 1.6 Tile 分块类型
+
+#### TileCoord / TileSpec / TileLayout
 
 ```rust
 pub struct TileCoord { pub x: u32, pub y: u32; }
@@ -129,48 +220,64 @@ pub struct TileLayout {
     pub overlap: u32,
     pub total_tiles: u32,
 }
-
-impl TileLayout {
-    pub fn new(image_width: u32, image_height: u32, tile_size: u32, overlap: u32) -> Self;
-    pub fn tile_spec(&self, x: u32, y: u32) -> TileSpec;
-    pub fn iter_tiles(&self) -> impl Iterator<Item = TileSpec> + '_;
-}
 ```
 
-### 1.6 Color（颜色与色彩空间）
+| TileLayout 方法 | 签名 | 说明 |
+|---|---|---|
+| `new` | `(image_w, image_h, tile_size, overlap) -> Self` | 计算分块布局 |
+| `tile_spec` | `(x, y) -> TileSpec` | 获取指定分块的规格 |
+| `iter_tiles` | `() -> impl Iterator<Item = TileSpec>` | 遍历所有分块 |
+
+### 1.7 色彩空间类型
+
+#### ColorPrimaries（11 种）
 
 ```rust
 pub enum ColorPrimaries {
     BT709, BT2020, DisplayP3, SRGB, AdobeRGB,
     ProPhoto, ACES, ACEScg, CIEXYZ, DCIP3, Rec2100,
 }
+```
 
+#### TransferFunction（11 种）
+
+```rust
 pub enum TransferFunction {
     Linear, SRGB, Gamma22, Gamma24, Gamma26, Gamma28,
     PQ, HLG, SLog3, LogC, Custom(f64),
 }
+```
 
+#### WhitePoint（8 种）
+
+```rust
 pub enum WhitePoint {
     D50, D55, D60, D65, D75, DCI, E, Custom(f32, f32),
 }
+```
 
+#### ColorSpace
+
+```rust
 pub struct ColorSpace {
     pub primaries: ColorPrimaries,
     pub transfer: TransferFunction,
     pub white_point: WhitePoint,
     pub hdr_nits: Option<f32>,
 }
-
-impl ColorSpace {
-    pub const SRGB: Self;
-    pub const ADOBE_RGB: Self;
-    pub const DISPLAY_P3: Self;
-    pub const REC2020_PQ: Self;
-    pub const ACES_CG: Self;
-    pub const LINEAR_SRGB: Self;
-    pub fn is_hdr(&self) -> bool;  // hdr_nits > 203
-}
 ```
+
+| 常量 / 方法 | 说明 |
+|---|---|
+| `ColorSpace::SRGB` | sRGB 原色，sRGB 传递函数，D65 白点 |
+| `ColorSpace::ADOBE_RGB` | Adobe RGB 原色，Gamma 2.2，D65 |
+| `ColorSpace::DISPLAY_P3` | Display P3 原色，sRGB 传递函数，D65 |
+| `ColorSpace::REC2020_PQ` | BT.2020 原色，PQ 传递函数，D65，1000 nit |
+| `ColorSpace::ACES_CG` | ACEScg 原色，Linear，D60 |
+| `ColorSpace::LINEAR_SRGB` | sRGB 原色，Linear，D65 |
+| `is_hdr() -> bool` | hdr_nits > 203 返回 true |
+
+#### RenderingIntent / GamutMapping / ColorConversionSpec
 
 ```rust
 pub enum RenderingIntent {
@@ -181,7 +288,9 @@ pub enum RenderingIntent {
 }
 
 pub enum GamutMapping {
-    Clip, Compress, LuminancePreserve,
+    Clip,
+    Compress,
+    LuminancePreserve,
 }
 
 pub struct ColorConversionSpec {
@@ -197,7 +306,22 @@ pub struct ColorConversionSpec {
 }
 ```
 
-### 1.7 Metadata（元数据）
+#### ColorRGB / ColorRGBA
+
+```rust
+pub struct ColorRGB { pub r: f32, pub g: f32, pub b: f32 }
+pub struct ColorRGBA { pub r: f32, pub g: f32, pub b: f32, pub a: f32 }
+
+impl ColorRGB {
+    pub const BLACK: Self;
+    pub const WHITE: Self;
+    pub fn luminance(&self) -> f32; // 0.2126*r + 0.7152*g + 0.0722*b
+}
+```
+
+### 1.8 元数据类型
+
+#### Metadata
 
 ```rust
 pub struct Metadata {
@@ -213,6 +337,7 @@ pub struct Metadata {
 
 ```rust
 pub struct ExifData {
+    // 设备和软件
     pub make: Option<String>,
     pub model: Option<String>,
     pub lens_model: Option<String>,
@@ -223,11 +348,13 @@ pub struct ExifData {
     pub image_description: Option<String>,
     pub orientation: Option<u16>,
 
+    // 时间
     pub date_time_original: Option<DateTime<Utc>>,
     pub date_time_digitized: Option<DateTime<Utc>>,
     pub sub_sec_time_original: Option<String>,
     pub offset_time_original: Option<String>,
 
+    // 曝光
     pub exposure_time: Option<String>,
     pub f_number: Option<String>,
     pub iso: Option<u32>,
@@ -242,18 +369,20 @@ pub struct ExifData {
     pub exposure_program: Option<u16>,
     pub white_balance: Option<u16>,
 
+    // 图像
     pub image_width: Option<u32>,
     pub image_height: Option<u32>,
     pub color_space: Option<u16>,
     pub bits_per_sample: Option<Vec<u16>>,
     pub compression: Option<u16>,
 
+    // 厂商
     pub maker_note: Option<Vec<u8>>,
     pub raw_tags: Vec<RawExifTag>,
 }
 ```
 
-#### XmpData
+#### XmpData / IptcData
 
 ```rust
 pub struct XmpData {
@@ -268,11 +397,7 @@ pub struct XmpData {
     pub subject: Vec<String>,
     pub raw_properties: Vec<RawXmpProperty>,
 }
-```
 
-#### IptcData
-
-```rust
 pub struct IptcData {
     pub creator: Option<String>,
     pub headline: Option<String>,
@@ -293,28 +418,40 @@ pub struct IptcData {
 ```rust
 pub struct GpsData {
     pub latitude: Option<f64>,
+    pub latitude_ref: Option<String>,
     pub longitude: Option<f64>,
+    pub longitude_ref: Option<String>,
     pub altitude: Option<f64>,
+    pub altitude_ref: Option<i8>,
     pub timestamp: Option<DateTime<Utc>>,
     pub img_direction: Option<f64>,
+    pub img_direction_ref: Option<String>,
+    pub map_datum: Option<String>,
     pub satellites: Option<String>,
+    pub status: Option<String>,
+    pub measure_mode: Option<String>,
+    pub dop: Option<f64>,
     pub speed: Option<f64>,
+    pub speed_ref: Option<String>,
     pub track: Option<f64>,
+    pub track_ref: Option<String>,
     pub dest_bearing: Option<f64>,
+    pub dest_bearing_ref: Option<String>,
     pub dest_distance: Option<f64>,
     pub dest_latitude: Option<f64>,
     pub dest_longitude: Option<f64>,
-    pub map_datum: Option<String>,
-    // ... 其他 GPS 字段
-}
-
-impl GpsData {
-    pub fn has_coordinates(&self) -> bool;
-    pub fn coordinate_tuple(&self) -> Option<(f64, f64)>;
+    pub processing_method: Option<String>,
+    pub area_information: Option<String>,
+    pub date_stamp: Option<String>,
 }
 ```
 
-#### GPX
+| 方法 | 说明 |
+|---|---|
+| `has_coordinates() -> bool` | 纬度和经度均为 `Some` |
+| `coordinate_tuple() -> Option<(f64, f64)>` | 返回 (纬度, 经度) 元组 |
+
+#### GpxTrack / GpxPoint
 
 ```rust
 pub struct GpxTrack {
@@ -338,6 +475,8 @@ impl GpxTrack {
 }
 ```
 
+`interpolate_at()` 使用线性插值，处理前后边界点（单一方向外推）和方位角跨 0° 情况。
+
 #### MetadataScope / MetadataTarget / MetadataWriteReport
 
 ```rust
@@ -355,7 +494,9 @@ pub struct MetadataWriteReport {
 }
 ```
 
-### 1.8 Types（通用类型）
+### 1.9 通用类型
+
+#### PluginVersion / VersionRequirement
 
 ```rust
 pub struct PluginVersion {
@@ -368,9 +509,9 @@ pub struct PluginVersion {
 impl PluginVersion {
     pub const fn new(major: u32, minor: u32, patch: u32) -> Self;
 }
-```
+impl Display for PluginVersion;      // "1.2.3" 或 "1.2.3-alpha"
+impl PartialOrd for PluginVersion;   // 支持 < > <= >=
 
-```rust
 pub struct VersionRequirement {
     pub min_version: PluginVersion,
     pub max_version: Option<PluginVersion>,
@@ -379,24 +520,33 @@ pub struct VersionRequirement {
 impl VersionRequirement {
     pub fn is_satisfied_by(&self, version: &PluginVersion) -> bool;
 }
+impl Display for VersionRequirement; // ">=1.0.0,<2.0.0"
 ```
 
+#### PluginCategory / GpuBackend / AiBackend
+
 ```rust
+#[derive(Display, EnumString)]
 pub enum PluginCategory {
     Input, Metadata, Color, Transform,
     Enhance, Merge, Format, External, Custom(String),
 }
-```
 
-```rust
+#[derive(Display)]
 pub enum GpuBackend {
-    None, CUDA, Metal, Vulkan, DirectX, OpenCL, ROCm, OpenVINO, Auto,
+    None, CUDA, Metal, Vulkan, DirectX,
+    OpenCL, ROCm, OpenVINO, Auto,
 }
 
+#[derive(Display)]
 pub enum AiBackend {
     ONNX, TensorRT, CoreML, OpenVINO, Burn,
 }
+```
 
+#### GpuContext / HardwareInfo / ProcessingStats
+
+```rust
 pub struct GpuContext {
     pub backend: GpuBackend,
     pub device_name: String,
@@ -411,9 +561,7 @@ pub struct HardwareInfo {
     pub total_ram_mb: u64,
     pub gpus: Vec<GpuContext>,
 }
-```
 
-```rust
 pub struct ProcessingStats {
     pub elapsed_ms: u64,
     pub cpu_time_ms: u64,
@@ -424,12 +572,18 @@ pub struct ProcessingStats {
 }
 ```
 
+#### ImageFormat
+
 ```rust
+#[derive(Display)]
 pub enum ImageFormat {
-    HEIF, HEIC, AVIF, JXL, PNG, TIFF, JPEG, WEBP,
-    OpenEXR, RAW, DNG, PPM, PGM, BMP, Unknown(String),
+    HEIF, HEIC, AVIF, JXL, PNG, TIFF,
+    JPEG, WEBP, OpenEXR, RAW, DNG,
+    PPM, PGM, BMP, Unknown(String),
 }
 ```
+
+#### ImageInfo / DecodeOptions / EncodeOptions / FormatProbe
 
 ```rust
 pub struct ImageInfo {
@@ -443,19 +597,13 @@ pub struct ImageInfo {
     pub pixel_format: PixelFormat,
     pub color_space: ColorSpace,
 }
-```
-
-```rust
-pub struct ImageDimensions { pub width: u32, pub height: u32; }
-
-pub enum ChromaSubsampling { Yuv444, Yuv422, Yuv420 }
 
 pub struct DecodeOptions {
     pub pixel_format: Option<PixelFormat>,
     pub max_width: Option<u32>,
     pub max_height: Option<u32>,
-    pub read_metadata: bool,
-    pub apply_transfer: bool,
+    pub read_metadata: bool,        // 默认 true
+    pub apply_transfer: bool,        // 默认 false
     pub icc_profile: Option<Vec<u8>>,
 }
 
@@ -466,14 +614,16 @@ pub struct DecodedImage {
 }
 
 pub struct EncodeOptions {
-    pub format: ImageFormat,
-    pub quality: Option<f32>,
-    pub lossless: bool,
-    pub bit_depth: u8,
+    pub format: ImageFormat,         // 默认 HEIF
+    pub quality: Option<f32>,        // 默认 Some(95.0)
+    pub lossless: bool,              // 默认 false
+    pub bit_depth: u8,               // 默认 10
     pub chroma_subsampling: Option<ChromaSubsampling>,
     pub encoder: Option<String>,
     pub effort: Option<u8>,
 }
+
+pub enum ChromaSubsampling { Yuv444, Yuv422, Yuv420 }
 
 pub struct FormatProbe {
     pub path: Option<PathBuf>,
@@ -483,26 +633,25 @@ pub struct FormatProbe {
 }
 ```
 
+#### HardwareRequirement / PluginConfig
+
 ```rust
 pub struct HardwareRequirement {
-    pub requires_cpu: bool,
-    pub requires_gpu: bool,
-    pub min_ram_mb: u64,
-    pub preferred_backend: Option<GpuBackend>,
+    pub requires_cpu: bool,          // 默认 true
+    pub requires_gpu: bool,          // 默认 false
+    pub min_ram_mb: u64,             // 默认 256
+    pub preferred_backend: Option<GpuBackend>, // 默认 None
+}
+
+pub struct PluginConfig {
+    pub enabled: bool,
+    pub settings: HashMap<String, String>,
 }
 ```
 
-```rust
-pub struct Tensor {
-    pub shape: Vec<usize>,
-    pub data: Vec<f32>,
-    pub dtype: TensorDtype,
-}
+### 1.10 错误类型
 
-pub enum TensorDtype { F32, F16, I8, U8 }
-```
-
-### 1.9 Error（错误类型）
+#### PluginError（23 变体）
 
 ```rust
 #[derive(Debug, Error)]
@@ -510,18 +659,18 @@ pub enum PluginError {
     NotFound(PluginId),
     AlreadyLoaded { plugin: PluginId },
     LoadFailed { plugin: PluginId, reason: String },
-    VersionMismatch { plugin, actual, required },
-    InvalidParameter { plugin, field, message },
-    MissingTool { plugin, tool, required },
-    GpuNotAvailable { plugin, backend: GpuBackend },
-    GpuOutOfMemory { plugin, needed, available },
-    ExpressionError { plugin, field, error },
-    Timeout { plugin, elapsed, timeout },
-    Internal { plugin, message },
-    Canceled { plugin },
-    Io { plugin, error: std::io::Error },
+    VersionMismatch { plugin: PluginId, actual: PluginVersion, required: VersionRequirement },
+    InvalidParameter { plugin: PluginId, field: String, message: String },
+    MissingTool { plugin: PluginId, tool: String, required: String },
+    GpuNotAvailable { plugin: PluginId, backend: GpuBackend },
+    GpuOutOfMemory { plugin: PluginId, needed: u64, available: u64 },
+    ExpressionError { plugin: PluginId, field: String, error: String },
+    Timeout { plugin: PluginId, elapsed: f64, timeout: f64 },
+    Internal { plugin: PluginId, message: String },
+    Canceled { plugin: PluginId },
+    Io { plugin: PluginId, error: std::io::Error },
     ValidationFailed(String),
-    NodeExecutionFailed { node, message },
+    NodeExecutionFailed { node: String, message: String },
     CircularDependency,
     FileNotFound(String),
     UnsupportedFormat(String),
@@ -532,15 +681,20 @@ pub enum PluginError {
 }
 
 pub type PluginResult<T> = Result<T, PluginError>;
-
-pub enum ValidationIssue {
-    Error { param: String, message: String },
-    Warning { param: String, message: String },
-    Info { param: String, message: String },
-}
 ```
 
-### 1.10 GuiSchema 相关类型
+#### ValidationIssue
+
+```rust
+pub enum ValidationIssue {
+    Error   { param: String, message: String },
+    Warning { param: String, message: String },
+    Info    { param: String, message: String },
+}
+impl Display for ValidationIssue; // "ERROR(param): message" 等
+```
+
+### 1.11 GUI Schema 类型
 
 ```rust
 pub struct GuiSchema {
@@ -549,7 +703,7 @@ pub struct GuiSchema {
     pub color: Option<String>,
     pub preview: PreviewMode,
     pub aux_views: Vec<AuxView>,
-    pub min_panel_width: u32,
+    pub min_panel_width: u32,           // 默认 320
 }
 
 pub enum GuiLayout {
@@ -560,10 +714,19 @@ pub enum GuiLayout {
 pub struct GuiSection {
     pub param_section_id: String,
     pub title_visible: bool,
-    pub style: SectionStyle,
+    pub style: SectionStyle,           // Default | Card | AccentCard | CollapsibleCard
 }
 
-pub enum SectionStyle { Default, Card, AccentCard, CollapsibleCard }
+pub struct GuiRow {
+    pub height: RowHeight,             // Compact | Normal | Expanded | Custom(u32)
+    pub cells: Vec<GuiCell>,
+}
+
+pub struct GuiCell {
+    pub param_field_id: String,
+    pub width_fraction: f64,
+    pub label_position: LabelPosition, // Top | Left | None
+}
 
 pub enum PreviewMode {
     None,
@@ -577,43 +740,54 @@ pub enum AuxView {
     Histogram, Waveform, Vectorscope, GamutDiagram, Map,
     FocusPeaking, ClippingWarning, MetadataTable, ProgressBar, StatusText,
 }
+
+pub enum SectionStyle { Default, Card, AccentCard, CollapsibleCard }
+pub enum SliderStyle { Continuous, Discrete, Range, DualHandle }
+pub enum SliderOrientation { Horizontal, Vertical }
+pub enum FloatWidget { SpinBox, Slider, ComboSlider, DragInput }
+pub enum IntegerWidget { SpinBox, Slider, Combo }
+pub enum EnumDisplay { Dropdown, RadioGroup, ButtonGroup, SegmentedControl, Tabs, PopupCard }
+pub enum ColorMode { RGB, RGBA, HSL, HSV, Lab }
+pub enum FilePathKind { File, Directory, SaveFile }
+pub enum SplitOrientation { Horizontal, Vertical }
+pub enum LabelPosition { Top, Left, None }
+pub enum RowHeight { Compact, Normal, Expanded, Custom(u32) }
 ```
 
 ---
 
-## 2. Plugin Crate — 插件框架
+## 2. Plugin Crate — `photopipeline-plugin`
 
-Crate 名称：`photopipeline-plugin`
-路径：`crates/plugin/src/`
+**路径：** `crates/plugin/src/`
 
-### 2.1 基础 Trait
+### 2.1 基础 Plugin Trait
 
 ```rust
 #[async_trait]
-pub trait Plugin: Send + Sync + Debug {
-    fn id(&self) -> &PluginId;
-    fn name(&self) -> &str;
-    fn version(&self) -> PluginVersion;
-    fn category(&self) -> PluginCategory;
-    fn description(&self) -> &str;
-    fn tags(&self) -> &[String];
-    fn requires_pixel_access(&self) -> bool;
-    fn produces_pixel_output(&self) -> bool;
-    fn supported_hardware(&self) -> HardwareRequirement;
+pub trait Plugin: Send + Sync + std::fmt::Debug {
+    fn id(&self)                        -> &PluginId;
+    fn name(&self)                      -> &str;
+    fn version(&self)                   -> PluginVersion;
+    fn category(&self)                  -> PluginCategory;
+    fn description(&self)               -> &str;
+    fn tags(&self)                      -> &[String];
+    fn requires_pixel_access(&self)     -> bool;
+    fn produces_pixel_output(&self)     -> bool;
+    fn supported_hardware(&self)        -> HardwareRequirement;
 
-    fn parameter_schema(&self) -> &ParameterSchema;
-    fn gui_schema(&self) -> &GuiSchema;
+    fn parameter_schema(&self)          -> &ParameterSchema;
+    fn gui_schema(&self)                -> &GuiSchema;
 
     async fn initialize(&mut self, cfg: &PluginConfig) -> PluginResult<()>;
-    async fn shutdown(&mut self) -> PluginResult<()>;
-    async fn validate(&self, params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>>;
+    async fn shutdown(&mut self)                         -> PluginResult<()>;
+    async fn validate(&self, params: &ParameterSet)      -> PluginResult<Vec<ValidationIssue>>;
 }
 ```
 
-### 2.2 能力 Trait
+### 2.2 能力 Trait（6 种）
 
 ```rust
-// 元数据处理 — 零像素访问
+// 1. 元数据处理
 #[async_trait]
 pub trait MetadataProcessor: Plugin {
     fn metadata_scope(&self) -> Vec<MetadataScope>;
@@ -621,7 +795,7 @@ pub trait MetadataProcessor: Plugin {
     async fn write_metadata(&self, target: &mut MetadataTarget, metadata: &Metadata, params: &ParameterSet) -> PluginResult<MetadataWriteReport>;
 }
 
-// 像素处理 — 16bit+ 精度
+// 2. 像素处理
 #[async_trait]
 pub trait PixelProcessor: Plugin {
     fn supported_input_formats(&self) -> Vec<PixelFormat>;
@@ -631,18 +805,18 @@ pub trait PixelProcessor: Plugin {
     async fn process_pixels(&self, input: &PixelBuffer, output: &mut PixelBuffer, params: &ParameterSet, progress: Box<dyn ProgressSink>) -> PluginResult<ProcessingStats>;
 }
 
-// 格式编解码
+// 3. 格式编解码
 #[async_trait]
 pub trait FormatProcessor: Plugin {
     fn format_id(&self) -> ImageFormat;
     fn supported_extensions(&self) -> Vec<(&str, &str)>;
     fn can_decode(&self, data: &FormatProbe) -> bool;
     fn can_encode(&self, format: &ImageFormat) -> bool;
-    async fn decode(&self, data: &[u8], opts: &DecodeOptions) -> PluginResult<DecodedImage>;
-    async fn encode(&self, image: &PixelBuffer, metadata: &Metadata, opts: &EncodeOptions) -> PluginResult<Vec<u8>>;
+    async fn decode(&self, data: &[u8], options: &DecodeOptions) -> PluginResult<DecodedImage>;
+    async fn encode(&self, image: &PixelBuffer, metadata: &Metadata, options: &EncodeOptions) -> PluginResult<Vec<u8>>;
 }
 
-// GPU 计算
+// 4. GPU 计算
 #[async_trait]
 pub trait GpuProcessor: Plugin {
     fn supported_backends(&self) -> Vec<GpuBackend>;
@@ -650,7 +824,7 @@ pub trait GpuProcessor: Plugin {
     async fn process_gpu(&self, ctx: &GpuContext, input: &GpuBuffer, output: &mut GpuBuffer, params: &ParameterSet, progress: Box<dyn ProgressSink>) -> PluginResult<ProcessingStats>;
 }
 
-// AI 推理
+// 5. AI 推理
 #[async_trait]
 pub trait AiProcessor: Plugin {
     fn model_info(&self) -> &ModelInfo;
@@ -660,7 +834,7 @@ pub trait AiProcessor: Plugin {
     async fn infer(&self, input: &Tensor, params: &ParameterSet) -> PluginResult<Tensor>;
 }
 
-// 外部工具
+// 6. 外部工具
 #[async_trait]
 pub trait ExternalToolProcessor: Plugin {
     fn tool_id(&self) -> &str;
@@ -694,7 +868,9 @@ impl ParameterSchema {
     pub fn defaults(&self) -> ParameterSet;
     pub fn all_fields(&self) -> Vec<&ParameterField>;
 }
+```
 
+```rust
 pub struct ParameterSection {
     pub id: String,
     pub label: String,
@@ -704,41 +880,61 @@ pub struct ParameterSection {
     pub default_collapsed: bool,
     pub fields: Vec<ParameterField>,
 }
+```
 
+```rust
 pub struct ParameterField {
     pub id: String,
     pub label: String,
     pub description: Option<String>,
     pub help_url: Option<String>,
-    pub field_type: ParameterType,
+    pub field_type: ParameterType,       // #[serde(flatten)]
     pub default: serde_json::Value,
     pub required: bool,
     pub advanced: bool,
-    pub allow_override: bool,
-    pub supports_expression: bool,
+    pub allow_override: bool,            // 默认 true
+    pub supports_expression: bool,       // 默认 false
 }
 ```
 
 ### 2.5 ParameterType（18 种）
 
 ```rust
+#[serde(tag = "type")]
 pub enum ParameterType {
+    #[serde(rename = "string")]
     String { max_length: usize, pattern: Option<String>, placeholder: Option<String> },
+    #[serde(rename = "integer")]
     Integer { min: i64, max: i64, step: i64, unit: Option<String>, style: IntegerWidget },
+    #[serde(rename = "float")]
     Float { min: f64, max: f64, step: f64, precision: u8, unit: Option<String>, logarithmic: bool, style: FloatWidget },
+    #[serde(rename = "boolean")]
     Boolean { label_true: Option<String>, label_false: Option<String> },
+    #[serde(rename = "enum")]
     Enum { options: Vec<EnumOption>, display: EnumDisplay },
+    #[serde(rename = "color")]
     Color { mode: ColorMode, show_alpha: bool },
+    #[serde(rename = "file_path")]
     FilePath { kind: FilePathKind, filters: Vec<(String, String)>, must_exist: bool },
+    #[serde(rename = "coordinate")]
     Coordinate { alt_required: bool, direction_required: bool },
+    #[serde(rename = "slider")]
     Slider { min: f64, max: f64, step: f64, show_ticks: bool, ticks: Option<Vec<f64>>, show_value: bool, orientation: SliderOrientation, style: SliderStyle },
+    #[serde(rename = "combo_slider")]
     ComboSlider { min: f64, max: f64, step: f64, presets: Vec<(String, f64)>, unit: Option<String> },
+    #[serde(rename = "expression")]
     Expression { variables: Vec<VariableDef> },
+    #[serde(rename = "preset")]
     Preset { preset_schema_ref: String, builtin_presets: Vec<NamedPreset>, allow_custom: bool, allow_import: bool },
+    #[serde(rename = "array")]
     Array { element: Box<ParameterField>, min_items: usize, max_items: Option<usize> },
+    #[serde(rename = "map_widget")]
     MapWidget { show_track: bool, show_photos: bool, allow_manual_pin: bool },
+    #[serde(rename = "before_after")]
     BeforeAfter { zoom_levels: Vec<f64>, show_histogram: bool },
+    #[serde(rename = "separator")]
     Separator { label: Option<String> },
+    #[serde(rename = "section")]
     Section { fields: Vec<ParameterField> },
 }
 ```
@@ -746,40 +942,36 @@ pub enum ParameterType {
 ### 2.6 ParameterSet
 
 ```rust
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ParameterSet {
     pub values: HashMap<String, serde_json::Value>,
 }
 
 impl ParameterSet {
     pub fn new() -> Self;
-    pub fn insert(&mut self, key: String, value: serde_json::Value);
-    pub fn get(&self, key: &str) -> Option<&serde_json::Value>;
-    pub fn get_str(&self, key: &str) -> Option<&str>;
-    pub fn get_i64(&self, key: &str) -> Option<i64>;
-    pub fn get_f64(&self, key: &str) -> Option<f64>;
+    pub fn insert(&mut self, key: String, value: Value);
+    pub fn get(&self, key: &str)      -> Option<&Value>;
+    pub fn get_str(&self, key: &str)  -> Option<&str>;
+    pub fn get_i64(&self, key: &str)  -> Option<i64>;
+    pub fn get_f64(&self, key: &str)  -> Option<f64>;
     pub fn get_bool(&self, key: &str) -> Option<bool>;
-    pub fn merge(&mut self, other: &ParameterSet);
-    pub fn iter(&self) -> impl Iterator<Item = (&String, &serde_json::Value)>;
+    pub fn merge(&mut self, other: &ParameterSet);  // 浅合并（other 覆盖 self）
+    pub fn iter(&self) -> impl Iterator<Item = (&String, &Value)>;
 }
 ```
 
 ### 2.7 Registry
 
 ```rust
-pub struct Registry { /* 内部 DashMap */ }
+pub struct Registry { /* 内部: DashMap + RwLock */ }
 
 impl Registry {
     pub fn new() -> Self;
+
+    // 基础注册/获取
     pub fn register(&self, plugin: Arc<dyn Plugin>) -> PluginResult<()>;
     pub fn unregister(&self, id: &PluginId) -> Option<Arc<dyn Plugin>>;
     pub fn get(&self, id: &PluginId) -> Option<Arc<dyn Plugin>>;
-    pub fn query(&self, q: &PluginQuery) -> Vec<Arc<dyn Plugin>>;
-    pub fn by_category(&self, cat: PluginCategory) -> Vec<Arc<dyn Plugin>>;
-    pub fn all(&self) -> Vec<Arc<dyn Plugin>>;
-    pub fn manifest(&self, id: &PluginId) -> Option<PluginManifest>;
-    pub fn manifests(&self) -> Vec<PluginManifest>;
-    pub fn categories(&self) -> Vec<PluginCategory>;
-    pub fn is_loaded(&self, id: &PluginId) -> bool;
 
     // 能力处理器注册/获取
     pub fn register_metadata_processor(&self, p: Arc<dyn MetadataProcessor>) -> PluginResult<()>;
@@ -794,6 +986,17 @@ impl Registry {
     pub fn get_ai_processor(&self, id: &PluginId) -> Option<Arc<dyn AiProcessor>>;
     pub fn register_external_tool_processor(&self, p: Arc<dyn ExternalToolProcessor>) -> PluginResult<()>;
     pub fn get_external_tool_processor(&self, id: &PluginId) -> Option<Arc<dyn ExternalToolProcessor>>;
+
+    // 查询
+    pub fn query(&self, q: &PluginQuery) -> Vec<Arc<dyn Plugin>>;
+    pub fn by_category(&self, cat: PluginCategory) -> Vec<Arc<dyn Plugin>>;
+    pub fn all(&self) -> Vec<Arc<dyn Plugin>>;
+
+    // Manifest
+    pub fn manifest(&self, id: &PluginId) -> Option<PluginManifest>;
+    pub fn manifests(&self) -> Vec<PluginManifest>;
+    pub fn categories(&self) -> Vec<PluginCategory>;
+    pub fn is_loaded(&self, id: &PluginId) -> bool;
 }
 ```
 
@@ -810,9 +1013,9 @@ pub trait PluginLoader: Send + Sync {
 }
 
 // 内置实现
-pub struct BuiltinPluginLoader;
-pub struct NativePluginLoader;
-pub struct ExternalToolPluginLoader;
+pub struct BuiltinPluginLoader;        // 不支持从路径加载
+pub struct NativePluginLoader;         // 读取 .toml manifest
+pub struct ExternalToolPluginLoader;   // TBD
 
 pub struct PluginLoaderManager {
     pub fn new() -> Self;
@@ -821,7 +1024,7 @@ pub struct PluginLoaderManager {
 }
 ```
 
-### 2.9 Manifest 与 Query
+### 2.9 PluginManifest 与 PluginQuery
 
 ```rust
 pub struct PluginManifest {
@@ -840,14 +1043,42 @@ pub struct PluginManifest {
 
 pub struct PluginQuery {
     pub category: Option<PluginCategory>,
-    pub tags: Vec<String>,
+    pub tags: Vec<String>,             // AND 匹配
     pub requires_pixel: Option<bool>,
-    pub keyword: Option<String>,
+    pub keyword: Option<String>,       // 搜索名称和描述
     pub enabled_only: bool,
 }
 ```
 
-### 2.10 GuiSchema 相关（plugin crate 扩展）
+### 2.10 ModelInfo 与 ModelSource
+
+```rust
+pub struct ModelInfo {
+    pub name: String,
+    pub version: String,
+    pub source: ModelSource,
+    pub input_shape: Vec<usize>,
+    pub output_shape: Vec<usize>,
+    pub memory_mb: u64,
+    pub description: String,
+}
+
+pub enum ModelSource {
+    Bundled,
+    ExternalFile(String),
+    HuggingFace { repo: String, file: String },
+    Url(String),
+}
+
+pub struct ToolAvailability {
+    pub available: bool,
+    pub version: Option<String>,
+    pub path: Option<String>,
+    pub error: Option<String>,
+}
+```
+
+### 2.11 GUI 面板类型
 
 ```rust
 pub struct NodePanelDefinition {
@@ -859,22 +1090,41 @@ pub struct NodePanelDefinition {
     pub help_text: Option<String>,
 }
 
-pub struct PanelSection { ... }
-pub enum PanelWidget { TextInput, NumberInput, Slider, Toggle, Dropdown, SegmentedControl, CardSelector, FilePicker, ColorPicker, CoordinateInput, ComboSlider, MapWidget, ExpressionEditor, BeforeAfterPreview, NestedFields, Label }
+pub struct PanelSection {
+    pub id: String,
+    pub label: String,
+    pub widget: PanelWidget,
+    pub collapsible: bool,
+    pub default_collapsed: bool,
+}
 
-pub struct ContextBarConfig {
-    pub show_template_selector: bool,
-    pub show_override_selector: bool,
-    pub allow_per_image_override: bool,
+#[serde(tag = "type")]
+pub enum PanelWidget {
+    TextInput { param_id, placeholder, max_length },
+    NumberInput { param_id, min, max, step, precision, unit },
+    Slider { param_id, min, max, step, show_value },
+    Toggle { param_id, label_on, label_off },
+    Dropdown { param_id, options: Vec<DropdownOption> },
+    SegmentedControl { param_id, options: Vec<DropdownOption> },
+    CardSelector { param_id, options: Vec<CardOption> },
+    FilePicker { param_id, kind, filters },
+    ColorPicker { param_id, show_alpha },
+    CoordinateInput { param_id_lat, param_id_lon, param_id_alt },
+    ComboSlider { param_id, presets, min, max, unit },
+    MapWidget { param_id_lat, param_id_lon, show_track, show_photos, allow_manual_pin },
+    ExpressionEditor { param_id, variables, example },
+    BeforeAfterPreview { zoom_levels, show_histogram },
+    NestedFields { fields: Vec<PanelSection> },
+    Label { text },
 }
 ```
 
 ---
 
-## 3. Engine Crate — 管线引擎
+## 3. Engine Crate — `photopipeline-engine`
 
-Crate 名称：`photopipeline-engine`
-路径：`crates/engine/src/`
+**路径：** `crates/engine/src/`
+**导出：** `executor`、`graph`、`params`、`tile`
 
 ### 3.1 PipelineGraph (DAG)
 
@@ -888,30 +1138,36 @@ pub struct PipelineNode {
     pub id: NodeId,
     pub label: String,
     pub plugin_id: PluginId,
-    pub enabled: bool,
-    pub position: (f64, f64),
+    pub enabled: bool,                             // 默认 true
+    pub position: (f64, f64),                      // 默认 (0, 0)
     pub inputs: Vec<PortId>,
     pub outputs: Vec<PortId>,
     pub parameter_overrides: Option<ParameterSet>,
 }
-
-impl PipelineGraph {
-    pub fn new() -> Self;
-    pub fn add_node(&mut self, plugin_id: String, label: String) -> NodeId;
-    pub fn remove_node(&mut self, node_id: NodeId) -> bool;
-    pub fn connect(&mut self, from_port: PortId, to_port: PortId) -> Result<(), PluginError>;
-    pub fn disconnect(&mut self, from_port: PortId, to_port: PortId) -> bool;
-    pub fn topological_order(&self) -> Result<Vec<NodeId>, PluginError>;
-    pub fn has_cycle(&self) -> bool;
-    pub fn validate_graph(&self) -> Result<(), Vec<String>>;
-    pub fn from_template(template: &PipelineTemplate) -> Self;
-    pub fn node(&self, id: NodeId) -> Option<&PipelineNode>;
-    pub fn node_mut(&mut self, id: NodeId) -> Option<&mut PipelineNode>;
-    pub fn port_owner(&self, port_id: PortId) -> Option<NodeId>;
-}
 ```
 
-### 3.2 PipelineTemplate (TOML 配置)
+| 方法 | 签名 | 说明 |
+|---|---|---|
+| `new` | `() -> Self` | 创建空图 |
+| `add_node` | `(plugin_id, label) -> NodeId` | 添加节点，返回 UUID |
+| `remove_node` | `(node_id) -> bool` | 移除节点及关联边 |
+| `connect` | `(from_port, to_port) -> Result<(), PluginError>` | 添加有向边（含环检测） |
+| `disconnect` | `(from_port, to_port) -> bool` | 移除边 |
+| `topological_order` | `() -> Result<Vec<NodeId>, PluginError>` | Kahn 算法拓扑排序 |
+| `has_cycle` | `() -> bool` | 检测环 |
+| `validate_graph` | `() -> Result<(), Vec<String>>` | 完整校验（端口、ID、环） |
+| `from_template` | `(template: &PipelineTemplate) -> Self` | 从模板构建图 |
+| `node` | `(id) -> Option<&PipelineNode>` | 按 ID 查询 |
+| `node_mut` | `(id) -> Option<&mut PipelineNode>` | 可变引用 |
+| `port_owner` | `(port_id) -> Option<NodeId>` | 查找端口所属节点 |
+
+**连接约束：**
+- 不允许自环（from == to）
+- 不允许同节点多端口互联
+- 不允许重复边
+- 形成环的边将被拒绝（`CircularDependency` 错误）
+
+### 3.2 PipelineTemplate
 
 ```rust
 pub struct PipelineTemplate {
@@ -921,11 +1177,6 @@ pub struct PipelineTemplate {
     pub overrides: Vec<ImageOverride>,
     pub groups: Vec<ParamGroup>,
     pub batch: Option<BatchConfig>,
-}
-
-impl PipelineTemplate {
-    pub fn validate(&self) -> Result<(), String>;
-    pub fn into_graph(self) -> PipelineGraph;
 }
 
 pub struct TemplateMetadata {
@@ -938,7 +1189,7 @@ pub struct TemplateNode {
     pub id: String,
     pub plugin: String,
     pub label: Option<String>,
-    pub enabled: bool,
+    pub enabled: bool,                               // 默认 true
     pub params: Option<HashMap<String, serde_json::Value>>,
 }
 
@@ -949,22 +1200,27 @@ pub struct TemplateEdge {
 
 pub struct ImageOverride {
     pub image: String,
-    pub params: HashMap<String, ParameterSet>,
+    pub params: HashMap<String, ParameterSet>,        // key = node_id
 }
 
 pub struct ParamGroup {
     pub name: String,
     pub condition: String,
-    pub params: HashMap<String, ParameterSet>,
+    pub params: HashMap<String, ParameterSet>,        // key = node_id
 }
 
 pub struct BatchConfig {
-    pub parallel: usize,
+    pub parallel: usize,                              // 默认 1
     pub output_pattern: Option<String>,
-    pub on_conflict: Option<String>,
-    pub resume: bool,
+    pub on_conflict: Option<String>,                  // "skip" | "overwrite"
+    pub resume: bool,                                 // 默认 false
 }
 ```
+
+| PipelineTemplate 方法 | 说明 |
+|---|---|
+| `validate() -> Result<(), String>` | 校验节点数和边引用 |
+| `into_graph() -> PipelineGraph` | 转换为可执行的图 |
 
 ### 3.3 NodeExecutor
 
@@ -988,13 +1244,22 @@ impl NodeExecutor {
 }
 ```
 
+**执行流程：**
+1. 拓扑排序图节点
+2. 按顺序遍历每个节点：
+   - 检查取消状态
+   - 跳过 `enabled = false` 的节点
+   - 通过 `ParameterResolver::resolve()` 合并参数
+   - 调用 `plugin.validate()` 校验参数
+   - 按 `requires_pixel_access()` 分派到 `process_pixel_node()` 或 `process_metadata_node()`
+3. 返回 `ExecutionResult`（含最终 PixelBuffer、Metadata 和节点状态）
+
 ```rust
-pub enum NodeStatus {
-    Pending,
-    Running,
-    Completed(ProcessingStats),
-    Failed(String),
-    Skipped,
+pub struct ExecutionContext {
+    pub image_info: ImageInfo,
+    pub buffer: Option<PixelBuffer>,
+    pub metadata: Metadata,
+    pub node_states: HashMap<NodeId, NodeRunState>,
 }
 
 pub struct NodeRunState {
@@ -1002,11 +1267,12 @@ pub struct NodeRunState {
     pub started_at: Option<DateTime<Utc>>,
 }
 
-pub struct ExecutionContext {
-    pub image_info: ImageInfo,
-    pub buffer: Option<PixelBuffer>,
-    pub metadata: Metadata,
-    pub node_states: HashMap<NodeId, NodeRunState>,
+pub enum NodeStatus {
+    Pending,
+    Running,
+    Completed(ProcessingStats),
+    Failed(String),
+    Skipped,
 }
 
 pub struct ExecutionResult {
@@ -1016,7 +1282,7 @@ pub struct ExecutionResult {
 }
 ```
 
-### 3.4 ParameterResolver（四级参数优先级）
+### 3.4 ParameterResolver
 
 ```rust
 pub struct ParameterResolver {
@@ -1025,21 +1291,18 @@ pub struct ParameterResolver {
     pub image_overrides: HashMap<(ImageId, NodeId), ParameterSet>,
     pub expr_engine: ExpressionEngine,
 }
-
-impl ParameterResolver {
-    pub fn new() -> Self;
-    pub fn set_template_params(&mut self, node_id: NodeId, params: ParameterSet);
-    pub fn add_group_override(&mut self, condition: GroupCondition, params: HashMap<NodeId, ParameterSet>);
-    pub fn set_image_override(&mut self, image_id: ImageId, node_id: NodeId, params: ParameterSet);
-
-    pub fn resolve(
-        &self, node_id: NodeId, image_id: ImageId,
-        schema: &ParameterSchema, metadata: &Metadata, image_info: &ImageInfo,
-    ) -> ParameterSet;
-
-    pub fn resolve_single(&self, node_id: NodeId, schema: &ParameterSchema) -> ParameterSet;
-}
 ```
+
+| 方法 | 签名 | 说明 |
+|---|---|---|
+| `new` | `() -> Self` | 创建空解析器 |
+| `set_template_params` | `(node_id, params)` | 设置模板级参数 |
+| `add_group_override` | `(condition, node_params)` | 添加分组覆盖 |
+| `set_image_override` | `(image_id, node_id, params)` | 设置图像级覆盖 |
+| `resolve` | `(node_id, image_id, schema, metadata, image_info) -> ParameterSet` | 四级合并 + 表达式求值 |
+| `resolve_single` | `(node_id, schema) -> ParameterSet` | 仅插件默认 + 模板（用于单图） |
+
+**四级合并顺序：** Plugin defaults → Template defaults → Group overrides (last match wins) → Image overrides → Expression evaluation
 
 #### GroupCondition
 
@@ -1056,6 +1319,8 @@ pub enum GroupCondition {
 }
 ```
 
+**Haversine 公式：** `GpsNear` 使用精确的 Haversine 球面距离计算（地球半径 6371 km）。
+
 ### 3.5 ExpressionEngine
 
 ```rust
@@ -1063,30 +1328,33 @@ pub struct ExpressionEngine;
 
 impl ExpressionEngine {
     pub fn evaluate(
-        &self, expr: &str, metadata: &Metadata, image_info: &ImageInfo,
+        &self,
+        expr: &str,                                  // 含 ${ } 的表达式
+        metadata: &Metadata,
+        image_info: &ImageInfo,
     ) -> Result<serde_json::Value, String>;
 }
 ```
 
-支持的表达式变量：
-- `exif.iso`、`exif.aperture`、`exif.shutter`、`exif.focal_length`
-- `exif.make`、`exif.model`、`exif.lens`
-- `image.filename`、`image.width`、`image.height`、`image.filesize`
+**支持的语法：**
+- 变量：`exif.iso`、`exif.aperture`、`exif.shutter`、`exif.focal_length`、`exif.make`、`exif.model`、`exif.lens`、`image.filename`、`image.width`、`image.height`、`image.filesize`
+- 运算符：`>`、`<`、`>=`、`<=`、`==`、`!=`
+- 三元：`condition ? true_value : false_value`（支持嵌套）
 - 字面值：`123`、`3.14`、`"string"`、`'string'`
-- 比较运算符：`>`、`<`、`>=`、`<=`、`==`、`!=`
-- 三元运算符：`condition ? true_value : false_value`
+- 浮点比较使用 epsilon 容差
 
 ### 3.6 TileEngine
 
 ```rust
 pub struct TileEngine {
-    pub default_tile_size: u32,    // 默认 1024
-    pub overlap: u32,              // 默认 64
-    pub max_parallel: usize,       // 自动检测 CPU 核心数
+    pub default_tile_size: u32,        // 默认 1024
+    pub overlap: u32,                  // 默认 64
+    pub max_parallel: usize,           // 默认 = CPU 核心数
 }
 
 impl TileEngine {
     pub fn new(default_tile_size: u32, overlap: u32, max_parallel: usize) -> Self;
+
     pub async fn process_tiled(
         &self,
         processor: &dyn PixelProcessor,
@@ -1097,66 +1365,58 @@ impl TileEngine {
 }
 ```
 
-### 3.7 数据流与精度保证
-
-```
-Metadata plugins:     Arc<Metadata> 共享，0拷贝
-Metadata → Metadata:  同一 Arc，始终共享
-Metadata → Pixel:     写入时触发 COW（单消费者）
-Pixel → Pixel（单消费者）：Arc 不做写时复制，原地修改
-Pixel → Pixel（多消费者）：Arc 共享，只读
-GPU → GPU:            GpuHandle 传递，VRAM 中保持
-```
+**分块处理模式：** 将大图按 `tile_size` 分割为独立块，每块创建子 PixelBuffer，依次调用 `processor.process_pixels()`，最后将结果 blit 回输出缓冲区。
 
 ---
 
-## 4. CLI — 命令与参数
+## 4. CLI 命令接口
 
-路径：`cli/src/main.rs`
+**路径：** `cli/src/main.rs`
 
-### 全局结构
+### 命令结构
 
 ```
-photopipeline [GLOBAL_FLAGS] <COMMAND>
+photopipeline [OPTIONS] <COMMAND>
 
 COMMANDS:
-  pipeline  管线运行与验证
-  plugin    插件列表与信息
-  batch     批量处理
-  help      打印帮助信息
+  pipeline    管线运行与验证
+  plugin      插件列表与信息
+  batch       批量处理
+  help        打印帮助信息
 ```
 
 ### `pipeline` 子命令
 
-```bash
-photopipeline pipeline run \
-  -c, --config <CONFIG>          # TOML 管线配置文件路径
-  -i, --input <INPUT>            # 输入图像文件路径
-  -o, --output <OUTPUT>          # 输出文件路径
+```
+photopipeline pipeline run
+  -c, --config <CONFIG>      管线 TOML 配置文件路径
+  -i, --input <INPUT>        输入图像文件路径
+  -o, --output <OUTPUT>      输出文件路径
 
-photopipeline pipeline validate \
-  -c, --config <CONFIG>          # TOML 管线配置文件路径
+photopipeline pipeline validate
+  -c, --config <CONFIG>      管线 TOML 配置文件路径
 ```
 
 ### `plugin` 子命令
 
-```bash
-photopipeline plugin list              # 列出所有已注册插件
+```
+photopipeline plugin list                    列出所有已注册插件
 
-photopipeline plugin info <PLUGIN_ID>  # 查看指定插件详情
+photopipeline plugin info <PLUGIN_ID>        查看插件详情
+  <PLUGIN_ID>   插件 ID，如 photopipeline.plugins.colorspace
 ```
 
 ### `batch` 子命令
 
-```bash
-photopipeline batch run \
-  -c, --config <CONFIG>          # TOML 管线配置文件路径
-  -p, --pattern <PATTERN>        # 文件匹配模式（glob，默认 "*.ARW"）
-  -o, --output <OUTPUT_DIR>      # 输出目录（默认 "./output/"）
+```
+photopipeline batch run
+  -c, --config <CONFIG>      管线 TOML 配置文件路径
+  -p, --pattern <PATTERN>    文件匹配模式 (glob) [默认: *.ARW]
+  -o, --output <OUTPUT_DIR>  输出目录 [默认: ./output/]
 
-photopipeline batch validate \
-  -c, --config <CONFIG>          # TOML 管线配置文件路径
-  -p, --pattern <PATTERN>        # 文件匹配模式（默认 "*.ARW"）
+photopipeline batch validate
+  -c, --config <CONFIG>      管线 TOML 配置文件路径
+  -p, --pattern <PATTERN>    文件匹配模式 [默认: *.ARW]
 ```
 
 ### 配置加载
@@ -1166,16 +1426,14 @@ photopipeline batch validate \
 pub fn load_template(content: &str) -> Result<PipelineTemplate, String>;
 ```
 
-从 TOML 字符串反序列化为 `PipelineTemplate` 结构。
-
 ---
 
 ## 5. gRPC 服务接口
 
-服务端入口：`crates/server/src/main.rs`
-监听地址：`0.0.0.0:50051`
+**服务端入口：** `crates/server/src/main.rs`
+**监听地址：** `localhost:50051`
 
-### 5.1 PipelineService
+### PipelineService
 
 ```protobuf
 service PipelineService {
@@ -1186,16 +1444,14 @@ service PipelineService {
 }
 ```
 
-**Rust 实现：** `PipelineServiceImpl`（`crates/server/src/services/pipeline.rs`）
+| RPC | 输入 → 输出 | 说明 |
+|---|---|---|
+| `CreatePipeline` | `PipelineSpec` → `PipelineId` | 创建管线，返回 UUID |
+| `Execute` | `ExecuteRequest` → stream `ExecuteProgress` | 流式执行管线 |
+| `Validate` | `PipelineSpec` → `ValidationResult` | 验证管线配置 |
+| `GetNodeSchema` | `PluginId` → `NodeSchema` | 获取插件参数/GUI Schema |
 
-| RPC | 输入 | 输出 | 说明 |
-|-----|------|------|------|
-| `CreatePipeline` | `PipelineSpec` | `PipelineId` | 创建管线，返回 UUID |
-| `Execute` | `ExecuteRequest` | `stream ExecuteProgress` | 流式执行管线 |
-| `Validate` | `PipelineSpec` | `ValidationResult` | 验证管线配置 |
-| `GetNodeSchema` | `PluginId` | `NodeSchema` | 获取插件参数 Schema |
-
-### 5.2 ImageService
+### ImageService
 
 ```protobuf
 service ImageService {
@@ -1206,16 +1462,14 @@ service ImageService {
 }
 ```
 
-**Rust 实现：** `ImageServiceImpl`（`crates/server/src/services/image.rs`）
+| RPC | 输入 → 输出 | 说明 |
+|---|---|---|
+| `Load` | `ImagePath` → `ImageInfo` | 加载图片元数据 |
+| `Decode` | `DecodeRequest` → stream `PixelDataChunk` | 流式解码 |
+| `Encode` | `EncodeRequest` → stream `EncodeProgress` | 流式编码 |
+| `GetThumbnail` | `ThumbnailRequest` → `ImageData` | 获取缩略图 |
 
-| RPC | 输入 | 输出 | 说明 |
-|-----|------|------|------|
-| `Load` | `ImagePath` | `ImageInfo` | 加载图片信息 |
-| `Decode` | `DecodeRequest` | `stream PixelDataChunk` | 流式解码 |
-| `Encode` | `EncodeRequest` | `stream EncodeProgress` | 流式编码 |
-| `GetThumbnail` | `ThumbnailRequest` | `ImageData` | 获取缩略图 |
-
-### 5.3 BatchService
+### BatchService
 
 ```protobuf
 service BatchService {
@@ -1225,22 +1479,22 @@ service BatchService {
 }
 ```
 
-**Rust 实现：** `BatchServiceImpl`（`crates/server/src/services/batch.rs`）
-
-| RPC | 输入 | 输出 | 说明 |
-|-----|------|------|------|
-| `SubmitBatch` | `BatchSpec` | `BatchId` | 提交批量任务 |
-| `GetProgress` | `BatchId` | `stream BatchProgress` | 流式获取进度 |
-| `Cancel` | `BatchId` | `Empty` | 取消批量任务 |
+| RPC | 输入 → 输出 | 说明 |
+|---|---|---|
+| `SubmitBatch` | `BatchSpec` → `BatchId` | 提交批量任务 |
+| `GetProgress` | `BatchId` → stream `BatchProgress` | 流式获取进度 |
+| `Cancel` | `BatchId` → `Empty` | 取消批量任务 |
 
 ---
 
 ## 6. Protobuf 消息定义
 
-### 6.1 pipeline.proto
+### pipeline.proto
 
 ```protobuf
-message PluginId { string id = 1; }
+message PluginId {
+  string id = 1;
+}
 
 message PipelineSpec {
   string name = 1;
@@ -1263,7 +1517,9 @@ message PipelineEdge {
   string to = 2;
 }
 
-message PipelineId { string id = 1; }
+message PipelineId {
+  string id = 1;
+}
 
 message ExecuteRequest {
   string pipeline_id = 1;
@@ -1311,7 +1567,7 @@ message BatchConfig {
 }
 ```
 
-### 6.2 image.proto
+### image.proto
 
 ```protobuf
 message ImagePath { string path = 1; }
@@ -1393,7 +1649,7 @@ message ImageData {
 }
 ```
 
-### 6.3 batch.proto
+### batch.proto
 
 ```protobuf
 message BatchSpec {
@@ -1418,13 +1674,6 @@ message BatchProgress {
 }
 ```
 
-### 6.4 SharedState
-
-```rust
-#[derive(Default)]
-pub struct SharedState {}
-```
-
-服务器共享状态（当前为空，为未来扩展预留：活跃管线列表、批量任务队列、进度缓存等）。
-
 ---
+
+*API Reference — Photopipeline v0.1.0*

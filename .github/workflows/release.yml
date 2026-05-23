@@ -1,24 +1,110 @@
 name: Release
+
 on:
   push:
-    tags: ['v*']
+    tags: ["v*"]
+
 jobs:
-  release:
+  build:
+    name: Build (${{ matrix.os }})
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
             artifact: photopipeline-linux-x86_64
+            ext: tar.gz
           - os: windows-latest
             artifact: photopipeline-windows-x86_64
+            ext: zip
           - os: macos-latest
             artifact: photopipeline-macos
+            ext: dmg
     runs-on: ${{ matrix.os }}
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo build --release --workspace --exclude photopipeline-server
-      - uses: actions/upload-artifact@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config \
+            protobuf-compiler libprotobuf-dev libheif-dev libjxl-dev \
+            liblcms2-dev libexif-dev libtiff-dev libpng-dev libopenexr-dev \
+            ninja-build
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install cmake pkg-config protobuf libheif jpeg-xl little-cms2 libexif libtiff libpng openexr ninja
+
+      - name: Install Windows dependencies
+        if: runner.os == 'Windows'
+        run: choco install -y cmake protoc
+
+      - name: Build Rust release binary
+        run: cargo build --release --workspace
+
+      - name: Setup .NET 8 SDK
+        if: runner.os == 'Windows'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build Windows GUI
+        if: runner.os == 'Windows'
+        run: dotnet publish gui/windows/Photopipeline/Photopipeline.csproj -c Release -o publish/win-x64/
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p release
+          cp target/release/photopipeline release/
+          tar -czf ${{ matrix.artifact }}.tar.gz -C release .
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p dmg_root
+          cp target/release/photopipeline dmg_root/
+          hdiutil create -volname Photopipeline -srcfolder dmg_root -ov -format UDZO ${{ matrix.artifact }}.dmg
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          mkdir release
+          copy target\release\photopipeline.exe release\
+          if exist publish\win-x64 xcopy /E /I publish\win-x64 release\win-x64
+          Compress-Archive -Path release\* -DestinationPath ${{ matrix.artifact }}.zip
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: target/release/photopipeline*
+          path: ${{ matrix.artifact }}.${{ matrix.ext }}
+
+  publish:
+    name: Publish Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            artifacts/*/* \
+            --title "${{ github.ref_name }}" \
+            --generate-notes

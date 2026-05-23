@@ -548,4 +548,406 @@ mod tests {
         let dims = ImageDimensions { width: 1920, height: 1080 };
         assert_eq!(dims.pixel_count(), 2073600);
     }
+
+    #[test]
+    fn aligned_buffer_size_zero() {
+        let buf = AlignedBuffer::new(0, 64);
+        assert_eq!(buf.data.len(), 0);
+        assert_eq!(buf.alignment, 64);
+    }
+
+    #[test]
+    fn aligned_buffer_alignment_1() {
+        let buf = AlignedBuffer::new(100, 1);
+        assert_eq!(buf.alignment, 1);
+    }
+
+    #[test]
+    fn aligned_buffer_alignment_4() {
+        let buf = AlignedBuffer::new(128, 4);
+        assert_eq!(buf.alignment, 4);
+    }
+
+    #[test]
+    fn aligned_buffer_alignment_4096() {
+        let buf = AlignedBuffer::new(1024, 4096);
+        assert_eq!(buf.alignment, 4096);
+    }
+
+    #[test]
+    fn aligned_buffer_large_size() {
+        let buf = AlignedBuffer::new(10_000_000, 64);
+        assert_eq!(buf.data.len(), 10_000_000);
+    }
+
+    #[test]
+    fn aligned_buffer_as_u16_small() {
+        let buf = AlignedBuffer::new(2, 64);
+        assert_eq!(buf.as_u16_slice().len(), 1);
+    }
+
+    #[test]
+    fn aligned_buffer_as_f32_small() {
+        let buf = AlignedBuffer::new(4, 64);
+        assert_eq!(buf.as_f32_slice().len(), 1);
+    }
+
+    #[test]
+    fn pixel_buffer_gray_u8() {
+        let pb = PixelBuffer::new(10, 20, ChannelLayout::Gray, PixelFormat::U8);
+        assert_eq!(pb.byte_size(), 10 * 20 * 1);
+        assert_eq!(pb.pixel_count(), 200);
+    }
+
+    #[test]
+    fn pixel_buffer_gray_alpha_u16() {
+        let pb = PixelBuffer::new(5, 5, ChannelLayout::GrayAlpha, PixelFormat::U16);
+        assert_eq!(pb.byte_size(), 5 * 5 * 2 * 2);
+    }
+
+    #[test]
+    fn pixel_buffer_rgba_f32() {
+        let pb = PixelBuffer::new(16, 16, ChannelLayout::RGBA, PixelFormat::F32);
+        assert_eq!(pb.byte_size(), 16 * 16 * 4 * 4);
+    }
+
+    #[test]
+    fn pixel_buffer_custom_7_u8() {
+        let pb = PixelBuffer::new(8, 8, ChannelLayout::Custom(7), PixelFormat::U8);
+        assert_eq!(pb.byte_size(), 8 * 8 * 7);
+    }
+
+    #[test]
+    fn pixel_buffer_one_by_one() {
+        let pb = PixelBuffer::new(1, 1, ChannelLayout::RGB, PixelFormat::U16);
+        assert_eq!(pb.pixel_count(), 1);
+        assert_eq!(pb.byte_size(), 1 * 3 * 2);
+    }
+
+    #[test]
+    fn pixel_buffer_width_zero() {
+        let pb = PixelBuffer::new(0, 10, ChannelLayout::RGB, PixelFormat::U8);
+        assert_eq!(pb.pixel_count(), 0);
+        assert_eq!(pb.byte_size(), 0);
+    }
+
+    #[test]
+    fn pixel_buffer_height_zero() {
+        let pb = PixelBuffer::new(10, 0, ChannelLayout::RGBA, PixelFormat::F16);
+        assert_eq!(pb.pixel_count(), 0);
+        assert_eq!(pb.byte_size(), 0);
+    }
+
+    #[test]
+    fn pixel_buffer_max_u32_dimensions() {
+        let pb = PixelBuffer::new(1, 1, ChannelLayout::Gray, PixelFormat::U8);
+        assert_eq!(pb.width, 1);
+        assert_eq!(pb.height, 1);
+        assert_eq!(pb.pixel_count(), 1);
+    }
+
+    #[test]
+    fn pixel_buffer_planar_f32_samples() {
+        let pb = PixelBuffer::new(4, 4, ChannelLayout::Planar(2), PixelFormat::F32);
+        let samples = pb.u16_samples(0);
+        assert!(samples.is_some());
+    }
+
+    #[test]
+    fn pixel_buffer_planar_f16_samples() {
+        let pb = PixelBuffer::new(4, 4, ChannelLayout::Planar(2), PixelFormat::F16);
+        let samples = pb.u16_samples(0);
+        assert!(samples.is_some());
+    }
+
+    #[test]
+    fn pixel_buffer_planar_u32_samples() {
+        let pb = PixelBuffer::new(4, 4, ChannelLayout::Planar(2), PixelFormat::U32);
+        let samples = pb.u16_samples(0);
+        assert!(samples.is_some());
+    }
+
+    #[test]
+    fn pixel_buffer_planar_u8_samples() {
+        let pb = PixelBuffer::new(4, 4, ChannelLayout::Planar(2), PixelFormat::U8);
+        let samples = pb.u16_samples(0);
+        assert!(samples.is_none());
+    }
+
+    #[test]
+    fn pixel_buffer_planar_channel_out_of_bounds() {
+        let pb = PixelBuffer::new(8, 8, ChannelLayout::Planar(1), PixelFormat::U16);
+        assert!(pb.u16_samples(1).is_none());
+    }
+
+    #[test]
+    fn tile_layout_tile_size_equals_image_size() {
+        let layout = TileLayout::new(512, 512, 512, 0);
+        assert_eq!(layout.tiles_x, 1);
+        assert_eq!(layout.tiles_y, 1);
+        assert_eq!(layout.total_tiles, 1);
+    }
+
+    #[test]
+    fn tile_layout_tile_size_larger_than_image() {
+        let layout = TileLayout::new(100, 100, 1024, 0);
+        assert_eq!(layout.tiles_x, 1);
+        assert_eq!(layout.tiles_y, 1);
+        assert_eq!(layout.total_tiles, 1);
+    }
+
+    #[test]
+    fn tile_layout_overlap_equals_tile_size() {
+        let layout = TileLayout::new(256, 256, 64, 64);
+        assert_eq!(layout.tiles_x, 256);
+        assert_eq!(layout.tiles_y, 256);
+    }
+
+    #[test]
+    fn tile_layout_one_by_one_pixel() {
+        let layout = TileLayout::new(1, 1, 256, 0);
+        assert_eq!(layout.tiles_x, 1);
+        assert_eq!(layout.tiles_y, 1);
+    }
+
+    #[test]
+    fn tile_layout_very_large_image() {
+        let layout = TileLayout::new(65536, 65536, 256, 0);
+        assert_eq!(layout.tiles_x, 256);
+        assert_eq!(layout.tiles_y, 256);
+        assert_eq!(layout.total_tiles, 65536);
+    }
+
+    #[test]
+    fn tile_layout_zero_overlap() {
+        let layout = TileLayout::new(1000, 1000, 200, 0);
+        assert_eq!(layout.overlap, 0);
+    }
+
+    #[test]
+    fn tile_layout_full_overlap() {
+        let layout = TileLayout::new(500, 500, 256, 255);
+        assert_eq!(layout.tiles_x, 500);
+    }
+
+    #[test]
+    fn tile_spec_first_tile() {
+        let layout = TileLayout::new(1024, 768, 256, 0);
+        let spec = layout.tile_spec(0, 0);
+        assert_eq!(spec.x_offset, 0);
+        assert_eq!(spec.y_offset, 0);
+        assert_eq!(spec.width, 256);
+        assert_eq!(spec.height, 256);
+    }
+
+    #[test]
+    fn tile_spec_last_tile_within_bounds() {
+        let layout = TileLayout::new(1000, 800, 256, 0);
+        let last_x = layout.tiles_x - 1;
+        let last_y = layout.tiles_y - 1;
+        let spec = layout.tile_spec(last_x, last_y);
+        assert!(spec.x_offset + spec.width <= 1000);
+        assert!(spec.y_offset + spec.height <= 800);
+    }
+
+    #[test]
+    fn tile_iter_verify_count() {
+        let layout = TileLayout::new(2048, 1024, 256, 0);
+        let count = layout.iter_tiles().count();
+        assert_eq!(count as u32, layout.total_tiles);
+        assert_eq!(count, 8 * 4);
+    }
+
+    #[test]
+    fn tile_iter_no_tile_exceeds_image_bounds() {
+        let layout = TileLayout::new(1000, 1000, 256, 64);
+        for spec in layout.iter_tiles() {
+            assert!(spec.x_offset + spec.width <= 1000);
+            assert!(spec.y_offset + spec.height <= 1000);
+        }
+    }
+
+    #[test]
+    fn decode_options_custom_values() {
+        let opts = DecodeOptions {
+            pixel_format: Some(PixelFormat::U16),
+            max_width: Some(1920),
+            max_height: Some(1080),
+            read_metadata: false,
+            apply_transfer: true,
+            icc_profile: Some(vec![1, 2, 3]),
+        };
+        assert_eq!(opts.pixel_format, Some(PixelFormat::U16));
+        assert_eq!(opts.max_width, Some(1920));
+        assert!(!opts.read_metadata);
+        assert!(opts.apply_transfer);
+        assert_eq!(opts.icc_profile, Some(vec![1, 2, 3]));
+    }
+
+    #[test]
+    fn encode_options_custom_values() {
+        let opts = EncodeOptions {
+            format: ImageFormat::AVIF,
+            quality: Some(80.0),
+            lossless: true,
+            bit_depth: 12,
+            chroma_subsampling: Some(ChromaSubsampling::Yuv420),
+            encoder: Some("rav1e".into()),
+            effort: Some(6),
+        };
+        assert_eq!(opts.format, ImageFormat::AVIF);
+        assert_eq!(opts.quality, Some(80.0));
+        assert!(opts.lossless);
+        assert_eq!(opts.bit_depth, 12);
+    }
+
+    #[test]
+    fn chroma_subsampling_yuv444() {
+        let cs = ChromaSubsampling::Yuv444;
+        assert_eq!(cs, ChromaSubsampling::Yuv444);
+    }
+
+    #[test]
+    fn chroma_subsampling_yuv422() {
+        let cs = ChromaSubsampling::Yuv422;
+        assert_ne!(cs, ChromaSubsampling::Yuv420);
+    }
+
+    #[test]
+    fn chroma_subsampling_yuv420() {
+        let cs = ChromaSubsampling::Yuv420;
+        assert_ne!(cs, ChromaSubsampling::Yuv444);
+    }
+
+    #[test]
+    fn hardware_requirement_default() {
+        let hr = HardwareRequirement::default();
+        assert!(hr.requires_cpu);
+        assert!(!hr.requires_gpu);
+        assert_eq!(hr.min_ram_mb, 256);
+    }
+
+    #[test]
+    fn hardware_requirement_custom() {
+        let hr = HardwareRequirement {
+            requires_cpu: false,
+            requires_gpu: true,
+            min_ram_mb: 8192,
+            preferred_backend: Some(GpuBackend::CUDA),
+        };
+        assert!(!hr.requires_cpu);
+        assert!(hr.requires_gpu);
+        assert_eq!(hr.min_ram_mb, 8192);
+        assert_eq!(hr.preferred_backend, Some(GpuBackend::CUDA));
+    }
+
+    #[test]
+    fn plugin_config_default() {
+        let cfg = PluginConfig::default();
+        assert!(cfg.enabled);
+        assert!(cfg.settings.is_empty());
+    }
+
+    #[test]
+    fn format_probe_fields() {
+        let probe = FormatProbe {
+            path: Some(std::path::PathBuf::from("/tmp/a.heic")),
+            extension: Some("heic".into()),
+            magic_bytes: Some(vec![0x00, 0x00]),
+            mime_type: Some("image/heic".into()),
+        };
+        assert_eq!(probe.extension, Some("heic".into()));
+    }
+
+    #[test]
+    fn gpu_buffer_handle_backend_opencl() {
+        let handle = GpuBufferHandle {
+            handle: 99,
+            size_bytes: 2048,
+            backend: GpuBackend::OpenCL,
+        };
+        assert_eq!(handle.backend, GpuBackend::OpenCL);
+    }
+
+    #[test]
+    fn gpu_buffer_fields() {
+        let buf = GpuBuffer {
+            handle: 7,
+            size_bytes: 4096,
+            backend: GpuBackend::Vulkan,
+        };
+        assert_eq!(buf.handle, 7);
+        assert_eq!(buf.size_bytes, 4096);
+    }
+
+    #[test]
+    fn tensor_dtype_f32() {
+        assert_eq!(TensorDtype::F32, TensorDtype::F32);
+        assert_ne!(TensorDtype::F32, TensorDtype::U8);
+    }
+
+    #[test]
+    fn tensor_dtype_f16() {
+        assert_ne!(TensorDtype::F16, TensorDtype::I8);
+    }
+
+    #[test]
+    fn tensor_dtype_i8() {
+        assert_ne!(TensorDtype::I8, TensorDtype::F32);
+    }
+
+    #[test]
+    fn tensor_dtype_u8() {
+        assert_eq!(TensorDtype::U8, TensorDtype::U8);
+    }
+
+    #[test]
+    fn tensor_construction() {
+        let t = Tensor {
+            shape: vec![1, 3, 256, 256],
+            data: vec![0.0_f32; 196608],
+            dtype: TensorDtype::F32,
+        };
+        assert_eq!(t.shape.len(), 4);
+        assert_eq!(t.data.len(), 196608);
+    }
+
+    #[test]
+    fn pixel_buffer_gpu_handle_none() {
+        let pb = PixelBuffer::new(10, 10, ChannelLayout::RGB, PixelFormat::U8);
+        assert!(pb.gpu_handle().is_none());
+    }
+
+    #[test]
+    fn pixel_buffer_icc_profile_none_by_default() {
+        let pb = PixelBuffer::new(10, 10, ChannelLayout::RGB, PixelFormat::U8);
+        assert!(pb.icc_profile.is_none());
+    }
+
+    #[test]
+    fn tile_spec_with_overlap_offsets() {
+        let layout = TileLayout::new(1024, 1024, 256, 64);
+        let spec0 = layout.tile_spec(0, 0);
+        assert_eq!(spec0.x_offset, 0);
+        assert_eq!(spec0.y_offset, 0);
+        let spec1 = layout.tile_spec(1, 0);
+        assert_eq!(spec1.x_offset, 192);
+        assert_eq!(spec1.y_offset, 0);
+    }
+
+    #[test]
+    fn pixel_buffer_planar_identical_u16_channel_0() {
+        let pb = PixelBuffer::new(2, 2, ChannelLayout::Planar(2), PixelFormat::U16);
+        let ch0 = pb.u16_samples(0);
+        assert!(ch0.is_some());
+        assert_eq!(ch0.unwrap().len(), 4);
+    }
+
+    #[test]
+    fn pixel_buffer_planar_identical_u16_channel_1() {
+        let pb = PixelBuffer::new(2, 2, ChannelLayout::Planar(2), PixelFormat::U16);
+        let ch1 = pb.u16_samples(1);
+        assert!(ch1.is_some());
+        assert_eq!(ch1.unwrap().len(), 4);
+    }
 }

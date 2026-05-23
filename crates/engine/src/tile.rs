@@ -238,4 +238,103 @@ mod tests {
             assert!(spec.y_offset + spec.height <= 1080);
         }
     }
+
+    #[test]
+    fn tile_engine_one_by_one_image() {
+        let layout = photopipeline_core::TileLayout::new(1, 1, 256, 0);
+        assert_eq!(layout.tiles_x, 1);
+        assert_eq!(layout.tiles_y, 1);
+        assert_eq!(layout.total_tiles, 1);
+    }
+
+    #[test]
+    fn tile_engine_vertical_strip() {
+        let layout = photopipeline_core::TileLayout::new(1, 10000, 256, 0);
+        assert_eq!(layout.tiles_x, 1);
+        assert_eq!(layout.tiles_y, (10000u32 + 255) / 256);
+    }
+
+    #[test]
+    fn tile_engine_horizontal_strip() {
+        let layout = photopipeline_core::TileLayout::new(10000, 1, 256, 0);
+        assert_eq!(layout.tiles_x, (10000u32 + 255) / 256);
+        assert_eq!(layout.tiles_y, 1);
+    }
+
+    #[test]
+    fn tile_engine_large_image_8192() {
+        let layout = photopipeline_core::TileLayout::new(8192, 8192, 256, 0);
+        assert_eq!(layout.tiles_x, 32);
+        assert_eq!(layout.tiles_y, 32);
+        assert_eq!(layout.total_tiles, 1024);
+    }
+
+    #[test]
+    fn tile_engine_large_image_4096_with_overlap() {
+        let layout = photopipeline_core::TileLayout::new(4096, 4096, 512, 64);
+        let stride = 512u32 - 64u32;
+        let expected_x = (4096u32 + stride - 1) / stride;
+        assert_eq!(layout.tiles_x, expected_x);
+        assert_eq!(layout.total_tiles, expected_x * expected_x);
+    }
+
+    #[test]
+    fn tile_engine_tile_size_zero_uses_min() {
+        let layout = photopipeline_core::TileLayout::new(100, 100, 0, 0);
+        assert_eq!(layout.tile_size, 0);
+    }
+
+    #[test]
+    fn tile_engine_max_parallel_zero() {
+        let engine = TileEngine::new(512, 32, 0);
+        assert_eq!(engine.max_parallel, 0);
+    }
+
+    #[test]
+    fn tile_engine_tile_counts_various_sizes_medium() {
+        let layout = photopipeline_core::TileLayout::new(1024, 800, 256, 0);
+        assert_eq!(layout.tiles_x, 4);
+        assert_eq!(layout.tiles_y, 4);
+        assert_eq!(layout.total_tiles, 16);
+    }
+
+    #[test]
+    fn tile_engine_tile_counts_various_sizes_odd() {
+        let layout = photopipeline_core::TileLayout::new(300, 300, 256, 0);
+        assert_eq!(layout.tiles_x, 2);
+        assert_eq!(layout.total_tiles, 4);
+    }
+
+    #[test]
+    fn tile_engine_tile_spec_single_tile_covers_image() {
+        let layout = photopipeline_core::TileLayout::new(100, 100, 256, 0);
+        let spec = layout.tile_spec(0, 0);
+        assert_eq!(spec.width, 100);
+        assert_eq!(spec.height, 100);
+    }
+
+    #[test]
+    fn tile_engine_overlap_tile_share_content() {
+        let layout = photopipeline_core::TileLayout::new(500, 500, 256, 128);
+        let spec0 = layout.tile_spec(0, 0);
+        let spec1 = layout.tile_spec(1, 0);
+        assert!(spec0.x_offset + spec0.width > spec1.x_offset);
+    }
+
+    #[test]
+    fn tile_engine_iter_tiles_empty_image() {
+        let layout = photopipeline_core::TileLayout::new(1, 1, 256, 0);
+        let tiles: Vec<_> = layout.iter_tiles().collect();
+        assert_eq!(tiles.len(), 1);
+    }
+
+    #[test]
+    fn tile_progress_sink_not_canceled() {
+        struct DummyProgress;
+        impl ProgressSink for DummyProgress {
+            fn set_progress(&self, _fraction: f32, _message: &str) {}
+            fn is_canceled(&self) -> bool { false }
+        }
+        assert!(!DummyProgress.is_canceled());
+    }
 }

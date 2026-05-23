@@ -1,0 +1,37 @@
+name: Security Audit
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  schedule:
+    - cron: "0 8 * * 1"
+
+jobs:
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run cargo audit
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit
+
+      - name: Initialize deny configuration
+        run: |
+          if [ ! -f deny.toml ]; then
+            cargo install cargo-deny --locked
+            cargo deny init
+          fi
+
+      - name: Run cargo deny check
+        run: cargo deny check

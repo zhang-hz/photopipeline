@@ -258,3 +258,148 @@ impl NodeExecutor {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use photopipeline_core::{ColorSpace, ImageFormat, PixelFormat, ChannelLayout};
+    use uuid::Uuid;
+
+    fn make_test_image_info() -> ImageInfo {
+        ImageInfo {
+            id: Uuid::new_v4(),
+            path: "/tmp/test.jpg".into(),
+            filename: "test.jpg".into(),
+            format: ImageFormat::JPEG,
+            width: 100,
+            height: 100,
+            file_size_bytes: 5000,
+            pixel_format: PixelFormat::U8,
+            color_space: ColorSpace::default(),
+        }
+    }
+
+    #[test]
+    fn node_run_state_default_is_pending() {
+        let state = NodeRunState::new();
+        assert!(matches!(state.status, NodeStatus::Pending));
+        assert!(state.started_at.is_none());
+    }
+
+    #[test]
+    fn node_run_state_default_trait() {
+        let state = NodeRunState::default();
+        assert!(matches!(state.status, NodeStatus::Pending));
+    }
+
+    #[test]
+    fn node_status_pending_display() {
+        let status = NodeStatus::Pending;
+        let s = format!("{:?}", status);
+        assert!(s.contains("Pending"));
+    }
+
+    #[test]
+    fn node_status_running_display() {
+        let status = NodeStatus::Running;
+        let s = format!("{:?}", status);
+        assert!(s.contains("Running"));
+    }
+
+    #[test]
+    fn node_status_completed_display() {
+        let stats = ProcessingStats {
+            elapsed_ms: 100,
+            cpu_time_ms: 80,
+            gpu_time_ms: None,
+            peak_memory_mb: 256,
+            input_pixels: 10000,
+            output_pixels: 10000,
+        };
+        let status = NodeStatus::Completed(stats);
+        let s = format!("{:?}", status);
+        assert!(s.contains("Completed"));
+    }
+
+    #[test]
+    fn node_status_failed_display() {
+        let status = NodeStatus::Failed("error msg".into());
+        let s = format!("{:?}", status);
+        assert!(s.contains("Failed"));
+    }
+
+    #[test]
+    fn node_status_skipped_display() {
+        let status = NodeStatus::Skipped;
+        let s = format!("{:?}", status);
+        assert!(s.contains("Skipped"));
+    }
+
+    #[test]
+    fn node_run_state_with_started_at() {
+        let now = chrono::Utc::now();
+        let state = NodeRunState {
+            status: NodeStatus::Running,
+            started_at: Some(now),
+        };
+        assert_eq!(state.started_at, Some(now));
+    }
+
+    #[test]
+    fn execution_context_new_with_none_buffer() {
+        let info = make_test_image_info();
+        let metadata = Metadata::default();
+        let ctx = ExecutionContext::new(info.clone(), None, metadata.clone());
+        assert!(ctx.buffer.is_none());
+        assert_eq!(ctx.image_info.filename, "test.jpg");
+    }
+
+    #[test]
+    fn execution_context_new_with_some_buffer() {
+        let info = make_test_image_info();
+        let metadata = Metadata::default();
+        let pb = PixelBuffer::new(10, 10, ChannelLayout::RGB, PixelFormat::U8);
+        let ctx = ExecutionContext::new(info, Some(pb), metadata);
+        assert!(ctx.buffer.is_some());
+    }
+
+    #[test]
+    fn execution_context_node_states_empty() {
+        let ctx = ExecutionContext::new(
+            make_test_image_info(),
+            None,
+            Metadata::default(),
+        );
+        assert!(ctx.node_states.is_empty());
+    }
+
+    #[test]
+    fn execution_result_default_fields() {
+        let result = ExecutionResult {
+            buffer: None,
+            metadata: Metadata::default(),
+            node_states: std::collections::HashMap::new(),
+        };
+        assert!(result.buffer.is_none());
+    }
+
+    #[test]
+    fn execution_result_with_buffer() {
+        let pb = PixelBuffer::new(10, 10, ChannelLayout::RGB, PixelFormat::U8);
+        let result = ExecutionResult {
+            buffer: Some(pb),
+            metadata: Metadata::default(),
+            node_states: Default::default(),
+        };
+        assert!(result.buffer.is_some());
+    }
+
+    #[test]
+    fn node_executor_debug_format() {
+        let registry = std::sync::Arc::new(photopipeline_plugin::Registry::new());
+        let resolver = std::sync::Arc::new(ParameterResolver::new());
+        let executor = NodeExecutor::new(registry, resolver);
+        let debug_str = format!("{:?}", executor);
+        assert!(debug_str.contains("NodeExecutor"));
+    }
+}

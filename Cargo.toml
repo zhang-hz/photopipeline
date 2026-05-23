@@ -6,6 +6,7 @@ members = [
     "crates/plugins",
     "crates/external",
     "cli",
+    "tests",
 ]
 exclude = [
     "crates/server",

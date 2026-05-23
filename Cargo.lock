@@ -677,6 +677,7 @@ dependencies = [
  "parking_lot",
  "regex",
  "serde",
+ "serde_json",
  "strum",
  "thiserror",
  "uuid",
@@ -747,7 +748,22 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "tokio",
  "tracing",
+]
+
+[[package]]
+name = "photopipeline-stress-tests"
+version = "0.1.0"
+dependencies = [
+ "photopipeline-core",
+ "photopipeline-engine",
+ "photopipeline-plugin",
+ "photopipeline-plugins",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]

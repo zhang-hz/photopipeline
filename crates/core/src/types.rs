@@ -521,4 +521,473 @@ mod tests {
         assert_eq!(ImageFormat::JXL.to_string(), "JXL");
         assert_eq!(ImageFormat::Unknown("custom".into()).to_string(), "custom");
     }
+
+    #[test]
+    fn plugin_version_eq_self() {
+        let v = PluginVersion::new(1, 2, 3);
+        assert_eq!(v, PluginVersion::new(1, 2, 3));
+    }
+
+    #[test]
+    fn plugin_version_ne_different() {
+        let v1 = PluginVersion::new(1, 0, 0);
+        let v2 = PluginVersion::new(1, 0, 1);
+        assert_ne!(v1, v2);
+    }
+
+    #[test]
+    fn plugin_version_lt_same_major() {
+        let v1 = PluginVersion::new(1, 0, 0);
+        let v2 = PluginVersion::new(1, 1, 0);
+        assert!(v1 < v2);
+    }
+
+    #[test]
+    fn plugin_version_gt_same_minor() {
+        let v1 = PluginVersion::new(1, 0, 5);
+        let v2 = PluginVersion::new(1, 0, 1);
+        assert!(v1 > v2);
+    }
+
+    #[test]
+    fn plugin_version_le_equal() {
+        let v = PluginVersion::new(3, 2, 1);
+        assert!(v <= PluginVersion::new(3, 2, 1));
+    }
+
+    #[test]
+    fn plugin_version_ge_equal() {
+        let v = PluginVersion::new(3, 2, 1);
+        assert!(v >= PluginVersion::new(3, 2, 1));
+    }
+
+    #[test]
+    fn plugin_version_ge_less() {
+        let v = PluginVersion::new(5, 0, 0);
+        assert!(v >= PluginVersion::new(4, 9, 9));
+    }
+
+    #[test]
+    fn plugin_version_le_greater() {
+        let v = PluginVersion::new(5, 0, 0);
+        assert!(v <= PluginVersion::new(5, 0, 1));
+    }
+
+    #[test]
+    fn plugin_version_with_pre_eq_same_pre() {
+        let v1 = PluginVersion { major: 2, minor: 0, patch: 0, pre: Some("rc1".into()) };
+        let v2 = PluginVersion { major: 2, minor: 0, patch: 0, pre: Some("rc1".into()) };
+        assert_eq!(v1, v2);
+    }
+
+    #[test]
+    fn plugin_version_with_pre_ne_different_pre() {
+        let v1 = PluginVersion { major: 2, minor: 0, patch: 0, pre: Some("alpha".into()) };
+        let v2 = PluginVersion { major: 2, minor: 0, patch: 0, pre: Some("beta".into()) };
+        assert_ne!(v1, v2);
+    }
+
+    #[test]
+    fn plugin_version_with_pre_lt_no_pre() {
+        let v1 = PluginVersion { major: 1, minor: 0, patch: 0, pre: Some("alpha".into()) };
+        let v2 = PluginVersion::new(1, 0, 0);
+        let _ = v1 < v2 || v1 > v2;
+    }
+
+    #[test]
+    fn plugin_version_zero_zero_zero() {
+        let v = PluginVersion::new(0, 0, 0);
+        assert_eq!(v.to_string(), "0.0.0");
+    }
+
+    #[test]
+    fn plugin_version_max_values() {
+        let v = PluginVersion::new(u32::MAX, u32::MAX, u32::MAX);
+        assert_eq!(v.major, u32::MAX);
+        assert_eq!(v.minor, u32::MAX);
+        assert_eq!(v.patch, u32::MAX);
+    }
+
+    #[test]
+    fn version_requirement_empty_max_means_no_upper_bound() {
+        let req = VersionRequirement {
+            min_version: PluginVersion::new(1, 0, 0),
+            max_version: None,
+        };
+        assert!(req.is_satisfied_by(&PluginVersion::new(999, 0, 0)));
+    }
+
+    #[test]
+    fn version_requirement_exact_version_match() {
+        let req = VersionRequirement {
+            min_version: PluginVersion::new(2, 3, 4),
+            max_version: None,
+        };
+        assert!(req.is_satisfied_by(&PluginVersion::new(2, 3, 4)));
+    }
+
+    #[test]
+    fn version_requirement_below_min_fails() {
+        let req = VersionRequirement {
+            min_version: PluginVersion::new(3, 0, 0),
+            max_version: None,
+        };
+        assert!(!req.is_satisfied_by(&PluginVersion::new(2, 999, 999)));
+    }
+
+    #[test]
+    fn version_requirement_above_max_exclusive_fails() {
+        let req = VersionRequirement {
+            min_version: PluginVersion::new(1, 0, 0),
+            max_version: Some(PluginVersion::new(3, 0, 0)),
+        };
+        assert!(!req.is_satisfied_by(&PluginVersion::new(3, 0, 0)));
+    }
+
+    #[test]
+    fn version_requirement_equal_to_max_fails() {
+        let req = VersionRequirement {
+            min_version: PluginVersion::new(1, 0, 0),
+            max_version: Some(PluginVersion::new(2, 0, 0)),
+        };
+        assert!(!req.is_satisfied_by(&PluginVersion::new(2, 0, 0)));
+    }
+
+    #[test]
+    fn version_requirement_within_range() {
+        let req = VersionRequirement {
+            min_version: PluginVersion::new(2, 0, 0),
+            max_version: Some(PluginVersion::new(3, 0, 0)),
+        };
+        assert!(req.is_satisfied_by(&PluginVersion::new(2, 5, 0)));
+    }
+
+    #[test]
+    fn version_requirement_just_above_min() {
+        let req = VersionRequirement {
+            min_version: PluginVersion::new(1, 0, 0),
+            max_version: Some(PluginVersion::new(2, 0, 0)),
+        };
+        assert!(req.is_satisfied_by(&PluginVersion::new(1, 0, 1)));
+    }
+
+    #[test]
+    fn version_requirement_just_below_max() {
+        let req = VersionRequirement {
+            min_version: PluginVersion::new(1, 0, 0),
+            max_version: Some(PluginVersion::new(2, 0, 0)),
+        };
+        assert!(req.is_satisfied_by(&PluginVersion::new(1, 999, 999)));
+    }
+
+    #[test]
+    fn pixel_format_u8_bytes_per_channel() {
+        use crate::image::PixelFormat;
+        assert_eq!(PixelFormat::U8.bytes_per_channel(), 1);
+    }
+
+    #[test]
+    fn pixel_format_u32_max_value_u16() {
+        use crate::image::PixelFormat;
+        assert_eq!(PixelFormat::U32.max_value_u16(), 65535);
+    }
+
+    #[test]
+    fn pixel_format_u32_is_high_precision() {
+        use crate::image::PixelFormat;
+        assert!(PixelFormat::U32.is_high_precision());
+    }
+
+    #[test]
+    fn pixel_format_u8_not_high_precision() {
+        use crate::image::PixelFormat;
+        assert!(!PixelFormat::U8.is_high_precision());
+    }
+
+    #[test]
+    fn channel_layout_planar_zero() {
+        use crate::image::ChannelLayout;
+        assert_eq!(ChannelLayout::Planar(0).channel_count(), 0);
+    }
+
+    #[test]
+    fn channel_layout_planar_255() {
+        use crate::image::ChannelLayout;
+        assert_eq!(ChannelLayout::Planar(255).channel_count(), 255);
+    }
+
+    #[test]
+    fn channel_layout_custom_zero() {
+        use crate::image::ChannelLayout;
+        assert_eq!(ChannelLayout::Custom(0).channel_count(), 0);
+    }
+
+    #[test]
+    fn channel_layout_planar_not_interleaved() {
+        use crate::image::ChannelLayout;
+        assert!(!ChannelLayout::Planar(4).is_interleaved());
+    }
+
+    #[test]
+    fn channel_layout_custom_not_interleaved() {
+        use crate::image::ChannelLayout;
+        assert!(!ChannelLayout::Custom(1).is_interleaved());
+    }
+
+    #[test]
+    fn gpu_backend_directx_display() {
+        assert_eq!(GpuBackend::DirectX.to_string(), "DirectX");
+    }
+
+    #[test]
+    fn gpu_backend_rocm_display() {
+        assert_eq!(GpuBackend::ROCm.to_string(), "ROCm");
+    }
+
+    #[test]
+    fn gpu_backend_metal_display() {
+        assert_eq!(GpuBackend::Metal.to_string(), "Metal");
+    }
+
+    #[test]
+    fn gpu_backend_openvino_display() {
+        assert_eq!(GpuBackend::OpenVINO.to_string(), "OpenVINO");
+    }
+
+    #[test]
+    fn ai_backend_openvino_display() {
+        assert_eq!(AiBackend::OpenVINO.to_string(), "OpenVINO");
+    }
+
+    #[test]
+    fn image_format_heic_display() {
+        assert_eq!(ImageFormat::HEIC.to_string(), "HEIC");
+    }
+
+    #[test]
+    fn image_format_webp_display() {
+        assert_eq!(ImageFormat::WEBP.to_string(), "WEBP");
+    }
+
+    #[test]
+    fn image_format_openexr_display() {
+        assert_eq!(ImageFormat::OpenEXR.to_string(), "OpenEXR");
+    }
+
+    #[test]
+    fn image_format_raw_display() {
+        assert_eq!(ImageFormat::RAW.to_string(), "RAW");
+    }
+
+    #[test]
+    fn image_format_dng_display() {
+        assert_eq!(ImageFormat::DNG.to_string(), "DNG");
+    }
+
+    #[test]
+    fn image_format_ppm_display() {
+        assert_eq!(ImageFormat::PPM.to_string(), "PPM");
+    }
+
+    #[test]
+    fn image_format_pgm_display() {
+        assert_eq!(ImageFormat::PGM.to_string(), "PGM");
+    }
+
+    #[test]
+    fn image_format_bmp_display() {
+        assert_eq!(ImageFormat::BMP.to_string(), "BMP");
+    }
+
+    #[test]
+    fn image_format_tiff_display() {
+        assert_eq!(ImageFormat::TIFF.to_string(), "TIFF");
+    }
+
+    #[test]
+    fn plugin_category_input_display() {
+        assert_eq!(PluginCategory::Input.to_string(), "input");
+    }
+
+    #[test]
+    fn plugin_category_format_display() {
+        assert_eq!(PluginCategory::Format.to_string(), "format");
+    }
+
+    #[test]
+    fn plugin_category_enhance_display() {
+        assert_eq!(PluginCategory::Enhance.to_string(), "enhance");
+    }
+
+    #[test]
+    fn plugin_category_custom_display() {
+        assert_eq!(PluginCategory::Custom("my_cat".into()).to_string(), "my_cat");
+    }
+
+    #[test]
+    fn plugin_category_custom_roundtrip() {
+        use std::str::FromStr;
+        let cat = PluginCategory::from_str("my_custom_category");
+        assert!(cat.is_ok());
+    }
+
+    #[test]
+    fn plugin_category_known_from_str() {
+        use std::str::FromStr;
+        assert_eq!(PluginCategory::from_str("input").unwrap(), PluginCategory::Input);
+    }
+
+    #[test]
+    fn hardware_info_serde_roundtrip() {
+        let hw = HardwareInfo {
+            cpu_cores: 8,
+            cpu_threads: 16,
+            total_ram_mb: 32768,
+            gpus: vec![GpuContext {
+                backend: GpuBackend::CUDA,
+                device_name: "RTX 4090".into(),
+                total_memory_mb: 24576,
+                available_memory_mb: 20000,
+                compute_units: 128,
+            }],
+        };
+        let json = serde_json::to_string(&hw).unwrap();
+        let hw2: HardwareInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(hw2.cpu_cores, 8);
+        assert_eq!(hw2.gpus.len(), 1);
+        assert_eq!(hw2.gpus[0].backend, GpuBackend::CUDA);
+    }
+
+    #[test]
+    fn processing_stats_serde_roundtrip() {
+        let stats = ProcessingStats {
+            elapsed_ms: 1500,
+            cpu_time_ms: 1200,
+            gpu_time_ms: Some(300),
+            peak_memory_mb: 4096,
+            input_pixels: 2073600,
+            output_pixels: 2073600,
+        };
+        let json = serde_json::to_string(&stats).unwrap();
+        let stats2: ProcessingStats = serde_json::from_str(&json).unwrap();
+        assert_eq!(stats2.elapsed_ms, 1500);
+        assert_eq!(stats2.peak_memory_mb, 4096);
+        assert_eq!(stats2.gpu_time_ms, Some(300));
+    }
+
+    #[test]
+    fn processing_stats_gpu_time_none_serde() {
+        let stats = ProcessingStats {
+            elapsed_ms: 100,
+            cpu_time_ms: 100,
+            gpu_time_ms: None,
+            peak_memory_mb: 256,
+            input_pixels: 1000,
+            output_pixels: 1000,
+        };
+        let json = serde_json::to_string(&stats).unwrap();
+        let stats2: ProcessingStats = serde_json::from_str(&json).unwrap();
+        assert_eq!(stats2.gpu_time_ms, None);
+    }
+
+    #[test]
+    fn version_requirement_serde_roundtrip() {
+        let req = VersionRequirement {
+            min_version: PluginVersion::new(1, 5, 0),
+            max_version: Some(PluginVersion::new(2, 0, 0)),
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        let req2: VersionRequirement = serde_json::from_str(&json).unwrap();
+        assert_eq!(req2.min_version, PluginVersion::new(1, 5, 0));
+        assert_eq!(req2.max_version, Some(PluginVersion::new(2, 0, 0)));
+    }
+
+    #[test]
+    fn version_requirement_no_max_serde() {
+        let req = VersionRequirement {
+            min_version: PluginVersion::new(1, 0, 0),
+            max_version: None,
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        let req2: VersionRequirement = serde_json::from_str(&json).unwrap();
+        assert_eq!(req2.max_version, None);
+    }
+
+    #[test]
+    fn color_mode_default_is_rgb() {
+        assert_eq!(ColorMode::default(), ColorMode::RGB);
+    }
+
+    #[test]
+    fn file_path_kind_default_is_file() {
+        assert_eq!(FilePathKind::default(), FilePathKind::File);
+    }
+
+    #[test]
+    fn slider_orientation_default() {
+        assert_eq!(SliderOrientation::default(), SliderOrientation::Horizontal);
+    }
+
+    #[test]
+    fn slider_style_default() {
+        assert_eq!(SliderStyle::default(), SliderStyle::Continuous);
+    }
+
+    #[test]
+    fn float_widget_default() {
+        assert_eq!(FloatWidget::default(), FloatWidget::SpinBox);
+    }
+
+    #[test]
+    fn integer_widget_default() {
+        assert_eq!(IntegerWidget::default(), IntegerWidget::SpinBox);
+    }
+
+    #[test]
+    fn enum_display_default() {
+        assert_eq!(EnumDisplay::default(), EnumDisplay::Dropdown);
+    }
+
+    #[test]
+    fn gui_schema_default() {
+        let gs = GuiSchema::default();
+        assert_eq!(gs.min_panel_width, 320);
+    }
+
+    #[test]
+    fn gui_layout_default() {
+        let layout = GuiLayout::default();
+        assert!(matches!(layout, GuiLayout::Standard { .. }));
+    }
+
+    #[test]
+    fn gpu_context_fields() {
+        let ctx = GpuContext {
+            backend: GpuBackend::Metal,
+            device_name: "M2".into(),
+            total_memory_mb: 32768,
+            available_memory_mb: 16384,
+            compute_units: 16,
+        };
+        assert_eq!(ctx.backend, GpuBackend::Metal);
+        assert_eq!(ctx.total_memory_mb, 32768);
+    }
+
+    #[test]
+    fn image_info_stores_pixel_format_and_color_space() {
+        use crate::image::PixelFormat;
+        let info = ImageInfo {
+            id: uuid::Uuid::new_v4(),
+            path: "/tmp/a.jpg".into(),
+            filename: "a.jpg".into(),
+            format: ImageFormat::JPEG,
+            width: 100,
+            height: 50,
+            file_size_bytes: 5000,
+            pixel_format: PixelFormat::U8,
+            color_space: crate::color::ColorSpace::default(),
+        };
+        assert_eq!(info.width, 100);
+        assert_eq!(info.height, 50);
+    }
 }

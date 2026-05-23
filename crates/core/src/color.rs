@@ -339,4 +339,221 @@ mod tests {
         assert_eq!(cs.transfer, TransferFunction::SRGB);
         assert!(!cs.is_hdr());
     }
+
+    #[test]
+    fn is_hdr_at_203_nits_is_false() {
+        let cs = ColorSpace { hdr_nits: Some(203.0), ..ColorSpace::default() };
+        assert!(!cs.is_hdr());
+    }
+
+    #[test]
+    fn is_hdr_at_204_nits_is_true() {
+        let cs = ColorSpace { hdr_nits: Some(204.0), ..ColorSpace::default() };
+        assert!(cs.is_hdr());
+    }
+
+    #[test]
+    fn is_hdr_at_0_nits_is_false() {
+        let cs = ColorSpace { hdr_nits: Some(0.0), ..ColorSpace::default() };
+        assert!(!cs.is_hdr());
+    }
+
+    #[test]
+    fn is_hdr_at_10000_nits_is_true() {
+        let cs = ColorSpace { hdr_nits: Some(10000.0), ..ColorSpace::default() };
+        assert!(cs.is_hdr());
+    }
+
+    #[test]
+    fn is_hdr_none_nits_is_false() {
+        let cs = ColorSpace { hdr_nits: None, ..ColorSpace::default() };
+        assert!(!cs.is_hdr());
+    }
+
+    #[test]
+    fn color_primaries_bt709_display() {
+        assert_eq!(ColorPrimaries::BT709.to_string(), "bt709");
+    }
+
+    #[test]
+    fn color_primaries_adobe_rgb_display() {
+        assert_eq!(ColorPrimaries::AdobeRGB.to_string(), "adobe_rgb");
+    }
+
+    #[test]
+    fn color_primaries_pro_photo_display() {
+        assert_eq!(ColorPrimaries::ProPhoto.to_string(), "pro_photo");
+    }
+
+    #[test]
+    fn color_primaries_aces_cg_display() {
+        assert_eq!(ColorPrimaries::ACEScg.to_string(), "aces_cg");
+    }
+
+    #[test]
+    fn color_primaries_cie_xyz_display() {
+        assert_eq!(ColorPrimaries::CIEXYZ.to_string(), "cie_xyz");
+    }
+
+    #[test]
+    fn color_primaries_dci_p3_display() {
+        assert_eq!(ColorPrimaries::DCIP3.to_string(), "dci_p3");
+    }
+
+    #[test]
+    fn color_primaries_rec2100_display() {
+        assert_eq!(ColorPrimaries::Rec2100.to_string(), "rec2100");
+    }
+
+    #[test]
+    fn transfer_function_gamma22_display() {
+        assert_eq!(TransferFunction::Gamma22.to_string(), "gamma22");
+    }
+
+    #[test]
+    fn transfer_function_gamma24_display() {
+        assert_eq!(TransferFunction::Gamma24.to_string(), "gamma24");
+    }
+
+    #[test]
+    fn transfer_function_gamma26_display() {
+        assert_eq!(TransferFunction::Gamma26.to_string(), "gamma26");
+    }
+
+    #[test]
+    fn transfer_function_gamma28_display() {
+        assert_eq!(TransferFunction::Gamma28.to_string(), "gamma28");
+    }
+
+    #[test]
+    fn transfer_function_slog3_display() {
+        assert_eq!(TransferFunction::SLog3.to_string(), "slog3");
+    }
+
+    #[test]
+    fn transfer_function_log_c_display() {
+        assert_eq!(TransferFunction::LogC.to_string(), "log_c");
+    }
+
+    #[test]
+    fn transfer_function_custom_display() {
+        assert_eq!(TransferFunction::Custom(2.4).to_string(), "custom");
+    }
+
+    #[test]
+    fn white_point_d55_display() {
+        assert_eq!(WhitePoint::D55.to_string(), "d55");
+    }
+
+    #[test]
+    fn white_point_d60_display() {
+        assert_eq!(WhitePoint::D60.to_string(), "d60");
+    }
+
+    #[test]
+    fn white_point_d75_display() {
+        assert_eq!(WhitePoint::D75.to_string(), "d75");
+    }
+
+    #[test]
+    fn white_point_e_display() {
+        assert_eq!(WhitePoint::E.to_string(), "e");
+    }
+
+    #[test]
+    fn white_point_custom_d65_display() {
+        let wp = WhitePoint::Custom(0.3127, 0.3290);
+        let s = wp.to_string();
+        assert!(!s.is_empty());
+    }
+
+    #[test]
+    fn rendering_intent_saturation_display() {
+        assert_eq!(RenderingIntent::Saturation.to_string(), "saturation");
+    }
+
+    #[test]
+    fn rendering_intent_absolute_colorimetric_display() {
+        assert_eq!(RenderingIntent::AbsoluteColorimetric.to_string(), "absolute_colorimetric");
+    }
+
+    #[test]
+    fn gamut_mapping_luminance_preserve_display() {
+        assert_eq!(GamutMapping::LuminancePreserve.to_string(), "luminance_preserve");
+    }
+
+    #[test]
+    fn color_rgb_red_luminance() {
+        let red = ColorRGB { r: 1.0, g: 0.0, b: 0.0 };
+        assert!((red.luminance() - 0.2126).abs() < 0.001);
+    }
+
+    #[test]
+    fn color_rgb_green_luminance() {
+        let green = ColorRGB { r: 0.0, g: 1.0, b: 0.0 };
+        assert!((green.luminance() - 0.7152).abs() < 0.001);
+    }
+
+    #[test]
+    fn color_rgb_blue_luminance() {
+        let blue = ColorRGB { r: 0.0, g: 0.0, b: 1.0 };
+        assert!((blue.luminance() - 0.0722).abs() < 0.001);
+    }
+
+    #[test]
+    fn color_rgb_gray_luminance() {
+        let gray = ColorRGB { r: 0.5, g: 0.5, b: 0.5 };
+        assert!((gray.luminance() - 0.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn color_rgba_with_alpha() {
+        let c = ColorRGBA { r: 1.0, g: 0.5, b: 0.0, a: 0.8 };
+        assert_eq!(c.a, 0.8);
+    }
+
+    #[test]
+    fn color_rgba_full_opaque() {
+        let c = ColorRGBA { r: 0.0, g: 0.0, b: 0.0, a: 1.0 };
+        assert_eq!(c.a, 1.0);
+    }
+
+    #[test]
+    fn color_conversion_spec_serde_roundtrip() {
+        let spec = ColorConversionSpec {
+            source: ColorSpace::SRGB,
+            target: ColorSpace::DISPLAY_P3,
+            intent: RenderingIntent::Perceptual,
+            black_point_compensation: true,
+            gamut_mapping: GamutMapping::Compress,
+            icc_profile: None,
+            ocio_config: None,
+            ocio_display: None,
+            ocio_view: None,
+        };
+        let json = serde_json::to_string(&spec).unwrap();
+        let spec2: ColorConversionSpec = serde_json::from_str(&json).unwrap();
+        assert_eq!(spec2.source, ColorSpace::SRGB);
+        assert!(spec2.black_point_compensation);
+        assert_eq!(spec2.gamut_mapping, GamutMapping::Compress);
+    }
+
+    #[test]
+    fn color_conversion_spec_with_icc_and_ocio() {
+        let spec = ColorConversionSpec {
+            source: ColorSpace::ADOBE_RGB,
+            target: ColorSpace::SRGB,
+            intent: RenderingIntent::RelativeColorimetric,
+            black_point_compensation: false,
+            gamut_mapping: GamutMapping::Clip,
+            icc_profile: Some(vec![1, 2, 3]),
+            ocio_config: Some("config.ocio".into()),
+            ocio_display: Some("sRGB".into()),
+            ocio_view: Some("Film".into()),
+        };
+        let json = serde_json::to_string(&spec).unwrap();
+        let spec2: ColorConversionSpec = serde_json::from_str(&json).unwrap();
+        assert_eq!(spec2.ocio_config, Some("config.ocio".into()));
+        assert_eq!(spec2.icc_profile, Some(vec![1, 2, 3]));
+    }
 }

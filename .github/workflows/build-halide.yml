@@ -1,20 +1,38 @@
 name: Build Halide
+
 on: [workflow_dispatch]
+
 jobs:
   build:
+    name: Build Halide (${{ matrix.os }})
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Halide build
+        uses: actions/cache@v4
+        with:
+          path: halide_generators/build
+          key: halide-${{ matrix.os }}-${{ github.sha }}
+          restore-keys: |
+            halide-${{ matrix.os }}-
+
       - name: Build Halide generators
         run: |
           cd halide_generators
           mkdir build && cd build
           cmake .. -DCMAKE_BUILD_TYPE=Release
           cmake --build . --parallel
-      - uses: actions/upload-artifact@v4
+
+      - name: Upload Halide artifacts
+        uses: actions/upload-artifact@v4
         with:
           name: halide-${{ matrix.os }}
           path: halide_generators/build/
+          retention-days: 90

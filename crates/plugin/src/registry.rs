@@ -371,4 +371,186 @@ mod tests {
         assert_eq!(m.category, PluginCategory::Input);
         assert_eq!(m.version, PluginVersion::new(1, 0, 0));
     }
+
+    #[test]
+    fn registry_register_duplicate_overwrites() {
+        let reg = Registry::new();
+        let p1 = Arc::new(MockPlugin::new("dup", "First", PluginCategory::Color));
+        let p2 = Arc::new(MockPlugin::new("dup", "Second", PluginCategory::Enhance));
+        reg.register(p1).unwrap();
+        reg.register(p2).unwrap();
+        let found = reg.get(&"dup".into());
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().name(), "Second");
+    }
+
+    #[test]
+    fn registry_unregister_then_get_returns_none() {
+        let reg = Registry::new();
+        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input))).unwrap();
+        reg.unregister(&"p1".into());
+        assert!(reg.get(&"p1".into()).is_none());
+    }
+
+    #[test]
+    fn registry_query_multiple_tags_and() {
+        let reg = Registry::new();
+        let mut p1 = MockPlugin::new("p1", "P1", PluginCategory::Enhance);
+        p1.tags = vec!["ai".into(), "denoise".into()];
+        let mut p2 = MockPlugin::new("p2", "P2", PluginCategory::Enhance);
+        p2.tags = vec!["ai".into()];
+        reg.register(Arc::new(p1)).unwrap();
+        reg.register(Arc::new(p2)).unwrap();
+
+        let q = PluginQuery {
+            tags: vec!["ai".into(), "denoise".into()],
+            ..Default::default()
+        };
+        let results = reg.query(&q);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name(), "P1");
+    }
+
+    #[test]
+    fn registry_query_empty_returns_all() {
+        let reg = Registry::new();
+        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input))).unwrap();
+        reg.register(Arc::new(MockPlugin::new("p2", "P2", PluginCategory::Format))).unwrap();
+        let results = reg.query(&PluginQuery::default());
+        assert_eq!(results.len(), 2);
+    }
+
+    #[test]
+    fn registry_query_unmatched_category_empty() {
+        let reg = Registry::new();
+        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input))).unwrap();
+        let q = PluginQuery { category: Some(PluginCategory::Transform), ..Default::default() };
+        assert!(reg.query(&q).is_empty());
+    }
+
+    #[test]
+    fn registry_manifest_after_unregister_returns_none() {
+        let reg = Registry::new();
+        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input))).unwrap();
+        reg.unregister(&"p1".into());
+        assert!(reg.manifest(&"p1".into()).is_none());
+    }
+
+    #[test]
+    fn registry_categories_after_register_multiple_same() {
+        let reg = Registry::new();
+        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Format))).unwrap();
+        reg.register(Arc::new(MockPlugin::new("p2", "P2", PluginCategory::Format))).unwrap();
+        reg.register(Arc::new(MockPlugin::new("p3", "P3", PluginCategory::Format))).unwrap();
+        let cats = reg.categories();
+        assert_eq!(cats.len(), 1);
+        assert_eq!(cats[0], PluginCategory::Format);
+    }
+
+    #[test]
+    fn registry_is_loaded_before_register() {
+        let reg = Registry::new();
+        assert!(!reg.is_loaded(&"nope".into()));
+    }
+
+    #[test]
+    fn registry_is_loaded_after_unregister() {
+        let reg = Registry::new();
+        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input))).unwrap();
+        reg.unregister(&"p1".into());
+        assert!(!reg.is_loaded(&"p1".into()));
+    }
+
+    #[test]
+    fn registry_query_keyword_in_description() {
+        let reg = Registry::new();
+        let mut p = MockPlugin::new("p1", "Short", PluginCategory::Enhance);
+        p.description = "advanced noise reduction for raw photos".into();
+        reg.register(Arc::new(p)).unwrap();
+        let q = PluginQuery { keyword: Some("noise".into()), ..Default::default() };
+        let results = reg.query(&q);
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn registry_query_keyword_not_found() {
+        let reg = Registry::new();
+        reg.register(Arc::new(MockPlugin::new("p1", "Denoise", PluginCategory::Enhance))).unwrap();
+        let q = PluginQuery { keyword: Some("xyzzy".into()), ..Default::default() };
+        assert!(reg.query(&q).is_empty());
+    }
+
+    #[test]
+    fn registry_query_requires_pixel_match() {
+        let reg = Registry::new();
+        let mut p1 = MockPlugin::new("p1", "P1", PluginCategory::Color);
+        p1.requires_pixel = true;
+        let mut p2 = MockPlugin::new("p2", "P2", PluginCategory::Metadata);
+        p2.requires_pixel = false;
+        reg.register(Arc::new(p1)).unwrap();
+        reg.register(Arc::new(p2)).unwrap();
+
+        let q = PluginQuery { requires_pixel: Some(true), ..Default::default() };
+        let results = reg.query(&q);
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn registry_query_enabled_only() {
+        let reg = Registry::new();
+        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input))).unwrap();
+        let q = PluginQuery { enabled_only: true, ..Default::default() };
+        let results = reg.query(&q);
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn registry_by_category_input() {
+        let reg = Registry::new();
+        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input))).unwrap();
+        reg.register(Arc::new(MockPlugin::new("p2", "P2", PluginCategory::Format))).unwrap();
+        let results = reg.by_category(PluginCategory::Input);
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn registry_by_category_metadata() {
+        let reg = Registry::new();
+        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Metadata))).unwrap();
+        let results = reg.by_category(PluginCategory::Metadata);
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn registry_by_category_external() {
+        let reg = Registry::new();
+        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::External))).unwrap();
+        let results = reg.by_category(PluginCategory::External);
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn registry_by_category_merge() {
+        let reg = Registry::new();
+        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Merge))).unwrap();
+        let results = reg.by_category(PluginCategory::Merge);
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn registry_by_category_custom() {
+        let reg = Registry::new();
+        reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Custom("special".into())))).unwrap();
+        let results = reg.by_category(PluginCategory::Custom("special".into()));
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn registry_all_after_multiple_registrations() {
+        let reg = Registry::new();
+        reg.register(Arc::new(MockPlugin::new("a", "A", PluginCategory::Input))).unwrap();
+        reg.register(Arc::new(MockPlugin::new("b", "B", PluginCategory::Format))).unwrap();
+        reg.register(Arc::new(MockPlugin::new("c", "C", PluginCategory::Color))).unwrap();
+        assert_eq!(reg.all().len(), 3);
+    }
 }

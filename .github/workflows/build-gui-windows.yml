@@ -1,0 +1,36 @@
+name: Build Windows GUI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  build:
+    name: Build Windows GUI
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build WinUI project
+        run: dotnet build gui/windows/Photopipeline/Photopipeline.csproj -c Release
+
+      - name: Run GUI unit tests
+        run: dotnet test gui/windows/Photopipeline.Tests/Photopipeline.Tests.csproj -c Release
+
+      - name: Publish application
+        run: dotnet publish gui/windows/Photopipeline/Photopipeline.csproj -c Release -o publish/win-x64/
+
+      - name: Upload publish artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: photopipeline-windows-gui
+          path: publish/win-x64/

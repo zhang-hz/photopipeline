@@ -137,3 +137,99 @@ impl PluginLoaderManager {
         Ok(loaded)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn builtin_plugin_loader_name() {
+        let loader = BuiltinPluginLoader;
+        assert_eq!(loader.name(), "builtin");
+    }
+
+    #[test]
+    fn builtin_plugin_loader_extensions_empty() {
+        let loader = BuiltinPluginLoader;
+        assert!(loader.supported_extensions().is_empty());
+    }
+
+    #[test]
+    fn builtin_plugin_loader_cannot_hot_reload() {
+        let loader = BuiltinPluginLoader;
+        assert!(!loader.can_hot_reload());
+    }
+
+    #[test]
+    fn native_plugin_loader_name() {
+        let loader = NativePluginLoader;
+        assert_eq!(loader.name(), "native");
+    }
+
+    #[test]
+    fn native_plugin_loader_extensions() {
+        let loader = NativePluginLoader;
+        let exts = loader.supported_extensions();
+        assert!(exts.contains(&"so"));
+        assert!(exts.contains(&"dylib"));
+        assert!(exts.contains(&"dll"));
+    }
+
+    #[test]
+    fn native_plugin_loader_cannot_hot_reload() {
+        let loader = NativePluginLoader;
+        assert!(!loader.can_hot_reload());
+    }
+
+    #[test]
+    fn external_tool_plugin_loader_name() {
+        let loader = ExternalToolPluginLoader;
+        assert_eq!(loader.name(), "external_tool");
+    }
+
+    #[test]
+    fn external_tool_plugin_loader_extensions_empty() {
+        let loader = ExternalToolPluginLoader;
+        assert!(loader.supported_extensions().is_empty());
+    }
+
+    #[test]
+    fn external_tool_plugin_loader_cannot_hot_reload() {
+        let loader = ExternalToolPluginLoader;
+        assert!(!loader.can_hot_reload());
+    }
+
+    #[test]
+    fn plugin_loader_manager_new_has_default_loaders() {
+        let manager = PluginLoaderManager::new();
+        assert!(!manager.loaders.is_empty());
+    }
+
+    #[test]
+    fn plugin_loader_manager_new_has_empty_search_paths() {
+        let manager = PluginLoaderManager::new();
+        assert!(manager.search_paths.is_empty());
+    }
+
+    #[test]
+    fn plugin_loader_manager_default() {
+        let manager = PluginLoaderManager::default();
+        assert!(manager.search_paths.is_empty());
+    }
+
+    #[test]
+    fn plugin_loader_manager_add_search_path() {
+        let mut manager = PluginLoaderManager::new();
+        manager.add_search_path(std::path::PathBuf::from("/tmp/plugins"));
+        assert_eq!(manager.search_paths.len(), 1);
+    }
+
+    #[test]
+    fn plugin_loader_manager_add_multiple_search_paths() {
+        let mut manager = PluginLoaderManager::new();
+        manager.add_search_path(std::path::PathBuf::from("/a"));
+        manager.add_search_path(std::path::PathBuf::from("/b"));
+        manager.add_search_path(std::path::PathBuf::from("/c"));
+        assert_eq!(manager.search_paths.len(), 3);
+    }
+}

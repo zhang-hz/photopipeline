@@ -930,4 +930,310 @@ mod tests {
         let result = resolver.resolve(node_id, image_id, &schema, &metadata, &image_info);
         assert_eq!(result.get_i64("threshold"), Some(1));
     }
+
+    #[test]
+    fn resolve_fallthrough_missing_image_override_uses_group() {
+        let mut resolver = ParameterResolver::new();
+        let schema = make_simple_schema();
+        let node_id = Uuid::new_v4();
+        let image_id = Uuid::new_v4();
+
+        let mut group_params = ParameterSet::new();
+        group_params.insert("threshold".into(), serde_json::json!(77));
+        let mut node_map = std::collections::HashMap::new();
+        node_map.insert(node_id, group_params);
+        resolver.add_group_override(GroupCondition::Always, node_map);
+
+        let metadata = Metadata::default();
+        let image_info = make_test_image_info();
+        let result = resolver.resolve(node_id, image_id, &schema, &metadata, &image_info);
+        assert_eq!(result.get_i64("threshold"), Some(77));
+    }
+
+    #[test]
+    fn resolve_fallthrough_missing_group_uses_template() {
+        let mut resolver = ParameterResolver::new();
+        let schema = make_simple_schema();
+        let node_id = Uuid::new_v4();
+        let image_id = Uuid::new_v4();
+
+        let mut template_params = ParameterSet::new();
+        template_params.insert("threshold".into(), serde_json::json!(42));
+        resolver.set_template_params(node_id, template_params);
+
+        let metadata = Metadata::default();
+        let image_info = make_test_image_info();
+        let result = resolver.resolve(node_id, image_id, &schema, &metadata, &image_info);
+        assert_eq!(result.get_i64("threshold"), Some(42));
+    }
+
+    #[test]
+    fn resolve_missing_all_uses_plugin_default() {
+        let resolver = ParameterResolver::new();
+        let schema = make_simple_schema();
+        let node_id = Uuid::new_v4();
+        let image_id = Uuid::new_v4();
+
+        let metadata = Metadata::default();
+        let image_info = make_test_image_info();
+        let result = resolver.resolve(node_id, image_id, &schema, &metadata, &image_info);
+        assert_eq!(result.get_i64("threshold"), Some(128));
+    }
+
+    #[test]
+    fn resolve_with_all_four_levels() {
+        let mut resolver = ParameterResolver::new();
+        let schema = make_simple_schema();
+        let node_id = Uuid::new_v4();
+        let image_id = Uuid::new_v4();
+
+        let mut template_params = ParameterSet::new();
+        template_params.insert("threshold".into(), serde_json::json!(200));
+        resolver.set_template_params(node_id, template_params);
+
+        let mut group_params = ParameterSet::new();
+        group_params.insert("threshold".into(), serde_json::json!(150));
+        let mut node_map = std::collections::HashMap::new();
+        node_map.insert(node_id, group_params);
+        resolver.add_group_override(GroupCondition::Always, node_map);
+
+        let mut override_params = ParameterSet::new();
+        override_params.insert("threshold".into(), serde_json::json!(50));
+        resolver.set_image_override(image_id, node_id, override_params);
+
+        let metadata = Metadata::default();
+        let image_info = make_test_image_info();
+        let result = resolver.resolve(node_id, image_id, &schema, &metadata, &image_info);
+        assert_eq!(result.get_i64("threshold"), Some(50));
+    }
+
+    #[test]
+    fn condition_and_empty_returns_true() {
+        let resolver = ParameterResolver::new();
+        let metadata = Metadata::default();
+        let image_info = make_test_image_info();
+        assert!(resolver.evaluate_condition(&GroupCondition::And(vec![]), &metadata, &image_info));
+    }
+
+    #[test]
+    fn condition_or_empty_returns_false() {
+        let resolver = ParameterResolver::new();
+        let metadata = Metadata::default();
+        let image_info = make_test_image_info();
+        assert!(!resolver.evaluate_condition(&GroupCondition::Or(vec![]), &metadata, &image_info));
+    }
+
+    #[test]
+    fn condition_and_all_false() {
+        let resolver = ParameterResolver::new();
+        let metadata = Metadata::default();
+        let image_info = make_test_image_info();
+        let cond = GroupCondition::And(vec![
+            GroupCondition::ExifEq { tag: "make".into(), value: "Canon".into() },
+            GroupCondition::ExifEq { tag: "make".into(), value: "Nikon".into() },
+        ]);
+        assert!(!resolver.evaluate_condition(&cond, &metadata, &image_info));
+    }
+
+    #[test]
+    fn condition_gps_near_at_radius_boundary() {
+        let resolver = ParameterResolver::new();
+        let metadata = Metadata {
+            gps: Some(photopipeline_core::GpsData {
+                latitude: Some(48.8566),
+                longitude: Some(2.3522),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let image_info = make_test_image_info();
+        let cond = GroupCondition::GpsNear { lat: 51.5074, lon: -0.1278, radius_km: 400.0 };
+        assert!(resolver.evaluate_condition(&cond, &metadata, &image_info));
+    }
+
+    #[test]
+    fn condition_gps_near_london_paris() {
+        let resolver = ParameterResolver::new();
+        let metadata = Metadata {
+            gps: Some(photopipeline_core::GpsData {
+                latitude: Some(48.8566),
+                longitude: Some(2.3522),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let image_info = make_test_image_info();
+        let cond = GroupCondition::GpsNear { lat: 51.5074, lon: -0.1278, radius_km: 350.0 };
+        assert!(resolver.evaluate_condition(&cond, &metadata, &image_info));
+    }
+
+    #[test]
+    fn condition_gps_near_nyc_la() {
+        let resolver = ParameterResolver::new();
+        let metadata = Metadata {
+            gps: Some(photopipeline_core::GpsData {
+                latitude: Some(40.7128),
+                longitude: Some(-74.0060),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let image_info = make_test_image_info();
+        let cond = GroupCondition::GpsNear { lat: 34.0522, lon: -118.2437, radius_km: 4000.0 };
+        assert!(resolver.evaluate_condition(&cond, &metadata, &image_info));
+    }
+
+    #[test]
+    fn condition_exif_gte_exact_boundary() {
+        let resolver = ParameterResolver::new();
+        let metadata = make_test_metadata(400);
+        let image_info = make_test_image_info();
+        let cond = GroupCondition::ExifGte { tag: "iso".into(), value: 400.0 };
+        assert!(resolver.evaluate_condition(&cond, &metadata, &image_info));
+    }
+
+    #[test]
+    fn condition_exif_lte_exact_boundary() {
+        let resolver = ParameterResolver::new();
+        let metadata = make_test_metadata(400);
+        let image_info = make_test_image_info();
+        let cond = GroupCondition::ExifLte { tag: "iso".into(), value: 400.0 };
+        assert!(resolver.evaluate_condition(&cond, &metadata, &image_info));
+    }
+
+    #[test]
+    fn condition_exif_eq_tag_not_found() {
+        let resolver = ParameterResolver::new();
+        let metadata = make_test_metadata(400);
+        let image_info = make_test_image_info();
+        let cond = GroupCondition::ExifEq { tag: "unknown_tag".into(), value: "x".into() };
+        assert!(!resolver.evaluate_condition(&cond, &metadata, &image_info));
+    }
+
+    #[test]
+    fn condition_exif_gte_no_exif() {
+        let resolver = ParameterResolver::new();
+        let metadata = Metadata::default();
+        let image_info = make_test_image_info();
+        let cond = GroupCondition::ExifGte { tag: "iso".into(), value: 100.0 };
+        assert!(!resolver.evaluate_condition(&cond, &metadata, &image_info));
+    }
+
+    #[test]
+    fn condition_exif_lte_no_exif() {
+        let resolver = ParameterResolver::new();
+        let metadata = Metadata::default();
+        let image_info = make_test_image_info();
+        let cond = GroupCondition::ExifLte { tag: "iso".into(), value: 6400.0 };
+        assert!(!resolver.evaluate_condition(&cond, &metadata, &image_info));
+    }
+
+    #[test]
+    fn expression_engine_multiple_substitutions() {
+        let engine = ExpressionEngine::default();
+        let metadata = make_test_metadata(400);
+        let image_info = make_test_image_info();
+        let result = engine.evaluate("${exif.make} ${exif.model}", &metadata, &image_info).unwrap();
+        assert_eq!(result, serde_json::Value::String("Canon EOS R5".into()));
+    }
+
+    #[test]
+    fn expression_engine_numeric_literal_comparison() {
+        let engine = ExpressionEngine::default();
+        let metadata = make_test_metadata(800);
+        let image_info = make_test_image_info();
+        let result = engine.evaluate("${exif.iso > 400 ? 100 : 200}", &metadata, &image_info).unwrap();
+        assert_eq!(result, serde_json::Value::String("100".into()));
+    }
+
+    #[test]
+    fn expression_engine_no_dollar_brace_returns_literal() {
+        let engine = ExpressionEngine::default();
+        let metadata = Metadata::default();
+        let image_info = make_test_image_info();
+        let result = engine.evaluate("plain text", &metadata, &image_info).unwrap();
+        assert_eq!(result, serde_json::Value::String("plain text".into()));
+    }
+
+    #[test]
+    fn expression_engine_malformed_missing_close_brace() {
+        let engine = ExpressionEngine::default();
+        let metadata = Metadata::default();
+        let image_info = make_test_image_info();
+        let result = engine.evaluate("${exif.make", &metadata, &image_info);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn expression_engine_string_ne() {
+        let engine = ExpressionEngine::default();
+        let metadata = make_test_metadata(400);
+        let image_info = make_test_image_info();
+        let result = engine.evaluate("${exif.make != \"Sony\"}", &metadata, &image_info).unwrap();
+        assert_eq!(result, serde_json::Value::String("true".into()));
+    }
+
+    #[test]
+    fn expression_engine_comparison_lt() {
+        let engine = ExpressionEngine::default();
+        let metadata = make_test_metadata(100);
+        let image_info = make_test_image_info();
+        let result = engine.evaluate("${exif.iso < 400}", &metadata, &image_info).unwrap();
+        assert_eq!(result, serde_json::Value::String("true".into()));
+    }
+
+    #[test]
+    fn expression_engine_comparison_ge() {
+        let engine = ExpressionEngine::default();
+        let metadata = make_test_metadata(400);
+        let image_info = make_test_image_info();
+        let result = engine.evaluate("${exif.iso >= 400}", &metadata, &image_info).unwrap();
+        assert_eq!(result, serde_json::Value::String("true".into()));
+    }
+
+    #[test]
+    fn expression_engine_single_quoted_string() {
+        let engine = ExpressionEngine::default();
+        let metadata = Metadata::default();
+        let image_info = make_test_image_info();
+        let result = engine.evaluate("${'hello world'}", &metadata, &image_info).unwrap();
+        assert_eq!(result, serde_json::Value::String("hello world".into()));
+    }
+
+    #[test]
+    fn expression_engine_unknown_image_field() {
+        let engine = ExpressionEngine::default();
+        let metadata = Metadata::default();
+        let image_info = make_test_image_info();
+        assert!(engine.evaluate("${image.unknown}", &metadata, &image_info).is_err());
+    }
+
+    #[test]
+    fn expression_engine_unknown_exif_field() {
+        let engine = ExpressionEngine::default();
+        let metadata = make_test_metadata(100);
+        let image_info = make_test_image_info();
+        assert!(engine.evaluate("${exif.unknown}", &metadata, &image_info).is_err());
+    }
+
+    #[test]
+    fn expression_engine_exif_lens() {
+        let engine = ExpressionEngine::default();
+        let metadata = make_test_metadata(100);
+        let image_info = make_test_image_info();
+        let result = engine.evaluate("${exif.lens}", &metadata, &image_info).unwrap();
+        assert_eq!(result, serde_json::Value::String("24-70mm".into()));
+    }
+
+    #[test]
+    fn haversine_same_point_zero() {
+        let dist = ParameterResolver::haversine_km(0.0, 0.0, 0.0, 0.0);
+        assert!((dist - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn haversine_london_to_paris_approx() {
+        let dist = ParameterResolver::haversine_km(51.5074, -0.1278, 48.8566, 2.3522);
+        assert!(dist > 330.0 && dist < 350.0);
+    }
 }

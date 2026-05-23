@@ -500,4 +500,390 @@ mod tests {
     fn interpolate_bearing_both_none() {
         assert_eq!(interpolate_bearing(None, None, 0.5), None);
     }
+
+    #[test]
+    fn gps_data_lat_only_no_coordinates() {
+        let gps = GpsData { latitude: Some(34.0), longitude: None, ..Default::default() };
+        assert!(!gps.has_coordinates());
+    }
+
+    #[test]
+    fn gps_data_lon_only_no_coordinates() {
+        let gps = GpsData { latitude: None, longitude: Some(-118.0), ..Default::default() };
+        assert!(!gps.has_coordinates());
+    }
+
+    #[test]
+    fn gps_data_both_none_no_coordinates() {
+        let gps = GpsData { latitude: None, longitude: None, ..Default::default() };
+        assert!(!gps.has_coordinates());
+    }
+
+    #[test]
+    fn gps_data_coordinate_tuple_zero_zero() {
+        let gps = GpsData { latitude: Some(0.0), longitude: Some(0.0), ..Default::default() };
+        assert_eq!(gps.coordinate_tuple(), Some((0.0, 0.0)));
+    }
+
+    #[test]
+    fn gps_data_coordinate_tuple_max_values() {
+        let gps = GpsData { latitude: Some(90.0), longitude: Some(180.0), ..Default::default() };
+        assert_eq!(gps.coordinate_tuple(), Some((90.0, 180.0)));
+    }
+
+    #[test]
+    fn gps_data_coordinate_tuple_min_values() {
+        let gps = GpsData { latitude: Some(-90.0), longitude: Some(-180.0), ..Default::default() };
+        assert_eq!(gps.coordinate_tuple(), Some((-90.0, -180.0)));
+    }
+
+    #[test]
+    fn interpolate_f64_negative_values() {
+        assert_eq!(interpolate_f64(Some(-10.0), Some(10.0), 0.5), Some(0.0));
+    }
+
+    #[test]
+    fn interpolate_f64_very_large_values() {
+        let result = interpolate_f64(Some(1e10), Some(2e10), 0.5);
+        assert!(result.is_some());
+        assert!((result.unwrap() - 1.5e10).abs() < 1.0);
+    }
+
+    #[test]
+    fn interpolate_f64_at_zero_fraction() {
+        assert_eq!(interpolate_f64(Some(5.0), Some(15.0), 0.0), Some(5.0));
+    }
+
+    #[test]
+    fn interpolate_f64_at_one_fraction() {
+        assert_eq!(interpolate_f64(Some(5.0), Some(15.0), 1.0), Some(15.0));
+    }
+
+    #[test]
+    fn interpolate_bearing_short_way_0_to_359() {
+        let result = interpolate_bearing(Some(0.0), Some(359.0), 0.5);
+        assert!(result.is_some());
+        let v = result.unwrap();
+        assert!(v < 1.0 || v > 358.0);
+    }
+
+    #[test]
+    fn interpolate_bearing_short_way_359_to_0() {
+        let result = interpolate_bearing(Some(359.0), Some(0.0), 0.5);
+        assert!(result.is_some());
+        let v = result.unwrap();
+        assert!(v < 1.0 || v > 358.0);
+    }
+
+    #[test]
+    fn interpolate_bearing_180_to_181() {
+        let result = interpolate_bearing(Some(180.0), Some(181.0), 0.5);
+        assert!(result.is_some());
+        assert!((result.unwrap() - 180.5).abs() < 0.1);
+    }
+
+    #[test]
+    fn interpolate_bearing_0_to_180() {
+        let result = interpolate_bearing(Some(0.0), Some(180.0), 0.5);
+        assert!(result.is_some());
+        assert!((result.unwrap() - 90.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn gpx_track_empty_points_no_interpolation() {
+        let track = GpxTrack { name: None, points: vec![], duration_seconds: None, distance_meters: None };
+        let t = chrono::Utc::now();
+        assert_eq!(track.interpolate_at(&t), None);
+    }
+
+    #[test]
+    fn gpx_track_all_points_no_timestamps() {
+        let track = GpxTrack {
+            name: None,
+            points: vec![
+                GpxPoint { latitude: 40.0, longitude: -74.0, elevation: None, timestamp: None, speed: None, bearing: None },
+            ],
+            duration_seconds: None,
+            distance_meters: None,
+        };
+        let t = chrono::Utc::now();
+        assert_eq!(track.interpolate_at(&t), None);
+    }
+
+    #[test]
+    fn gpx_track_single_point_with_timestamp() {
+        let t1 = chrono::Utc::now();
+        let track = GpxTrack {
+            name: None,
+            points: vec![
+                GpxPoint { latitude: 40.0, longitude: -74.0, elevation: None, timestamp: Some(t1), speed: None, bearing: None },
+            ],
+            duration_seconds: None,
+            distance_meters: None,
+        };
+        let result = track.interpolate_at(&t1);
+        assert!(result.is_some());
+        assert!((result.unwrap().latitude - 40.0).abs() < 0.0001);
+    }
+
+    #[test]
+    fn gpx_track_duplicate_timestamps() {
+        let t1 = chrono::Utc::now();
+        let track = GpxTrack {
+            name: None,
+            points: vec![
+                GpxPoint { latitude: 40.0, longitude: -74.0, elevation: None, timestamp: Some(t1), speed: None, bearing: None },
+                GpxPoint { latitude: 41.0, longitude: -73.0, elevation: None, timestamp: Some(t1), speed: None, bearing: None },
+            ],
+            duration_seconds: None,
+            distance_meters: None,
+        };
+        let result = track.interpolate_at(&t1);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn gpx_track_interpolate_exact_start() {
+        let t1 = chrono::Utc::now();
+        let t2 = t1 + chrono::Duration::hours(1);
+        let track = GpxTrack {
+            name: None,
+            points: vec![
+                GpxPoint { latitude: 10.0, longitude: 20.0, elevation: None, timestamp: Some(t1), speed: None, bearing: None },
+                GpxPoint { latitude: 20.0, longitude: 30.0, elevation: None, timestamp: Some(t2), speed: None, bearing: None },
+            ],
+            duration_seconds: None,
+            distance_meters: None,
+        };
+        let result = track.interpolate_at(&t1);
+        assert!(result.is_some());
+        let pt = result.unwrap();
+        assert!((pt.latitude - 10.0).abs() < 0.0001);
+    }
+
+    #[test]
+    fn gpx_track_interpolate_exact_end() {
+        let t1 = chrono::Utc::now();
+        let t2 = t1 + chrono::Duration::hours(1);
+        let track = GpxTrack {
+            name: None,
+            points: vec![
+                GpxPoint { latitude: 10.0, longitude: 20.0, elevation: None, timestamp: Some(t1), speed: None, bearing: None },
+                GpxPoint { latitude: 20.0, longitude: 30.0, elevation: None, timestamp: Some(t2), speed: None, bearing: None },
+            ],
+            duration_seconds: None,
+            distance_meters: None,
+        };
+        let result = track.interpolate_at(&t2);
+        assert!(result.is_some());
+        let pt = result.unwrap();
+        assert!((pt.latitude - 20.0).abs() < 0.0001);
+    }
+
+    #[test]
+    fn exif_data_default_all_none() {
+        let exif = ExifData::default();
+        assert!(exif.make.is_none());
+        assert!(exif.model.is_none());
+        assert!(exif.iso.is_none());
+    }
+
+    #[test]
+    fn exif_data_all_fields_some() {
+        let now = chrono::Utc::now();
+        let exif = ExifData {
+            make: Some("Canon".into()),
+            model: Some("EOS R5".into()),
+            lens_model: Some("RF24-105".into()),
+            serial_number: Some("12345".into()),
+            software: Some("LR".into()),
+            artist: Some("Photographer".into()),
+            copyright: Some("2024".into()),
+            image_description: Some("Sunset".into()),
+            orientation: Some(1),
+            date_time_original: Some(now),
+            date_time_digitized: Some(now),
+            sub_sec_time_original: Some("00".into()),
+            offset_time_original: Some("+00:00".into()),
+            exposure_time: Some("1/125".into()),
+            f_number: Some("5.6".into()),
+            iso: Some(400),
+            focal_length: Some("50".into()),
+            focal_length_35mm: Some(50),
+            aperture_value: Some("5.6".into()),
+            shutter_speed_value: Some("1/125".into()),
+            brightness_value: Some("0".into()),
+            exposure_bias: Some("0".into()),
+            metering_mode: Some(5),
+            flash: Some(0),
+            exposure_program: Some(3),
+            white_balance: Some(0),
+            image_width: Some(8192),
+            image_height: Some(5464),
+            color_space: Some(1),
+            bits_per_sample: Some(vec![8, 8, 8]),
+            compression: Some(6),
+            maker_note: Some(vec![]),
+            raw_tags: vec![],
+        };
+        assert_eq!(exif.make, Some("Canon".into()));
+        assert_eq!(exif.iso, Some(400));
+        assert_eq!(exif.focal_length, Some("50".into()));
+    }
+
+    #[test]
+    fn exif_data_serde_roundtrip() {
+        let exif = ExifData {
+            make: Some("Sony".into()),
+            model: Some("ILCE-7RM5".into()),
+            iso: Some(100),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&exif).unwrap();
+        let exif2: ExifData = serde_json::from_str(&json).unwrap();
+        assert_eq!(exif2.make, Some("Sony".into()));
+        assert_eq!(exif2.iso, Some(100));
+    }
+
+    #[test]
+    fn xmp_data_default_empty() {
+        let xmp = XmpData::default();
+        assert!(xmp.creator.is_none());
+        assert!(xmp.subject.is_empty());
+    }
+
+    #[test]
+    fn xmp_data_serde_roundtrip() {
+        let xmp = XmpData {
+            creator: Some("Author".into()),
+            title: Some("Title".into()),
+            rating: Some(5),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&xmp).unwrap();
+        let xmp2: XmpData = serde_json::from_str(&json).unwrap();
+        assert_eq!(xmp2.title, Some("Title".into()));
+        assert_eq!(xmp2.rating, Some(5));
+    }
+
+    #[test]
+    fn iptc_data_default_empty() {
+        let iptc = IptcData::default();
+        assert!(iptc.caption.is_none());
+        assert!(iptc.keywords.is_empty());
+    }
+
+    #[test]
+    fn iptc_data_serde_roundtrip() {
+        let iptc = IptcData {
+            city: Some("NYC".into()),
+            country: Some("USA".into()),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&iptc).unwrap();
+        let iptc2: IptcData = serde_json::from_str(&json).unwrap();
+        assert_eq!(iptc2.city, Some("NYC".into()));
+    }
+
+    #[test]
+    fn gps_data_all_fields() {
+        let gps = GpsData {
+            latitude: Some(48.8566),
+            longitude: Some(2.3522),
+            altitude: Some(35.0),
+            speed: Some(5.0),
+            track: Some(270.0),
+            ..Default::default()
+        };
+        assert!(gps.has_coordinates());
+        assert_eq!(gps.altitude, Some(35.0));
+    }
+
+    #[test]
+    fn metadata_scoped_fields() {
+        assert_eq!(MetadataScope::EXIF, MetadataScope::EXIF);
+        assert_ne!(MetadataScope::All, MetadataScope::GPS);
+    }
+
+    #[test]
+    fn custom_tag_creation() {
+        let tag = CustomTag {
+            key: "my_key".into(),
+            value: "my_value".into(),
+            namespace: Some("ns".into()),
+        };
+        assert_eq!(tag.key, "my_key");
+        assert_eq!(tag.namespace, Some("ns".into()));
+    }
+
+    #[test]
+    fn raw_exif_tag_fields() {
+        let tag = RawExifTag { tag: "0x829A".into(), group: "ExifIFD".into(), value: "1/125".into() };
+        assert_eq!(tag.tag, "0x829A");
+    }
+
+    #[test]
+    fn raw_xmp_property_fields() {
+        let prop = RawXmpProperty { namespace: "dc".into(), name: "creator".into(), value: "me".into() };
+        assert_eq!(prop.namespace, "dc");
+    }
+
+    #[test]
+    fn raw_iptc_tag_fields() {
+        let tag = RawIptcTag { record: 2, dataset: 80, name: "Byline".into(), value: "Author".into() };
+        assert_eq!(tag.record, 2);
+        assert_eq!(tag.dataset, 80);
+    }
+
+    #[test]
+    fn metadata_target_fields() {
+        use crate::types::ImageFormat;
+        let target = MetadataTarget { path: "/tmp/img.jpg".into(), format: ImageFormat::JPEG };
+        assert_eq!(target.path, "/tmp/img.jpg");
+        assert_eq!(target.format, ImageFormat::JPEG);
+    }
+
+    #[test]
+    fn metadata_write_report_defaults() {
+        let report = MetadataWriteReport { tags_written: 10, tags_skipped: 2, warnings: vec![] };
+        assert_eq!(report.tags_written, 10);
+        assert_eq!(report.tags_skipped, 2);
+        assert!(report.warnings.is_empty());
+    }
+
+    #[test]
+    fn gpx_track_with_name_and_duration() {
+        let track = GpxTrack {
+            name: Some("Morning Run".into()),
+            points: vec![],
+            duration_seconds: Some(3600.0),
+            distance_meters: Some(10000.0),
+        };
+        assert_eq!(track.name, Some("Morning Run".into()));
+        assert_eq!(track.distance_meters, Some(10000.0));
+    }
+
+    #[test]
+    fn gpx_point_all_fields_some() {
+        let ts = chrono::Utc::now();
+        let pt = GpxPoint {
+            latitude: 34.0,
+            longitude: -118.0,
+            elevation: Some(100.0),
+            timestamp: Some(ts),
+            speed: Some(5.5),
+            bearing: Some(90.0),
+        };
+        assert!(pt.timestamp.is_some());
+        assert_eq!(pt.speed, Some(5.5));
+    }
+
+    #[test]
+    fn gpx_point_all_fields_none() {
+        let pt = GpxPoint {
+            latitude: 0.0, longitude: 0.0,
+            elevation: None, timestamp: None, speed: None, bearing: None,
+        };
+        assert!(pt.elevation.is_none());
+    }
 }

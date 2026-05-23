@@ -3,6 +3,7 @@ use photopipeline_plugin::{
     registry::Registry, PluginQuery,
 };
 use photopipeline_engine::{PipelineTemplate, TemplateNode, TemplateEdge, PipelineGraph};
+use uuid::Uuid;
 
 #[test]
 fn test_register_all_plugins() {
@@ -192,4 +193,206 @@ fn test_image_format_display_all() {
     assert_eq!(ImageFormat::PGM.to_string(), "PGM");
     assert_eq!(ImageFormat::BMP.to_string(), "BMP");
     assert_eq!(ImageFormat::Unknown("custom".into()).to_string(), "custom");
+}
+
+#[test]
+fn test_registry_query_by_tags() {
+    let registry = Registry::new();
+    photopipeline_plugins::register_all(&registry);
+
+    let q = PluginQuery {
+        tags: vec!["format".into()],
+        ..Default::default()
+    };
+    let results = registry.query(&q);
+    assert!(!results.is_empty());
+    for plugin in &results {
+        assert!(plugin.tags().iter().any(|t| t == "format"));
+    }
+}
+
+#[test]
+fn test_registry_query_enabled_only() {
+    let registry = Registry::new();
+    photopipeline_plugins::register_all(&registry);
+
+    let q = PluginQuery {
+        enabled_only: true,
+        ..Default::default()
+    };
+    let results = registry.query(&q);
+    assert_eq!(results.len(), 14);
+}
+
+#[test]
+fn test_registry_query_keyword_not_found() {
+    let registry = Registry::new();
+    photopipeline_plugins::register_all(&registry);
+
+    let q = PluginQuery {
+        keyword: Some("zzz_not_exist_zzz".into()),
+        ..Default::default()
+    };
+    let results = registry.query(&q);
+    assert!(results.is_empty());
+}
+
+#[test]
+fn test_registry_all_returns_all() {
+    let registry = Registry::new();
+    photopipeline_plugins::register_all(&registry);
+
+    let all = registry.all();
+    assert_eq!(all.len(), 14);
+}
+
+#[test]
+fn test_pipeline_template_node_params_non_empty() {
+    let mut params_map = std::collections::HashMap::new();
+    params_map.insert("quality".into(), serde_json::json!(80.0));
+    let template = PipelineTemplate {
+        metadata: Default::default(),
+        nodes: vec![TemplateNode {
+            id: "n1".into(),
+            plugin: "heif_encoder".into(),
+            label: None,
+            enabled: true,
+            params: Some(params_map),
+        }],
+        edges: vec![],
+        overrides: vec![],
+        groups: vec![],
+        batch: None,
+    };
+    assert!(template.validate().is_ok());
+    let graph = template.into_graph();
+    let node = &graph.nodes[0];
+    assert!(node.parameter_overrides.is_some());
+}
+
+#[test]
+fn test_pipeline_template_node_disabled() {
+    let template = PipelineTemplate {
+        metadata: Default::default(),
+        nodes: vec![TemplateNode {
+            id: "n1".into(),
+            plugin: "exif_rw".into(),
+            label: None,
+            enabled: false,
+            params: None,
+        }],
+        edges: vec![],
+        overrides: vec![],
+        groups: vec![],
+        batch: None,
+    };
+    assert!(template.validate().is_ok());
+}
+
+#[test]
+fn test_pipeline_template_node_label_override() {
+    let template = PipelineTemplate {
+        metadata: Default::default(),
+        nodes: vec![TemplateNode {
+            id: "n1".into(),
+            plugin: "exif_rw".into(),
+            label: Some("Custom Label".into()),
+            enabled: true,
+            params: None,
+        }],
+        edges: vec![],
+        overrides: vec![],
+        groups: vec![],
+        batch: None,
+    };
+    let graph = template.into_graph();
+    assert_eq!(graph.nodes[0].label, "Custom Label");
+}
+
+#[test]
+fn test_pipeline_graph_serialize_empty_graph() {
+    let graph = PipelineGraph::new();
+    let json = serde_json::to_string(&graph).unwrap();
+    let deserialized: PipelineGraph = serde_json::from_str(&json).unwrap();
+    assert!(deserialized.nodes.is_empty());
+    assert!(deserialized.edges.is_empty());
+}
+
+#[test]
+fn test_pipeline_graph_same_node_connect_fails() {
+    let mut graph = PipelineGraph::new();
+    let n1 = graph.add_node("p1".into(), "n1".into());
+    let in1 = graph.node(n1).unwrap().inputs[0];
+    let out1 = graph.node(n1).unwrap().outputs[0];
+    assert!(graph.connect(out1, in1).is_err());
+}
+
+#[test]
+fn test_pipeline_graph_has_cycle_on_dag() {
+    let mut graph = PipelineGraph::new();
+    let n1 = graph.add_node("a".into(), "A".into());
+    let n2 = graph.add_node("b".into(), "B".into());
+    let out1 = graph.node(n1).unwrap().outputs[0];
+    let in2 = graph.node(n2).unwrap().inputs[0];
+    graph.connect(out1, in2).unwrap();
+    assert!(!graph.has_cycle());
+}
+
+#[test]
+fn test_pipeline_graph_node_not_found_by_id() {
+    let mut graph = PipelineGraph::new();
+    graph.add_node("p1".into(), "n1".into());
+    assert!(graph.node(Uuid::new_v4()).is_none());
+}
+
+#[test]
+fn test_registry_manifests_after_register_all() {
+    let registry = Registry::new();
+    photopipeline_plugins::register_all(&registry);
+    let manifests = registry.manifests();
+    assert_eq!(manifests.len(), 14);
+    for m in &manifests {
+        assert!(m.version.major > 0 || m.version.minor > 0 || m.version.patch > 0);
+        assert!(!m.tags.is_empty());
+    }
+}
+
+#[test]
+fn test_parameter_set_from_schema_defaults() {
+    let registry = Registry::new();
+    photopipeline_plugins::register_all(&registry);
+    for plugin in &registry.all() {
+        let defaults = plugin.parameter_schema().defaults();
+        let fields = plugin.parameter_schema().all_fields();
+        assert_eq!(defaults.iter().count(), fields.len());
+    }
+}
+
+#[test]
+fn test_all_plugins_are_loaded_in_registry() {
+    let registry = Registry::new();
+    photopipeline_plugins::register_all(&registry);
+
+    let all = registry.all();
+    assert_eq!(all.len(), 14);
+    for plugin in &all {
+        assert!(!plugin.id().is_empty(), "plugin has empty id");
+        assert!(!plugin.name().is_empty(), "plugin has empty name");
+    }
+}
+
+#[test]
+fn test_registry_register_get_remove_cycle() {
+    let registry = Registry::new();
+    photopipeline_plugins::register_all(&registry);
+
+    let count_before = registry.all().len();
+    assert!(count_before >= 14);
+
+    let manifests_before = registry.manifests().len();
+    let first_id = registry.all()[0].id().clone();
+    let removed = registry.unregister(&first_id);
+    assert!(removed.is_some(), "unregister returned None for {}", first_id);
+    let manifests_after = registry.manifests().len();
+    assert_eq!(manifests_after, manifests_before - 1);
 }

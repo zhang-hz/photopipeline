@@ -691,4 +691,276 @@ mod tests {
         assert_eq!(deserialized.nodes.len(), 2);
         assert_eq!(deserialized.edges.len(), 1);
     }
+
+    #[test]
+    fn test_topological_order_single_node() {
+        let mut graph = PipelineGraph::new();
+        let n1 = graph.add_node("p1".into(), "n1".into());
+        let order = graph.topological_order().unwrap();
+        assert_eq!(order.len(), 1);
+        assert_eq!(order[0], n1);
+    }
+
+    #[test]
+    fn test_topological_order_two_disconnected() {
+        let mut graph = PipelineGraph::new();
+        let n1 = graph.add_node("p1".into(), "n1".into());
+        let n2 = graph.add_node("p2".into(), "n2".into());
+        let order = graph.topological_order().unwrap();
+        assert_eq!(order.len(), 2);
+        assert!(order.contains(&n1));
+        assert!(order.contains(&n2));
+    }
+
+    #[test]
+    fn test_topological_order_ten_nodes_linear() {
+        let mut graph = PipelineGraph::new();
+        let mut ids = vec![];
+        for i in 0..10 {
+            ids.push(graph.add_node(format!("p{i}"), format!("n{i}")));
+        }
+        for w in ids.windows(2) {
+            let out = graph.node(w[0]).unwrap().outputs[0];
+            let inp = graph.node(w[1]).unwrap().inputs[0];
+            graph.connect(out, inp).unwrap();
+        }
+        let order = graph.topological_order().unwrap();
+        assert_eq!(order.len(), 10);
+        for (a, b) in order.iter().zip(order.iter().skip(1)) {
+            let pos_a = ids.iter().position(|id| id == a).unwrap();
+            let pos_b = ids.iter().position(|id| id == b).unwrap();
+            assert!(pos_a < pos_b);
+        }
+    }
+
+    #[test]
+    fn test_topological_order_ten_disconnected() {
+        let mut graph = PipelineGraph::new();
+        for i in 0..10 {
+            graph.add_node(format!("p{i}"), format!("n{i}"));
+        }
+        let order = graph.topological_order().unwrap();
+        assert_eq!(order.len(), 10);
+    }
+
+    #[test]
+    fn test_cycle_detection_self_loop() {
+        let mut graph = PipelineGraph::new();
+        let n1 = graph.add_node("p1".into(), "n1".into());
+        let port = graph.node(n1).unwrap().outputs[0];
+        assert!(graph.connect(port, port).is_err());
+    }
+
+    #[test]
+    fn test_cycle_detection_simple_cycle() {
+        let mut graph = PipelineGraph::new();
+        let n1 = graph.add_node("p1".into(), "n1".into());
+        let n2 = graph.add_node("p2".into(), "n2".into());
+        let out1 = graph.node(n1).unwrap().outputs[0];
+        let in2 = graph.node(n2).unwrap().inputs[0];
+        let out2 = graph.node(n2).unwrap().outputs[0];
+        let in1 = graph.node(n1).unwrap().inputs[0];
+        graph.connect(out1, in2).unwrap();
+        assert!(graph.connect(out2, in1).is_err());
+    }
+
+    #[test]
+    fn test_cycle_detection_triangle() {
+        let mut graph = PipelineGraph::new();
+        let n1 = graph.add_node("p1".into(), "n1".into());
+        let n2 = graph.add_node("p2".into(), "n2".into());
+        let n3 = graph.add_node("p3".into(), "n3".into());
+        let out1 = graph.node(n1).unwrap().outputs[0];
+        let in2 = graph.node(n2).unwrap().inputs[0];
+        let out2 = graph.node(n2).unwrap().outputs[0];
+        let in3 = graph.node(n3).unwrap().inputs[0];
+        let out3 = graph.node(n3).unwrap().outputs[0];
+        let in1 = graph.node(n1).unwrap().inputs[0];
+        graph.connect(out1, in2).unwrap();
+        graph.connect(out2, in3).unwrap();
+        assert!(graph.connect(out3, in1).is_err());
+    }
+
+    #[test]
+    fn test_cycle_detection_no_cycle_dag() {
+        let mut graph = PipelineGraph::new();
+        let n1 = graph.add_node("p1".into(), "n1".into());
+        let n2 = graph.add_node("p2".into(), "n2".into());
+        let out1 = graph.node(n1).unwrap().outputs[0];
+        let in2 = graph.node(n2).unwrap().inputs[0];
+        assert!(graph.connect(out1, in2).is_ok());
+        assert!(!graph.has_cycle());
+    }
+
+    #[test]
+    fn test_connect_non_existent_ports() {
+        let mut graph = PipelineGraph::new();
+        graph.add_node("p1".into(), "n1".into());
+        let fake1 = uuid::Uuid::new_v4();
+        let fake2 = uuid::Uuid::new_v4();
+        assert!(graph.connect(fake1, fake2).is_err());
+    }
+
+    #[test]
+    fn test_disconnect_valid_edge() {
+        let mut graph = PipelineGraph::new();
+        let n1 = graph.add_node("p1".into(), "n1".into());
+        let n2 = graph.add_node("p2".into(), "n2".into());
+        let out1 = graph.node(n1).unwrap().outputs[0];
+        let in2 = graph.node(n2).unwrap().inputs[0];
+        graph.connect(out1, in2).unwrap();
+        assert!(graph.disconnect(out1, in2));
+    }
+
+    #[test]
+    fn test_disconnect_nonexistent_edge() {
+        let mut graph = PipelineGraph::new();
+        let n1 = graph.add_node("p1".into(), "n1".into());
+        let n2 = graph.add_node("p2".into(), "n2".into());
+        let out1 = graph.node(n1).unwrap().outputs[0];
+        let in2 = graph.node(n2).unwrap().inputs[0];
+        assert!(!graph.disconnect(out1, in2));
+    }
+
+    #[test]
+    fn test_remove_node_removes_from_list() {
+        let mut graph = PipelineGraph::new();
+        let n1 = graph.add_node("p1".into(), "n1".into());
+        let n2 = graph.add_node("p2".into(), "n2".into());
+        graph.remove_node(n1);
+        assert_eq!(graph.nodes.len(), 1);
+        assert_eq!(graph.nodes[0].id, n2);
+    }
+
+    #[test]
+    fn test_validate_empty_graph_ok() {
+        let graph = PipelineGraph::new();
+        assert!(graph.validate_graph().is_ok());
+    }
+
+    #[test]
+    fn test_validate_single_node_no_edges_ok() {
+        let mut graph = PipelineGraph::new();
+        graph.add_node("p1".into(), "n1".into());
+        assert!(graph.validate_graph().is_ok());
+    }
+
+    #[test]
+    fn test_validate_duplicate_node_ids_error() {
+        let mut graph = PipelineGraph::new();
+        let id = graph.add_node("p1".into(), "n1".into());
+        graph.add_node("p2".into(), "n2".into());
+        if let Some(node) = graph.node_mut(id) {
+            node.position = (10.0, 20.0);
+        }
+        assert!(graph.node(id).is_some());
+    }
+
+    #[test]
+    fn test_pipeline_node_default_position() {
+        let mut graph = PipelineGraph::new();
+        let id = graph.add_node("p1".into(), "n1".into());
+        let node = graph.node(id).unwrap();
+        assert_eq!(node.position, (0.0, 0.0));
+    }
+
+    #[test]
+    fn test_pipeline_node_custom_position() {
+        let mut graph = PipelineGraph::new();
+        let id = graph.add_node("p1".into(), "n1".into());
+        if let Some(node) = graph.node_mut(id) {
+            node.position = (100.0, 200.0);
+        }
+        let node = graph.node(id).unwrap();
+        assert_eq!(node.position, (100.0, 200.0));
+    }
+
+    #[test]
+    fn test_pipeline_node_default_enabled() {
+        let mut graph = PipelineGraph::new();
+        let id = graph.add_node("p1".into(), "n1".into());
+        assert!(graph.node(id).unwrap().enabled);
+    }
+
+    #[test]
+    fn test_pipeline_node_label() {
+        let mut graph = PipelineGraph::new();
+        let id = graph.add_node("p1".into(), "MyNode".into());
+        assert_eq!(graph.node(id).unwrap().label, "MyNode");
+    }
+
+    #[test]
+    fn test_pipeline_node_plugin_id() {
+        let mut graph = PipelineGraph::new();
+        let id = graph.add_node("colorspace".into(), "CS".into());
+        assert_eq!(graph.node(id).unwrap().plugin_id, "colorspace");
+    }
+
+    #[test]
+    fn test_batch_config_default() {
+        let config = BatchConfig {
+            parallel: 4,
+            output_pattern: Some("{name}_out".into()),
+            on_conflict: Some("skip".into()),
+            resume: true,
+        };
+        assert_eq!(config.parallel, 4);
+        assert!(config.resume);
+    }
+
+    #[test]
+    fn test_batch_config_serde_roundtrip() {
+        let config = BatchConfig {
+            parallel: 8,
+            output_pattern: Some("out/{name}".into()),
+            on_conflict: None,
+            resume: false,
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        let config2: BatchConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(config2.parallel, 8);
+        assert_eq!(config2.output_pattern, Some("out/{name}".into()));
+    }
+
+    #[test]
+    fn test_template_empty_nodes_validate_fails() {
+        let template = PipelineTemplate {
+            metadata: Default::default(),
+            nodes: vec![],
+            edges: vec![],
+            overrides: vec![],
+            groups: vec![],
+            batch: None,
+        };
+        assert!(template.validate().is_err());
+    }
+
+    #[test]
+    fn test_template_metadata_fields() {
+        let meta = TemplateMetadata {
+            name: Some("My Pipeline".into()),
+            version: Some("1.0".into()),
+            description: Some("A test pipeline".into()),
+        };
+        assert_eq!(meta.name, Some("My Pipeline".into()));
+    }
+
+    #[test]
+    fn test_image_override_fields() {
+        let mut params = std::collections::HashMap::new();
+        params.insert("colorspace".into(), ParameterSet::new());
+        let ov = ImageOverride { image: "img1.jpg".into(), params };
+        assert_eq!(ov.image, "img1.jpg");
+    }
+
+    #[test]
+    fn test_param_group_fields() {
+        let group = ParamGroup {
+            name: "High ISO".into(),
+            condition: "exif.iso > 800".into(),
+            params: Default::default(),
+        };
+        assert_eq!(group.name, "High ISO");
+        assert_eq!(group.condition, "exif.iso > 800");
+    }
 }
