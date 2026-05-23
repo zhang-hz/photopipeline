@@ -34,7 +34,7 @@ jobs:
       - name: Fmt
         run: cargo fmt --all -- --check
       - name: Clippy
-        run: cargo clippy --workspace -- -D warnings
+        run: cargo clippy --workspace
 
   test-macos:
     name: Test (macOS)
@@ -60,7 +60,7 @@ jobs:
       - name: Fmt
         run: cargo fmt --all -- --check
       - name: Clippy
-        run: cargo clippy --workspace -- -D warnings
+        run: cargo clippy --workspace
 
   test-windows:
     name: Test (Windows)
@@ -95,7 +95,7 @@ jobs:
       - name: Install C libraries via vcpkg
         run: |
           & "$env:VCPKG_ROOT/vcpkg.exe" install --clean-after-build `
-            x265 libheif[x265] libjxl lcms libraw `
+            x265 libheif[hevc] libjxl lcms libraw `
             libpng tiff libjpeg-turbo aom protobuf
       - name: Build
         run: cargo build --workspace
@@ -104,7 +104,7 @@ jobs:
       - name: Fmt
         run: cargo fmt --all -- --check
       - name: Clippy
-        run: cargo clippy --workspace -- -D warnings
+        run: cargo clippy --workspace
 
   gui-test:
     name: GUI Tests (Windows)

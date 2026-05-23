@@ -132,7 +132,7 @@ jobs:
       - name: Install C libraries via vcpkg
         run: |
           & "$env:VCPKG_ROOT/vcpkg.exe" install --clean-after-build `
-            x265 libheif[x265] libjxl lcms libraw `
+            x265 libheif[hevc] libjxl lcms libraw `
             libpng tiff libjpeg-turbo aom protobuf
       - name: Build release
         run: cargo build --release --workspace
