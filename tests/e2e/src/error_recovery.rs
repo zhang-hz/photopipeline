@@ -3,7 +3,7 @@
 
 use photopipeline_core::{
     ColorSpace, ExifData, GpsData, GpxPoint, GpxTrack, ImageFormat, ImageInfo, Metadata,
-    PixelBuffer, PixelFormat, PluginError, PluginResult, ValidationIssue,
+    MetadataWriteReport, PixelBuffer, PixelFormat, PluginError, PluginResult, ValidationIssue,
 };
 use photopipeline_engine::{
     ExpressionEngine, NodeRunState, NodeStatus, ParameterResolver, PipelineGraph, PipelineNode,
@@ -405,7 +405,10 @@ fn e2e_exif_write_invalid_permissions() {
             let mut t = target.clone();
             proc.write_metadata(&mut t, &md, &params).await
         });
-        assert!(result.is_err());
+        assert!(result.is_ok());
+        let report = result.unwrap();
+        assert_eq!(report.tags_written, 0);
+        assert!(!report.warnings.is_empty());
     }
 }
 

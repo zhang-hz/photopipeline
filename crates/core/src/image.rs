@@ -155,11 +155,13 @@ impl AlignedBuffer {
     }
 
     pub fn as_u16_slice(&self) -> &[u16] {
-        bytemuck::cast_slice(&self.data)
+        let len = self.data.len() / std::mem::size_of::<u16>();
+        bytemuck::cast_slice(&self.data[..len * std::mem::size_of::<u16>()])
     }
 
     pub fn as_f32_slice(&self) -> &[f32] {
-        bytemuck::cast_slice(&self.data)
+        let len = self.data.len() / std::mem::size_of::<f32>();
+        bytemuck::cast_slice(&self.data[..len * std::mem::size_of::<f32>()])
     }
 }
 

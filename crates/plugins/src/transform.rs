@@ -670,8 +670,8 @@ impl PixelProcessor for TransformPlugin {
             let rad = angle.to_radians();
             let cos_a = rad.cos().abs();
             let sin_a = rad.sin().abs();
-            let extent_w = (target_w as f64 * cos_a + target_h as f64 * sin_a).ceil() as u32;
-            let extent_h = (target_w as f64 * sin_a + target_h as f64 * cos_a).ceil() as u32;
+            let extent_w = (target_w as f64 * cos_a + target_h as f64 * sin_a).round() as u32;
+            let extent_h = (target_w as f64 * sin_a + target_h as f64 * cos_a).round() as u32;
             target_w = extent_w.max(1);
             target_h = extent_h.max(1);
         }
@@ -693,6 +693,9 @@ impl PixelProcessor for TransformPlugin {
 
         let in_stride = input.width as usize * channels;
         let out_stride = target_w as usize * channels;
+        let expected_bytes =
+            target_w as usize * target_h as usize * channels * input.format.bytes_per_channel();
+        output.data.data.resize(expected_bytes, 0);
 
         match filter {
             "nearest" => {

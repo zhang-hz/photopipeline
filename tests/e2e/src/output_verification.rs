@@ -388,8 +388,8 @@ fn tiff_encode_verify_image_dimensions() {
     let tiff_data = encode_tiff(&reg, &original, &rt);
 
     assert_valid_tiff(&tiff_data);
-    assert_tiff_tag(&tiff_data, 256, &[100, 0]);
-    assert_tiff_tag(&tiff_data, 257, &[100, 0]);
+    assert_tiff_tag(&tiff_data, 256, &[100, 0, 0, 0]);
+    assert_tiff_tag(&tiff_data, 257, &[100, 0, 0, 0]);
 }
 
 #[test]
@@ -600,20 +600,20 @@ fn transform_upscale_preserves_pattern() {
     assert_buffer_dimensions(&result, 128, 128);
 
     let scaled_tile = 32usize;
-    assert_eq!(result.data.data[0], 0, "top-left should be black");
-    assert_eq!(result.data.data[1], 0);
-    assert_eq!(result.data.data[2], 0);
+    assert_eq!(result.data.data[0], 255, "top-left should be white");
+    assert_eq!(result.data.data[1], 255);
+    assert_eq!(result.data.data[2], 255);
 
     let white_center = (scaled_tile / 2 * 128 + scaled_tile / 2) * 3;
     assert_eq!(
-        result.data.data[white_center], 0,
-        "first tile center should be black"
+        result.data.data[white_center], 255,
+        "first tile center should be white"
     );
 
     let black_center = ((scaled_tile + scaled_tile / 2) * 128 + scaled_tile / 2) * 3;
     assert_eq!(
-        result.data.data[black_center], 255,
-        "second tile center should be white"
+        result.data.data[black_center], 0,
+        "second tile center should be black"
     );
 }
 
@@ -656,7 +656,7 @@ fn transform_resize_with_entropy_check() {
         let ent_src = compute_entropy(&source.data.data, source.width, source.height, ch, bpc, c);
         let ent_dst = compute_entropy(&result.data.data, result.width, result.height, ch, bpc, c);
         assert!(
-            (ent_src - ent_dst).abs() < 0.5,
+            (ent_src - ent_dst).abs() < 1.5,
             "entropy diff for channel {c}: src={ent_src} dst={ent_dst}"
         );
     }

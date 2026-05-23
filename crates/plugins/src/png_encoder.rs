@@ -11,7 +11,7 @@ use photopipeline_plugin::{
     EnumOption, FormatProcessor, GuiLayout, GuiSchema, GuiSection, ParameterField, ParameterSchema,
     ParameterSection, ParameterSet, ParameterType, Plugin, PreviewMode, SectionStyle,
 };
-use png::{BitDepth, ColorType, Compression, Encoder};
+use png::{BitDepth, ColorType, Compression, Decoder, Encoder};
 
 static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterSchema {
     version: 1,
@@ -436,210 +436,57 @@ impl FormatProcessor for PngEncoderPlugin {
 }
 
 fn decode_png(data: &[u8]) -> PluginResult<DecodedImage> {
-    let sig: [u8; 8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-    if data.len() < 8 || data[..8] != sig {
-        return Err(PluginError::DecodingFailed("not a PNG file".into()));
-    }
+    let decoder = Decoder::new(data);
+    let mut reader = decoder
+        .read_info()
+        .map_err(|e| PluginError::DecodingFailed(format!("PNG decode: {}", e)))?;
+    let mut buf = vec![0; reader.output_buffer_size()];
+    let info = reader
+        .next_frame(&mut buf)
+        .map_err(|e| PluginError::DecodingFailed(format!("PNG decode frame: {}", e)))?;
 
-    let mut pos: usize = 8;
-    let mut width: u32 = 0;
-    let mut height: u32 = 0;
-    let mut bit_depth: u8 = 0;
-    let mut color_type: u8 = 0;
-    let mut idat_data: Vec<u8> = Vec::new();
-
-    while pos + 12 <= data.len() {
-        let len =
-            u32::from_be_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]]) as usize;
-        let chunk_type = &data[pos + 4..pos + 8];
-        pos += 8;
-        if pos + len + 4 > data.len() {
-            return Err(PluginError::DecodingFailed("truncated PNG chunk".into()));
+    let channels: usize = match info.color_type {
+        ColorType::Grayscale => 1,
+        ColorType::Rgb => 3,
+        ColorType::GrayscaleAlpha => 2,
+        ColorType::Rgba => 4,
+        _ => {
+            return Err(PluginError::DecodingFailed(format!(
+                "unsupported color type {:?}",
+                info.color_type
+            )));
         }
-        let chunk_data = &data[pos..pos + len];
-
-        match chunk_type {
-            b"IHDR" if len >= 13 => {
-                width = u32::from_be_bytes([
-                    chunk_data[0],
-                    chunk_data[1],
-                    chunk_data[2],
-                    chunk_data[3],
-                ]);
-                height = u32::from_be_bytes([
-                    chunk_data[4],
-                    chunk_data[5],
-                    chunk_data[6],
-                    chunk_data[7],
-                ]);
-                bit_depth = chunk_data[8];
-                color_type = chunk_data[9];
-            }
-            b"IDAT" => {
-                idat_data.extend_from_slice(chunk_data);
-            }
-            b"IEND" => break,
-            _ => {}
-        }
-
-        pos += len + 4;
-    }
-
-    if width == 0 || height == 0 {
-        return Err(PluginError::DecodingFailed(
-            "missing or invalid IHDR".into(),
-        ));
-    }
-    if idat_data.is_empty() {
-        return Err(PluginError::DecodingFailed("no IDAT data found".into()));
-    }
-    if !matches!(color_type, 2 | 6 | 0 | 4) {
-        return Err(PluginError::DecodingFailed(format!(
-            "unsupported color type {}",
-            color_type
-        )));
-    }
-    if !matches!(bit_depth, 8 | 16) {
-        return Err(PluginError::DecodingFailed(format!(
-            "unsupported bit depth {}",
-            bit_depth
-        )));
-    }
-
-    let channels: usize = match color_type {
-        2 => 3,
-        6 => 4,
-        0 => 1,
-        4 => 2,
-        _ => unreachable!(),
     };
 
-    let raw_filtered = inflate_zlib(&idat_data).map_err(|e| PluginError::DecodingFailed(e))?;
-
-    let bytes_per_sample = bit_depth as usize / 8;
-    let row_bytes_raw = width as usize * channels * bytes_per_sample;
-    let expected_raw = row_bytes_raw * height as usize + height as usize;
-    if raw_filtered.len() < expected_raw {
-        return Err(PluginError::DecodingFailed(
-            "decompressed data too short".into(),
-        ));
-    }
-
-    let mut pixel_data = vec![0u8; row_bytes_raw * height as usize];
-    for y in 0..height as usize {
-        let row_start = y * (row_bytes_raw + 1);
-        let filter = raw_filtered[row_start];
-        let filtered = &raw_filtered[row_start + 1..row_start + 1 + row_bytes_raw];
-        let out_start = y * row_bytes_raw;
-        match filter {
-            0 => {
-                pixel_data[out_start..out_start + row_bytes_raw].copy_from_slice(filtered);
-            }
-            1 => {
-                for x in 0..row_bytes_raw {
-                    let left = if x >= bytes_per_sample {
-                        pixel_data[out_start + x - bytes_per_sample] as u32
-                    } else {
-                        0
-                    };
-                    pixel_data[out_start + x] = (filtered[x] as u32 + left) as u8 & 0xFF;
-                }
-            }
-            2 => {
-                let prev = if y > 0 { out_start - row_bytes_raw } else { 0 };
-                if y > 0 {
-                    for x in 0..row_bytes_raw {
-                        let above = pixel_data[prev + x] as u32;
-                        pixel_data[out_start + x] = (filtered[x] as u32 + above) as u8 & 0xFF;
-                    }
-                } else {
-                    pixel_data[out_start..out_start + row_bytes_raw].copy_from_slice(filtered);
-                }
-            }
-            3 => {
-                let prev = if y > 0 { out_start - row_bytes_raw } else { 0 };
-                for x in 0..row_bytes_raw {
-                    let left = if x >= bytes_per_sample {
-                        pixel_data[out_start + x - bytes_per_sample] as u32
-                    } else {
-                        0
-                    };
-                    let above = if y > 0 {
-                        pixel_data[prev + x] as u32
-                    } else {
-                        0
-                    };
-                    pixel_data[out_start + x] =
-                        (filtered[x] as u32 + ((left + above) / 2)) as u8 & 0xFF;
-                }
-            }
-            4 => {
-                let prev = if y > 0 { out_start - row_bytes_raw } else { 0 };
-                for x in 0..row_bytes_raw {
-                    let left = if x >= bytes_per_sample {
-                        pixel_data[out_start + x - bytes_per_sample] as i32
-                    } else {
-                        0
-                    };
-                    let above = if y > 0 {
-                        pixel_data[prev + x] as i32
-                    } else {
-                        0
-                    };
-                    let above_left = if y > 0 && x >= bytes_per_sample {
-                        pixel_data[prev + x - bytes_per_sample] as i32
-                    } else {
-                        0
-                    };
-                    let p = left + above - above_left;
-                    let pa = (p - left).abs();
-                    let pb = (p - above).abs();
-                    let pc = (p - above_left).abs();
-                    let pr = if pa <= pb && pa <= pc {
-                        left
-                    } else if pb <= pc {
-                        above
-                    } else {
-                        above_left
-                    };
-                    pixel_data[out_start + x] = (filtered[x] as i32 + pr) as u8 & 0xFF;
-                }
-            }
-            _ => {
-                return Err(PluginError::DecodingFailed(format!(
-                    "unknown filter type {}",
-                    filter
-                )));
-            }
-        }
-    }
-
-    let layout = match color_type {
-        2 => ChannelLayout::RGB,
-        6 => ChannelLayout::RGBA,
-        0 => ChannelLayout::Gray,
-        4 => ChannelLayout::GrayAlpha,
+    let layout = match info.color_type {
+        ColorType::Grayscale => ChannelLayout::Gray,
+        ColorType::Rgb => ChannelLayout::RGB,
+        ColorType::GrayscaleAlpha => ChannelLayout::GrayAlpha,
+        ColorType::Rgba => ChannelLayout::RGBA,
         _ => ChannelLayout::RGB,
     };
-    let format = match bit_depth {
-        16 => CorePixelFormat::U16,
-        _ => CorePixelFormat::U8,
+
+    let format = match info.bit_depth {
+        BitDepth::Eight => CorePixelFormat::U8,
+        BitDepth::Sixteen => CorePixelFormat::U16,
+        _ => {
+            return Err(PluginError::DecodingFailed(format!(
+                "unsupported bit depth {:?}",
+                info.bit_depth
+            )));
+        }
     };
-    let actual_row_bytes = width as usize * channels * format.bytes_per_channel();
-    let total = actual_row_bytes * height as usize;
 
-    if total > pixel_data.len() {
-        return Err(PluginError::DecodingFailed(
-            "pixel data size mismatch".into(),
-        ));
-    }
+    let expected =
+        info.width as usize * info.height as usize * channels * format.bytes_per_channel();
+    let actual = buf.len().min(expected);
 
-    let mut aligned = AlignedBuffer::new(total, 64);
-    aligned.data[..total].copy_from_slice(&pixel_data[..total]);
+    let mut aligned = AlignedBuffer::new(expected, 64);
+    aligned.data[..actual].copy_from_slice(&buf[..actual]);
 
     let buffer = PixelBuffer {
-        width,
-        height,
+        width: info.width,
+        height: info.height,
         layout,
         format,
         color_space: ColorSpace::default(),
@@ -652,11 +499,6 @@ fn decode_png(data: &[u8]) -> PluginResult<DecodedImage> {
         metadata: Metadata::default(),
         format: ImageFormat::PNG,
     })
-}
-
-fn inflate_zlib(data: &[u8]) -> Result<Vec<u8>, String> {
-    use miniz_oxide::inflate::decompress_to_vec_zlib;
-    decompress_to_vec_zlib(data).map_err(|e| format!("zlib decompression failed: {}", e))
 }
 
 static TAGS: LazyLock<Vec<String>> = LazyLock::new(|| {
