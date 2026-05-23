@@ -3,6 +3,7 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -52,6 +53,9 @@ jobs:
       - name: Build Rust release binary
         run: cargo build --release --workspace
 
+      - name: Smoke test
+        run: ./target/release/photopipeline --version
+
       - name: Setup .NET 8 SDK
         if: runner.os == 'Windows'
         uses: actions/setup-dotnet@v4
@@ -67,14 +71,14 @@ jobs:
         run: |
           mkdir -p release
           cp target/release/photopipeline release/
-          tar -czf ${{ matrix.artifact }}.tar.gz -C release .
+          tar -czf photopipeline-${{ github.ref_name }}-linux-x86_64.tar.gz -C release .
 
       - name: Package (macOS)
         if: runner.os == 'macOS'
         run: |
           mkdir -p dmg_root
           cp target/release/photopipeline dmg_root/
-          hdiutil create -volname Photopipeline -srcfolder dmg_root -ov -format UDZO ${{ matrix.artifact }}.dmg
+          hdiutil create -volname Photopipeline -srcfolder dmg_root -ov -format UDZO photopipeline-${{ github.ref_name }}-macos.dmg
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
@@ -82,13 +86,13 @@ jobs:
           mkdir release
           copy target\release\photopipeline.exe release\
           if exist publish\win-x64 xcopy /E /I publish\win-x64 release\win-x64
-          Compress-Archive -Path release\* -DestinationPath ${{ matrix.artifact }}.zip
+          Compress-Archive -Path release\* -DestinationPath photopipeline-${{ github.ref_name }}-windows-x86_64.zip
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: ${{ matrix.artifact }}.${{ matrix.ext }}
+          name: photopipeline-${{ github.ref_name }}-${{ matrix.os }}
+          path: photopipeline-${{ github.ref_name }}-*.${{ matrix.ext }}
 
   publish:
     name: Publish Release

@@ -3,8 +3,8 @@ use std::sync::LazyLock;
 
 use photopipeline_core::{
     ChannelLayout, ColorSpace, GpuBackend, HardwareRequirement, PerfTimer, PixelBuffer,
-    PixelFormat, PluginCategory, PluginId, PluginResult, PluginVersion, ProcessingStats,
-    ValidationIssue,
+    PixelFormat, PluginCategory, PluginError, PluginId, PluginResult, PluginVersion,
+    ProcessingStats, RenderingIntent, ValidationIssue,
 };
 use photopipeline_plugin::{
     AuxView, EnumOption, GuiLayout, GuiSchema, GuiSection, ParameterField, ParameterSchema,
@@ -540,6 +540,16 @@ impl PixelProcessor for ColorSpacePlugin {
             .map(|v| v.as_bool().unwrap_or(true))
             .unwrap_or(true);
 
+        let intent = match params
+            .get_str("rendering_intent")
+            .unwrap_or("relative_colorimetric")
+        {
+            "perceptual" => RenderingIntent::Perceptual,
+            "saturation" => RenderingIntent::Saturation,
+            "absolute_colorimetric" => RenderingIntent::AbsoluteColorimetric,
+            _ => RenderingIntent::RelativeColorimetric,
+        };
+
         let target_cs = resolve_color_space(target_str);
         let source_cs = if source_str == "auto" {
             input.color_space.clone()
@@ -611,6 +621,22 @@ impl PixelProcessor for ColorSpacePlugin {
             }
         }
 
+        if convert_via_lcms2(input, output, &source_cs, &target_cs, intent).is_ok() {
+            if embed_icc {
+                output.icc_profile = Some(generate_icc_profile(&source_cs, &target_cs));
+            }
+            let pixels = output.pixel_count();
+            progress.set_progress(1.0, "done (lcms2)");
+            return Ok(ProcessingStats {
+                elapsed_ms: 0,
+                cpu_time_ms: 0,
+                gpu_time_ms: Some(0),
+                peak_memory_mb: (input.data.data.len() * 2) as u64 / (1024 * 1024),
+                input_pixels: input.pixel_count(),
+                output_pixels: pixels,
+            });
+        }
+
         let copy_len = input.data.data.len().min(output.data.data.len());
         output.data.data[..copy_len].copy_from_slice(&input.data.data[..copy_len]);
         output.color_space = target_cs.clone();
@@ -627,6 +653,135 @@ impl PixelProcessor for ColorSpacePlugin {
             input_pixels: pixels,
             output_pixels: pixels,
         })
+    }
+}
+
+#[cfg(feature = "lcms2-native")]
+mod lcms2_ffi {
+    use std::ffi::{c_uint, c_void};
+
+    pub type CmsHPROFILE = *mut c_void;
+    pub type CmsHTRANSFORM = *mut c_void;
+
+    pub const TYPE_RGB_8: c_uint = 0x1906;
+    pub const TYPE_RGB_16: c_uint = 0x1A06;
+    pub const TYPE_RGBA_8: c_uint = 0x1908;
+    pub const TYPE_RGBA_16: c_uint = 0x1A08;
+    pub const TYPE_GRAY_8: c_uint = 0x1901;
+    pub const TYPE_GRAY_16: c_uint = 0x1A01;
+    pub const TYPE_RGB_FLT: c_uint = 0x1606;
+
+    pub const INTENT_PERCEPTUAL: c_uint = 0;
+    pub const INTENT_RELATIVE_COLORIMETRIC: c_uint = 1;
+    pub const INTENT_SATURATION: c_uint = 2;
+    pub const INTENT_ABSOLUTE_COLORIMETRIC: c_uint = 3;
+
+    #[link(name = "lcms2")]
+    extern "C" {
+        pub fn cmsCreate_sRGBProfile() -> CmsHPROFILE;
+        pub fn cmsOpenProfileFromMem(data: *const c_void, size: c_uint) -> CmsHPROFILE;
+        pub fn cmsCloseProfile(h: CmsHPROFILE);
+        pub fn cmsCreateTransform(
+            input: CmsHPROFILE,
+            input_format: c_uint,
+            output: CmsHPROFILE,
+            output_format: c_uint,
+            intent: c_uint,
+            flags: c_uint,
+        ) -> CmsHTRANSFORM;
+        pub fn cmsDeleteTransform(h: CmsHTRANSFORM);
+        pub fn cmsDoTransform(
+            transform: CmsHTRANSFORM,
+            input: *const c_void,
+            output: *mut c_void,
+            size: c_uint,
+        );
+    }
+}
+
+fn convert_via_lcms2(
+    _input: &PixelBuffer,
+    _output: &mut PixelBuffer,
+    _source_space: &ColorSpace,
+    _target_space: &ColorSpace,
+    _intent: RenderingIntent,
+) -> PluginResult<()> {
+    #[cfg(not(feature = "lcms2-native"))]
+    {
+        Err(PluginError::Internal {
+            plugin: "colorspace".into(),
+            message: "lcms2 native not compiled".into(),
+        })
+    }
+
+    #[cfg(feature = "lcms2-native")]
+    unsafe {
+        use lcms2_ffi::*;
+
+        let src_profile = cmsCreate_sRGBProfile();
+        let dst_profile = cmsCreate_sRGBProfile();
+
+        if src_profile.is_null() || dst_profile.is_null() {
+            return Err(PluginError::Internal {
+                plugin: "colorspace".into(),
+                message: "failed to create profiles".into(),
+            });
+        }
+
+        let (pixel_format, _channels) = match (_input.format, _input.layout) {
+            (PixelFormat::U8, ChannelLayout::RGB) => (TYPE_RGB_8, 3usize),
+            (PixelFormat::U16, ChannelLayout::RGB) => (TYPE_RGB_16, 3),
+            (PixelFormat::U8, ChannelLayout::RGBA) => (TYPE_RGBA_8, 4),
+            (PixelFormat::U16, ChannelLayout::RGBA) => (TYPE_RGBA_16, 4),
+            (PixelFormat::U8, ChannelLayout::Gray) => (TYPE_GRAY_8, 1),
+            (PixelFormat::U16, ChannelLayout::Gray) => (TYPE_GRAY_16, 1),
+            (PixelFormat::F32, _) => (TYPE_RGB_FLT, 3),
+            _ => (TYPE_RGB_8, 3),
+        };
+
+        let intent_val = match _intent {
+            RenderingIntent::Perceptual => INTENT_PERCEPTUAL,
+            RenderingIntent::RelativeColorimetric => INTENT_RELATIVE_COLORIMETRIC,
+            RenderingIntent::Saturation => INTENT_SATURATION,
+            RenderingIntent::AbsoluteColorimetric => INTENT_ABSOLUTE_COLORIMETRIC,
+        };
+
+        let transform = cmsCreateTransform(
+            src_profile,
+            pixel_format,
+            dst_profile,
+            pixel_format,
+            intent_val,
+            0,
+        );
+        if transform.is_null() {
+            cmsCloseProfile(src_profile);
+            cmsCloseProfile(dst_profile);
+            return Err(PluginError::Internal {
+                plugin: "colorspace".into(),
+                message: "failed to create transform".into(),
+            });
+        }
+
+        let pixel_count = (_input.width as usize * _input.height as usize) as c_uint;
+        cmsDoTransform(
+            transform,
+            _input.data.data.as_ptr() as *const c_void,
+            _output.data.data.as_mut_ptr() as *mut c_void,
+            pixel_count,
+        );
+
+        cmsDeleteTransform(transform);
+        cmsCloseProfile(src_profile);
+        cmsCloseProfile(dst_profile);
+
+        _output.width = _input.width;
+        _output.height = _input.height;
+        _output.layout = _input.layout;
+        _output.format = _input.format;
+        _output.color_space = _target_space.clone();
+
+        Ok(())
     }
 }
 

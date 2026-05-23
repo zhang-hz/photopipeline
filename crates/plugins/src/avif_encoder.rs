@@ -2,14 +2,16 @@ use async_trait::async_trait;
 use std::sync::LazyLock;
 
 use photopipeline_core::{
-    DecodeOptions, DecodedImage, EncodeOptions, FormatProbe, HardwareRequirement, ImageFormat,
-    Metadata, PixelBuffer, PluginCategory, PluginError, PluginId, PluginResult, PluginVersion,
-    ValidationIssue,
+    ChannelLayout, DecodeOptions, DecodedImage, EncodeOptions, FormatProbe, HardwareRequirement,
+    ImageFormat, Metadata, PerfTimer, PixelBuffer, PixelFormat, PluginCategory, PluginError,
+    PluginId, PluginResult, PluginVersion, ValidationIssue,
 };
 use photopipeline_plugin::{
     EnumOption, FormatProcessor, GuiLayout, GuiSchema, GuiSection, ParameterField, ParameterSchema,
     ParameterSection, ParameterSet, ParameterType, Plugin, PreviewMode, SectionStyle,
 };
+use ravif::{Encoder as AvifEncoder, Img};
+use rgb::FromSlice;
 
 static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterSchema {
     version: 1,
@@ -160,39 +162,21 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
             icon: None,
             collapsible: true,
             default_collapsed: true,
-            fields: vec![
-                ParameterField {
-                    id: "lossless".into(),
-                    label: "Lossless".into(),
-                    description: Some("Use lossless compression".into()),
-                    help_url: None,
-                    field_type: ParameterType::Boolean {
-                        label_true: Some("Lossless".into()),
-                        label_false: Some("Lossy".into()),
-                    },
-                    default: serde_json::json!(false),
-                    required: false,
-                    advanced: true,
-                    allow_override: true,
-                    supports_expression: false,
+            fields: vec![ParameterField {
+                id: "lossless".into(),
+                label: "Lossless".into(),
+                description: Some("Use lossless compression".into()),
+                help_url: None,
+                field_type: ParameterType::Boolean {
+                    label_true: Some("Lossless".into()),
+                    label_false: Some("Lossy".into()),
                 },
-                ParameterField {
-                    id: "avifenc_path".into(),
-                    label: "avifenc Path".into(),
-                    description: Some("Custom path to avifenc/avifenc binary".into()),
-                    help_url: None,
-                    field_type: ParameterType::String {
-                        max_length: 1024,
-                        pattern: None,
-                        placeholder: Some("/usr/bin/avifenc".into()),
-                    },
-                    default: serde_json::json!("avifenc"),
-                    required: false,
-                    advanced: true,
-                    allow_override: true,
-                    supports_expression: false,
-                },
-            ],
+                default: serde_json::json!(false),
+                required: false,
+                advanced: true,
+                allow_override: true,
+                supports_expression: false,
+            }],
         },
     ],
 });
@@ -258,7 +242,7 @@ impl Plugin for AvifEncoderPlugin {
         PluginCategory::Format
     }
     fn description(&self) -> &str {
-        "Encode images in AVIF format using libavif (AV1)"
+        "Encode images in AVIF format using ravif (pure-Rust AV1)"
     }
     fn tags(&self) -> &[String] {
         &TAGS
@@ -284,7 +268,7 @@ impl Plugin for AvifEncoderPlugin {
     }
 
     async fn initialize(&mut self, _cfg: &photopipeline_plugin::PluginConfig) -> PluginResult<()> {
-        tracing::info!("avif_encoder plugin initialized (avifenc required)");
+        tracing::info!("avif_encoder plugin initialized (ravif)");
         Ok(())
     }
 
@@ -364,150 +348,75 @@ impl FormatProcessor for AvifEncoderPlugin {
     async fn encode(
         &self,
         image: &PixelBuffer,
-        metadata: &Metadata,
+        _metadata: &Metadata,
         options: &EncodeOptions,
     ) -> PluginResult<Vec<u8>> {
-        let _timer =
-            photopipeline_core::PerfTimer::with_target("avif_encode", "plugin.avif_encoder");
-        let quality = options.quality.unwrap_or(85.0);
+        let _timer = PerfTimer::with_target("encode_avif", &format!("plugins.{}", self.id()));
+
+        let quality = options.quality.unwrap_or(80.0);
+        let speed = options
+            .effort
+            .map(|e| (10 - e.min(9)).max(1) as u8)
+            .unwrap_or(5);
+
+        let result = match (image.layout, image.format) {
+            (ChannelLayout::RGB, PixelFormat::U8) => {
+                let pixels = image.data.data.as_rgb();
+                let img = Img::new(pixels, image.width as usize, image.height as usize);
+                AvifEncoder::new()
+                    .with_quality(quality)
+                    .with_speed(speed)
+                    .encode_rgb(img)
+            }
+            (ChannelLayout::RGBA, PixelFormat::U8) => {
+                let pixels = image.data.data.as_rgba();
+                let img = Img::new(pixels, image.width as usize, image.height as usize);
+                AvifEncoder::new()
+                    .with_quality(quality)
+                    .with_alpha_quality(quality)
+                    .with_speed(speed)
+                    .encode_rgba(img)
+            }
+            (ChannelLayout::RGB, PixelFormat::U16) => {
+                let data_u16: &[u16] = bytemuck::cast_slice(&image.data.data);
+                let u8_data: Vec<u8> = data_u16.iter().map(|&v| (v >> 8) as u8).collect();
+                let pixels = u8_data.as_rgb();
+                let img = Img::new(pixels, image.width as usize, image.height as usize);
+                AvifEncoder::new()
+                    .with_quality(quality)
+                    .with_speed(speed)
+                    .encode_rgb(img)
+            }
+            (ChannelLayout::RGBA, PixelFormat::U16) => {
+                let data_u16: &[u16] = bytemuck::cast_slice(&image.data.data);
+                let u8_data: Vec<u8> = data_u16.iter().map(|&v| (v >> 8) as u8).collect();
+                let pixels = u8_data.as_rgba();
+                let img = Img::new(pixels, image.width as usize, image.height as usize);
+                AvifEncoder::new()
+                    .with_quality(quality)
+                    .with_alpha_quality(quality)
+                    .with_speed(speed)
+                    .encode_rgba(img)
+            }
+            _ => {
+                return Err(PluginError::EncodingFailed(
+                    "ravif only supports RGB or RGBA U8/U16 input".into(),
+                ));
+            }
+        }
+        .map_err(|e| PluginError::EncodingFailed(format!("ravif encode: {}", e)))?;
+
         tracing::info!(
-            input_dims = format!("{}x{}", image.width, image.height),
-            format = ?image.format,
+            target = format!("plugins.{}", self.id()),
+            width = image.width,
+            height = image.height,
+            output_bytes = result.avif_file.len(),
             quality = quality,
-            "avif_encoder: encoding {}x{} AVIF (q={})",
-            image.width,
-            image.height,
-            quality,
+            "AVIF encoded via ravif"
         );
 
-        if photopipeline_oiio::OiioContext::available() {
-            let tmp_out =
-                std::env::temp_dir().join(format!("pp_oiio_out_{}.avif", std::process::id()));
-            if let Ok(()) = photopipeline_oiio::OiioContext::write_image(
-                &tmp_out.to_string_lossy(),
-                image,
-                metadata,
-            ) {
-                if let Ok(data) = std::fs::read(&tmp_out) {
-                    let _ = std::fs::remove_file(&tmp_out);
-                    return Ok(data);
-                }
-                let _ = std::fs::remove_file(&tmp_out);
-            }
-        }
-
-        let pid = std::process::id();
-        let tmp_input = std::env::temp_dir().join(format!("pp_avif_in_{}.ppm", pid));
-        let tmp_output = std::env::temp_dir().join(format!("pp_avif_out_{}.avif", pid));
-
-        write_ppm_temp(&tmp_input, image)?;
-
-        let mut cmd = std::process::Command::new("avifenc");
-        cmd.arg("-q")
-            .arg(format!("{}", quality as u32))
-            .arg("-s")
-            .arg("6")
-            .arg(&tmp_input)
-            .arg(&tmp_output);
-
-        if let Some(ref exif) = metadata.exif
-            && let Some(ref make) = exif.make
-        {
-            let _ = make;
-        }
-
-        tracing::debug!(
-            tool = "avifenc",
-            quality = quality,
-            input = %tmp_input.display(),
-            output = %tmp_output.display(),
-            "avif_encoder: invoking avifenc to encode",
-        );
-
-        let result = cmd.output();
-
-        let _ = std::fs::remove_file(&tmp_input);
-
-        match result {
-            Ok(output) if output.status.success() => {
-                let data = std::fs::read(&tmp_output).map_err(|e| PluginError::Io {
-                    plugin: self.id.clone(),
-                    error: e,
-                })?;
-                let output_size = data.len();
-                tracing::info!(
-                    output_bytes = output_size,
-                    "avif_encoder: encoded {} bytes",
-                    output_size,
-                );
-                let _ = std::fs::remove_file(&tmp_output);
-                Ok(data)
-            }
-            Ok(output) => {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                tracing::error!(
-                    tool = "avifenc",
-                    exit_code = ?output.status.code(),
-                    stderr = %stderr,
-                    "avif_encoder: avifenc failed with exit code {:?}",
-                    output.status.code(),
-                );
-                let _ = std::fs::remove_file(&tmp_output);
-                Err(PluginError::MissingTool {
-                    plugin: self.id.clone(),
-                    tool: "avifenc".into(),
-                    required: format!(
-                        "libavif encoder ({})",
-                        String::from_utf8_lossy(&output.stderr)
-                    ),
-                })
-            }
-            Err(e) => {
-                tracing::error!(
-                    tool = "avifenc",
-                    error = %e,
-                    "avif_encoder: avifenc invocation failed",
-                );
-                let _ = std::fs::remove_file(&tmp_output);
-                Err(PluginError::Io {
-                    plugin: self.id.clone(),
-                    error: e,
-                })
-            }
-        }
+        Ok(result.avif_file)
     }
-}
-
-fn write_ppm_temp(path: &std::path::Path, image: &PixelBuffer) -> PluginResult<()> {
-    use std::io::Write;
-    if image.format.bytes_per_channel() != 1 {
-        return Err(PluginError::Internal {
-            plugin: PluginId::from("avif_encoder"),
-            message: "ppm pipe only supports 8-bit, use direct libavif API for 16-bit".into(),
-        });
-    }
-    let mut f = std::fs::File::create(path).map_err(|e| PluginError::Io {
-        plugin: PluginId::from("avif_encoder"),
-        error: e,
-    })?;
-    writeln!(f, "P6\n{} {}\n255", image.width, image.height).map_err(|e| PluginError::Io {
-        plugin: PluginId::from("avif_encoder"),
-        error: e,
-    })?;
-
-    let stride = image.width as usize * 3;
-    for y in 0..image.height as usize {
-        let row_start = y * stride;
-        let row_end = row_start + stride;
-        if row_end <= image.data.data.len() {
-            f.write_all(&image.data.data[row_start..row_end])
-                .map_err(|e| PluginError::Io {
-                    plugin: PluginId::from("avif_encoder"),
-                    error: e,
-                })?;
-        }
-    }
-    Ok(())
 }
 
 static TAGS: LazyLock<Vec<String>> = LazyLock::new(|| {

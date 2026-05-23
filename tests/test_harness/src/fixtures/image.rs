@@ -233,6 +233,218 @@ pub fn test_buffer_suite() -> Vec<PixelBuffer> {
         .collect()
 }
 
+fn write_channel_value(data: &mut [u8], offset: usize, bpc: usize, u8_val: u8) {
+    match bpc {
+        1 => data[offset] = u8_val,
+        2 => {
+            let v16 = u8_val as u16 * 257u16;
+            data[offset] = (v16 & 0xFF) as u8;
+            data[offset + 1] = (v16 >> 8) as u8;
+        }
+        4 => {
+            let v32 = u8_val as f32 / 255.0;
+            let bytes = v32.to_le_bytes();
+            data[offset..offset + 4].copy_from_slice(&bytes);
+        }
+        _ => {}
+    }
+}
+
+fn write_u16_value(data: &mut [u8], offset: usize, bpc: usize, u16_val: u16) {
+    match bpc {
+        1 => data[offset] = u16_val.min(255) as u8,
+        2 => {
+            data[offset] = (u16_val & 0xFF) as u8;
+            data[offset + 1] = (u16_val >> 8) as u8;
+        }
+        _ => {}
+    }
+}
+
+pub fn vertical_ramp(width: u32, height: u32, format: PixelFormat) -> PixelBuffer {
+    let mut buf = PixelBuffer::new(width, height, ChannelLayout::RGB, format);
+    let bpc = format.bytes_per_channel();
+    let channels = 3usize;
+
+    for y in 0..height as usize {
+        for x in 0..width as usize {
+            let t = y as f32 / (height as f32).max(1.0);
+            let r = (t * 255.0) as u8;
+            let g = (t * 200.0) as u8;
+            let base = (y * width as usize + x) * channels * bpc;
+            write_channel_value(&mut buf.data.data, base, bpc, r);
+            write_channel_value(&mut buf.data.data, base + bpc, bpc, g);
+            write_channel_value(&mut buf.data.data, base + 2 * bpc, bpc, 128);
+        }
+    }
+
+    buf
+}
+
+pub fn horizontal_ramp(width: u32, height: u32, format: PixelFormat) -> PixelBuffer {
+    let mut buf = PixelBuffer::new(width, height, ChannelLayout::RGB, format);
+    let bpc = format.bytes_per_channel();
+    let channels = 3usize;
+
+    for y in 0..height as usize {
+        for x in 0..width as usize {
+            let t = x as f32 / (width as f32).max(1.0);
+            let r = (t * 255.0) as u8;
+            let base = (y * width as usize + x) * channels * bpc;
+            write_channel_value(&mut buf.data.data, base, bpc, r);
+            write_channel_value(&mut buf.data.data, base + bpc, bpc, 128);
+            write_channel_value(&mut buf.data.data, base + 2 * bpc, bpc, 128);
+        }
+    }
+
+    buf
+}
+
+pub fn diagonal_ramp(width: u32, height: u32) -> PixelBuffer {
+    let mut buf = PixelBuffer::new(width, height, ChannelLayout::RGB, PixelFormat::U8);
+    let channels = 3usize;
+    let max_sum = (width + height - 2).max(1) as usize;
+
+    for y in 0..height as usize {
+        for x in 0..width as usize {
+            let r = ((x + y) * 255 / max_sum.max(1)) as u8;
+            let base = (y * width as usize + x) * channels;
+            buf.data.data[base] = r;
+            buf.data.data[base + 1] = 128;
+            buf.data.data[base + 2] = 128;
+        }
+    }
+
+    buf
+}
+
+pub fn checkerboard_black_white(
+    width: u32,
+    height: u32,
+    tile_size: u32,
+    format: PixelFormat,
+) -> PixelBuffer {
+    let mut buf = PixelBuffer::new(width, height, ChannelLayout::RGB, format);
+    let bpc = format.bytes_per_channel();
+    let channels = 3usize;
+    let max_val: u16 = match bpc {
+        2 => 65535,
+        _ => 255,
+    };
+
+    for y in 0..height as usize {
+        for x in 0..width as usize {
+            let tx = x / tile_size as usize;
+            let ty = y / tile_size as usize;
+            let bright = (tx + ty) % 2 == 0;
+            let val = if bright { max_val } else { 0u16 };
+            let base = (y * width as usize + x) * channels * bpc;
+            write_u16_value(&mut buf.data.data, base, bpc, val);
+            write_u16_value(&mut buf.data.data, base + bpc, bpc, val);
+            write_u16_value(&mut buf.data.data, base + 2 * bpc, bpc, val);
+        }
+    }
+
+    buf
+}
+
+pub fn color_bars(width: u32, height: u32) -> PixelBuffer {
+    let mut buf = PixelBuffer::new(width, height, ChannelLayout::RGB, PixelFormat::U8);
+    let colors: [(u8, u8, u8); 8] = [
+        (255, 255, 255),
+        (255, 255, 0),
+        (0, 255, 255),
+        (0, 255, 0),
+        (255, 0, 255),
+        (255, 0, 0),
+        (0, 0, 255),
+        (0, 0, 0),
+    ];
+    let bar_width = (width as usize / 8).max(1);
+
+    for y in 0..height as usize {
+        for x in 0..width as usize {
+            let bar = (x / bar_width).min(7);
+            let (r, g, b) = colors[bar];
+            let base = (y * width as usize + x) * 3;
+            buf.data.data[base] = r;
+            buf.data.data[base + 1] = g;
+            buf.data.data[base + 2] = b;
+        }
+    }
+
+    buf
+}
+
+pub fn grayscale_steps(width: u32, height: u32, num_steps: u32) -> PixelBuffer {
+    let mut buf = PixelBuffer::new(width, height, ChannelLayout::Gray, PixelFormat::U8);
+    let step_width = (width as usize / num_steps as usize).max(1);
+
+    for y in 0..height as usize {
+        for x in 0..width as usize {
+            let step = (x / step_width).min(num_steps as usize - 1);
+            let val = (step * 255 / (num_steps as usize - 1).max(1)) as u8;
+            let idx = y * width as usize + x;
+            buf.data.data[idx] = val;
+        }
+    }
+
+    buf
+}
+
+pub fn rgb_separation(width: u32, height: u32) -> PixelBuffer {
+    let mut buf = PixelBuffer::new(width, height, ChannelLayout::RGB, PixelFormat::U8);
+    let band_height = (height as usize / 3).max(1);
+
+    for y in 0..height as usize {
+        for x in 0..width as usize {
+            let band = y / band_height;
+            let t = x as f32 / (width as f32).max(1.0);
+            let r = if band == 0 { (t * 255.0) as u8 } else { 0u8 };
+            let g = if band == 1 { (t * 255.0) as u8 } else { 0u8 };
+            let b = if band >= 2 { (t * 255.0) as u8 } else { 0u8 };
+            let base = (y * width as usize + x) * 3;
+            buf.data.data[base] = r;
+            buf.data.data[base + 1] = g;
+            buf.data.data[base + 2] = b;
+        }
+    }
+
+    buf
+}
+
+pub fn known_value_solid(
+    width: u32,
+    height: u32,
+    r: u16,
+    g: u16,
+    b: u16,
+    format: PixelFormat,
+) -> PixelBuffer {
+    let mut buf = PixelBuffer::new(width, height, ChannelLayout::RGB, format);
+    let bpc = format.bytes_per_channel();
+    let channels = 3usize;
+    let (r_val, g_val, b_val) = match bpc {
+        1 => (r.min(255) as u16, g.min(255) as u16, b.min(255) as u16),
+        _ => (r, g, b),
+    };
+
+    for y in 0..height as usize {
+        for x in 0..width as usize {
+            let base = (y * width as usize + x) * channels * bpc;
+            write_u16_value(&mut buf.data.data, base, bpc, r_val);
+            write_u16_value(&mut buf.data.data, base + bpc, bpc, g_val);
+            write_u16_value(&mut buf.data.data, base + 2 * bpc, bpc, b_val);
+        }
+    }
+
+    buf
+}
+
+pub fn known_value_solid_u8(width: u32, height: u32, r: u8, g: u8, b: u8) -> PixelBuffer {
+    known_value_solid(width, height, r as u16, g as u16, b as u16, PixelFormat::U8)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

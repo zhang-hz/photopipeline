@@ -3,6 +3,69 @@ use std::process::Command;
 use std::sync::LazyLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+#[cfg(feature = "libheif-native")]
+mod libheif_ffi {
+    use std::ffi::{c_int, c_uint};
+
+    #[repr(C)]
+    pub struct HeifContext;
+    #[repr(C)]
+    pub struct HeifEncoder;
+    #[repr(C)]
+    pub struct HeifImage;
+
+    #[link(name = "heif")]
+    extern "C" {
+        pub fn heif_context_alloc() -> *mut HeifContext;
+        pub fn heif_context_free(ctx: *mut HeifContext);
+        pub fn heif_context_get_encoder_for_format(
+            ctx: *mut HeifContext,
+            format: c_int,
+        ) -> *mut HeifEncoder;
+        pub fn heif_encoder_set_lossy_quality(enc: *mut HeifEncoder, quality: c_int);
+        pub fn heif_encoder_set_lossless(enc: *mut HeifEncoder, lossless: c_int);
+        pub fn heif_encoder_set_parameter_string(
+            enc: *mut HeifEncoder,
+            name: *const u8,
+            value: *const u8,
+        );
+        pub fn heif_image_create(
+            width: c_int,
+            height: c_int,
+            colorspace: c_int,
+            chroma: c_int,
+            image: *mut *mut HeifImage,
+        );
+        pub fn heif_image_add_plane(
+            image: *mut HeifImage,
+            channel: c_int,
+            width: c_int,
+            height: c_int,
+            bit_depth: c_int,
+        );
+        pub fn heif_image_get_plane(
+            image: *mut HeifImage,
+            channel: c_int,
+            stride: *mut c_int,
+        ) -> *mut u8;
+        pub fn heif_context_encode_image(
+            ctx: *mut HeifContext,
+            image: *mut HeifImage,
+            enc: *mut HeifEncoder,
+            options: *const std::ffi::c_void,
+            output: *mut *mut u8,
+            output_size: *mut usize,
+        );
+        pub fn heif_image_release(image: *mut HeifImage);
+        pub fn heif_encoder_release(enc: *mut HeifEncoder);
+    }
+
+    pub const HEIF_COLOR_SPACE_RGB: c_int = 1;
+    pub const HEIF_CHROMA_444: c_int = 1;
+    pub const HEIF_CHROMA_420: c_int = 2;
+    pub const HEIF_COMPRESSION_HEVC: c_int = 1;
+}
+
 use photopipeline_core::{
     DecodeOptions, DecodedImage, EncodeOptions, FormatProbe, HardwareRequirement, ImageFormat,
     Metadata, PixelBuffer, PluginCategory, PluginError, PluginId, PluginResult, PluginVersion,
@@ -405,6 +468,34 @@ impl FormatProcessor for HeifEncoderPlugin {
 
         let _ = metadata;
 
+        let chroma_str_for_ffi = options
+            .chroma_subsampling
+            .as_ref()
+            .map_or("444", |cs| match cs {
+                photopipeline_core::ChromaSubsampling::Yuv444 => "444",
+                photopipeline_core::ChromaSubsampling::Yuv422 => "422",
+                photopipeline_core::ChromaSubsampling::Yuv420 => "420",
+            });
+        let effort_val = options.effort.unwrap_or(4);
+        match encode_via_libheif(
+            image,
+            quality,
+            lossless,
+            options.bit_depth,
+            chroma_str_for_ffi,
+            effort_val,
+            &self.id,
+        ) {
+            Ok(data) => return Ok(data),
+            Err(e) => {
+                tracing::debug!(
+                    target: "plugins.heif_encoder",
+                    error = ?e,
+                    "libheif FFI not available, falling back to heif-enc CLI"
+                );
+            }
+        }
+
         let mut cmd_args = Vec::new();
 
         if lossless {
@@ -500,6 +591,167 @@ impl FormatProcessor for HeifEncoderPlugin {
                     error: e,
                 })
             }
+        }
+    }
+}
+
+fn encode_via_libheif(
+    image: &PixelBuffer,
+    quality: f32,
+    lossless: bool,
+    bit_depth: u8,
+    chroma_str: &str,
+    effort: u8,
+    plugin_id: &PluginId,
+) -> PluginResult<Vec<u8>> {
+    #[cfg(not(feature = "libheif-native"))]
+    {
+        let _ = (
+            image, quality, lossless, bit_depth, chroma_str, effort, plugin_id,
+        );
+        return Err(PluginError::Internal {
+            plugin: plugin_id.clone(),
+            message: "libheif native not compiled (use heif-enc fallback)".into(),
+        });
+    }
+    #[cfg(feature = "libheif-native")]
+    {
+        use libheif_ffi::*;
+        unsafe {
+            let ctx = heif_context_alloc();
+            if ctx.is_null() {
+                return Err(PluginError::Internal {
+                    plugin: plugin_id.clone(),
+                    message: "failed to allocate heif context".into(),
+                });
+            }
+
+            let width = image.width as c_int;
+            let height = image.height as c_int;
+            let chroma_val = match chroma_str {
+                "420" => HEIF_CHROMA_420,
+                _ => HEIF_CHROMA_444,
+            };
+            let bpc = image.format.bytes_per_channel();
+
+            let mut heif_image: *mut HeifImage = std::ptr::null_mut();
+            heif_image_create(
+                width,
+                height,
+                HEIF_COLOR_SPACE_RGB,
+                chroma_val,
+                &mut heif_image,
+            );
+            if heif_image.is_null() {
+                heif_context_free(ctx);
+                return Err(PluginError::Internal {
+                    plugin: plugin_id.clone(),
+                    message: "failed to create heif image".into(),
+                });
+            }
+
+            let total_pixels = (width * height) as usize;
+            heif_image_add_plane(heif_image, 0, width, height, bit_depth as c_int);
+
+            let mut stride: c_int = 0;
+            let plane = heif_image_get_plane(heif_image, 0, &mut stride);
+            if plane.is_null() {
+                heif_image_release(heif_image);
+                heif_context_free(ctx);
+                return Err(PluginError::Internal {
+                    plugin: plugin_id.clone(),
+                    message: "failed to get heif image plane".into(),
+                });
+            }
+
+            if bpc == 2 {
+                let src = image.data.as_u16_slice();
+                let dst = std::slice::from_raw_parts_mut(plane, total_pixels * 2);
+                let width_u = width as usize;
+                let stride_u = stride as usize;
+                if stride_u == width_u * 2 {
+                    dst[..std::cmp::min(src.len(), dst.len())]
+                        .copy_from_slice(&src[..std::cmp::min(src.len(), dst.len())]);
+                } else {
+                    for y in 0..height as usize {
+                        let src_row = &src[y * width_u * 3..(y + 1) * width_u * 3];
+                        let dst_row = &mut dst[y * stride_u..y * stride_u + width_u * 3 * 2];
+                        // copy interleaved RGB row
+                        let copy_len = std::cmp::min(src_row.len(), dst_row.len());
+                        dst_row[..copy_len].copy_from_slice(&src_row[..copy_len]);
+                    }
+                }
+            } else {
+                let dst = std::slice::from_raw_parts_mut(
+                    plane,
+                    total_pixels * ((bit_depth as usize + 7) / 8),
+                );
+                let width_u = width as usize;
+                let stride_u = stride as usize;
+                if stride_u == width_u * 3 {
+                    let copy_end = std::cmp::min(image.data.data.len(), dst.len());
+                    dst[..copy_end].copy_from_slice(&image.data.data[..copy_end]);
+                } else {
+                    for y in 0..height as usize {
+                        let src_row = &image.data.data[y * width_u * 3..(y + 1) * width_u * 3];
+                        let dst_row = &mut dst[y * stride_u..y * stride_u + width_u * 3];
+                        let copy_len = std::cmp::min(src_row.len(), dst_row.len());
+                        dst_row[..copy_len].copy_from_slice(src_row);
+                    }
+                }
+            }
+
+            let encoder = heif_context_get_encoder_for_format(ctx, HEIF_COMPRESSION_HEVC);
+            if encoder.is_null() {
+                heif_image_release(heif_image);
+                heif_context_free(ctx);
+                return Err(PluginError::Internal {
+                    plugin: plugin_id.clone(),
+                    message: "failed to get hevc encoder".into(),
+                });
+            }
+
+            if lossless {
+                heif_encoder_set_lossless(encoder, 1);
+            } else {
+                heif_encoder_set_lossy_quality(encoder, quality as c_int);
+            }
+
+            let effort_str = format!("{}", effort);
+            heif_encoder_set_parameter_string(
+                encoder,
+                b"effort\0".as_ptr(),
+                effort_str.as_bytes().as_ptr(),
+            );
+
+            let mut output_ptr: *mut u8 = std::ptr::null_mut();
+            let mut output_size: usize = 0;
+            heif_context_encode_image(
+                ctx,
+                heif_image,
+                encoder,
+                std::ptr::null(),
+                &mut output_ptr,
+                &mut output_size,
+            );
+
+            if output_ptr.is_null() || output_size == 0 {
+                heif_encoder_release(encoder);
+                heif_image_release(heif_image);
+                heif_context_free(ctx);
+                return Err(PluginError::Internal {
+                    plugin: plugin_id.clone(),
+                    message: "encode produced no output".into(),
+                });
+            }
+
+            let output = std::slice::from_raw_parts(output_ptr, output_size).to_vec();
+
+            heif_encoder_release(encoder);
+            heif_image_release(heif_image);
+            heif_context_free(ctx);
+
+            Ok(output)
         }
     }
 }

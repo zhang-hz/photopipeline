@@ -12,6 +12,41 @@ use photopipeline_plugin::{
     ParameterSection, ParameterSet, ParameterType, Plugin, PreviewMode, SectionStyle,
 };
 
+#[cfg(feature = "libraw-native")]
+mod libraw_ffi {
+    use std::ffi::{c_char, c_int, c_uint, c_void};
+
+    #[repr(C)]
+    pub struct LibRawData;
+
+    #[link(name = "raw")]
+    extern "C" {
+        pub fn libraw_init(flags: c_uint) -> *mut LibRawData;
+        pub fn libraw_close(lr: *mut LibRawData);
+        pub fn libraw_open_buffer(lr: *mut LibRawData, buffer: *const c_void, size: usize)
+        -> c_int;
+        pub fn libraw_unpack(lr: *mut LibRawData) -> c_int;
+        pub fn libraw_dcraw_process(lr: *mut LibRawData) -> c_int;
+        pub fn libraw_dcraw_make_mem_image(lr: *mut LibRawData) -> *mut LibRawProcessedImage;
+        pub fn libraw_dcraw_clear_mem(image: *mut LibRawProcessedImage);
+
+        pub fn libraw_get_iwidth(lr: *const LibRawData) -> c_int;
+        pub fn libraw_get_iheight(lr: *const LibRawData) -> c_int;
+        pub fn libraw_get_colors(lr: *const LibRawData) -> c_int;
+    }
+
+    #[repr(C)]
+    pub struct LibRawProcessedImage {
+        pub data_type: c_int,
+        pub width: c_int,
+        pub height: c_int,
+        pub colors: c_int,
+        pub data: *mut c_void,
+    }
+
+    pub const LIBRAW_IMAGE_FORMAT_TIFF_LIKE: c_int = 0;
+}
+
 static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterSchema {
     version: 1,
     sections: vec![
@@ -301,6 +336,92 @@ impl Plugin for RawInputPlugin {
     }
 }
 
+fn decode_via_libraw(_data: &[u8], _options: &DecodeOptions) -> PluginResult<DecodedImage> {
+    #[cfg(not(feature = "libraw-native"))]
+    {
+        let _ = (_data, _options);
+        Err(PluginError::Internal {
+            plugin: "raw_input".into(),
+            message: "LibRaw native not compiled".into(),
+        })
+    }
+
+    #[cfg(feature = "libraw-native")]
+    unsafe {
+        use libraw_ffi::*;
+
+        let lr = libraw_init(LIBRAW_IMAGE_FORMAT_TIFF_LIKE as c_uint);
+        if lr.is_null() {
+            return Err(PluginError::Internal {
+                plugin: "raw_input".into(),
+                message: "libraw_init failed".into(),
+            });
+        }
+
+        let ret = libraw_open_buffer(lr, _data.as_ptr() as *const c_void, _data.len());
+        if ret != 0 {
+            libraw_close(lr);
+            return Err(PluginError::DecodingFailed(
+                "libraw_open_buffer failed".into(),
+            ));
+        }
+
+        let ret = libraw_unpack(lr);
+        if ret != 0 {
+            libraw_close(lr);
+            return Err(PluginError::DecodingFailed("libraw_unpack failed".into()));
+        }
+
+        let ret = libraw_dcraw_process(lr);
+        if ret != 0 {
+            libraw_close(lr);
+            return Err(PluginError::DecodingFailed(
+                "libraw_dcraw_process failed".into(),
+            ));
+        }
+
+        let img = libraw_dcraw_make_mem_image(lr);
+        if img.is_null() {
+            libraw_close(lr);
+            return Err(PluginError::DecodingFailed("make_mem_image failed".into()));
+        }
+
+        let width = (*img).width as u32;
+        let height = (*img).height as u32;
+        let colors = (*img).colors as usize;
+
+        let img_size = width as usize * height as usize * colors * 2;
+        let mut pixel_data = vec![0u8; img_size];
+        std::ptr::copy_nonoverlapping((*img).data as *const u8, pixel_data.as_mut_ptr(), img_size);
+
+        libraw_dcraw_clear_mem(img);
+        libraw_close(lr);
+
+        let buffer = PixelBuffer {
+            width,
+            height,
+            layout: if colors == 3 {
+                ChannelLayout::RGB
+            } else {
+                ChannelLayout::Gray
+            },
+            format: PixelFormat::U16,
+            color_space: ColorSpace::SRGB,
+            icc_profile: None,
+            data: AlignedBuffer {
+                data: pixel_data,
+                alignment: 64,
+            },
+        };
+
+        Ok(DecodedImage {
+            buffer,
+            metadata: Metadata::default(),
+            format: ImageFormat::RAW,
+        })
+    }
+}
+
 #[async_trait]
 impl FormatProcessor for RawInputPlugin {
     fn supported_extensions(&self) -> Vec<(&str, &str)> {
@@ -408,6 +529,16 @@ impl FormatProcessor for RawInputPlugin {
         );
         if data.is_empty() {
             return Err(PluginError::DecodingFailed("Empty input data".into()));
+        }
+
+        match decode_via_libraw(data, options) {
+            Ok(image) => return Ok(image),
+            Err(e) => {
+                tracing::debug!(
+                    error = %e,
+                    "raw_input: LibRaw decode failed, falling back to stub"
+                );
+            }
         }
 
         let pixel_format = options.pixel_format.unwrap_or(PixelFormat::U16);

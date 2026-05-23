@@ -1,3 +1,5 @@
+use super::structural::crc32;
+
 pub fn assert_valid_png(data: &[u8]) {
     assert!(
         data.len() >= 8,
@@ -144,21 +146,6 @@ pub fn assert_png_ihdr(
         "IHDR color_type mismatch: expected {}, got {}",
         expected_color_type, color_type
     );
-}
-
-fn crc32(data: &[u8]) -> u32 {
-    let mut crc: u32 = 0xFFFFFFFF;
-    for &byte in data {
-        crc ^= byte as u32;
-        for _ in 0..8 {
-            if crc & 1 != 0 {
-                crc = (crc >> 1) ^ 0xEDB88320;
-            } else {
-                crc >>= 1;
-            }
-        }
-    }
-    !crc
 }
 
 #[cfg(test)]

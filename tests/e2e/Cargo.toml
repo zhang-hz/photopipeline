@@ -48,6 +48,10 @@ path = "src/negative_tests.rs"
 name = "cli_system"
 path = "src/cli_system.rs"
 
+[[test]]
+name = "output_verification"
+path = "src/output_verification.rs"
+
 [dependencies]
 photopipeline-core = { path = "../../crates/core" }
 photopipeline-plugin = { path = "../../crates/plugin" }

@@ -360,6 +360,12 @@ impl FormatProcessor for JxlEncoderPlugin {
             lossless,
         );
 
+        let effort = options.effort.unwrap_or(7);
+
+        if let Ok(data) = encode_via_libjxl(image, quality, lossless, effort) {
+            return Ok(data);
+        }
+
         if photopipeline_oiio::OiioContext::available() {
             let tmp_out =
                 std::env::temp_dir().join(format!("pp_oiio_out_{}.jxl", std::process::id()));
@@ -498,6 +504,153 @@ fn write_temp_rgb(path: &std::path::Path, image: &PixelBuffer) -> PluginResult<(
         }
     }
     Ok(())
+}
+
+#[cfg(feature = "libjxl-native")]
+mod libjxl_ffi {
+    use std::ffi::{c_float, c_int, c_void};
+
+    #[repr(C)]
+    pub struct JxlPixelFormat {
+        pub num_channels: u32,
+        pub data_type: u32,
+        pub endianness: u32,
+        pub align: usize,
+    }
+
+    pub const JXL_TYPE_UINT8: u32 = 0;
+    pub const JXL_TYPE_UINT16: u32 = 1;
+    pub const JXL_TYPE_FLOAT16: u32 = 2;
+    pub const JXL_TYPE_FLOAT: u32 = 3;
+
+    pub const JXL_NATIVE_ENDIAN: u32 = 0;
+
+    pub const JXL_ENC_SUCCESS: c_int = 0;
+    pub const JXL_ENC_ERROR: c_int = 1;
+    pub const JXL_ENC_NEED_MORE_OUTPUT: c_int = 2;
+
+    #[link(name = "jxl")]
+    extern "C" {
+        pub fn JxlEncoderCreate(memory_manager: *const c_void) -> *mut c_void;
+        pub fn JxlEncoderDestroy(enc: *mut c_void);
+        pub fn JxlEncoderSetFrameLossless(enc: *mut c_void, lossless: c_int);
+        pub fn JxlEncoderSetFrameDistance(enc: *mut c_void, distance: c_float);
+        pub fn JxlEncoderSetFrameEffort(enc: *mut c_void, effort: c_int);
+        pub fn JxlEncoderAddImageFrame(
+            enc: *mut c_void,
+            pixel_format: *const JxlPixelFormat,
+            buffer: *const c_void,
+            size: usize,
+        );
+        pub fn JxlEncoderCloseInput(enc: *mut c_void);
+        pub fn JxlEncoderProcessOutput(
+            enc: *mut c_void,
+            next_out: *mut *mut u8,
+            avail_out: *mut usize,
+        ) -> c_int;
+    }
+}
+
+fn encode_via_libjxl(
+    image: &PixelBuffer,
+    quality: f32,
+    lossless: bool,
+    effort: u8,
+) -> PluginResult<Vec<u8>> {
+    #[cfg(not(feature = "libjxl-native"))]
+    {
+        let _ = (image, quality, lossless, effort);
+        Err(PluginError::Internal {
+            plugin: "jxl".into(),
+            message: "libjxl native not compiled".into(),
+        })
+    }
+
+    #[cfg(feature = "libjxl-native")]
+    unsafe {
+        use libjxl_ffi::*;
+
+        let enc = JxlEncoderCreate(std::ptr::null());
+        if enc.is_null() {
+            return Err(PluginError::Internal {
+                plugin: "jxl".into(),
+                message: "JxlEncoderCreate failed".into(),
+            });
+        }
+
+        let result = (|| {
+            if lossless {
+                JxlEncoderSetFrameLossless(enc, 1);
+            } else {
+                let distance: c_float = ((100.0 - quality) / 100.0 * 15.0).clamp(0.0, 15.0);
+                JxlEncoderSetFrameDistance(enc, distance);
+            }
+            JxlEncoderSetFrameEffort(enc, effort as c_int);
+
+            let data_type = match image.format {
+                PixelFormat::U8 => JXL_TYPE_UINT8,
+                PixelFormat::U16 => JXL_TYPE_UINT16,
+                PixelFormat::F16 => JXL_TYPE_FLOAT16,
+                PixelFormat::F32 => JXL_TYPE_FLOAT,
+                PixelFormat::U32 => {
+                    return Err(PluginError::Internal {
+                        plugin: "jxl".into(),
+                        message: "U32 pixel format not supported by libjxl".into(),
+                    });
+                }
+            };
+
+            let num_channels = image.layout.channel_count() as u32;
+
+            let pixel_format = JxlPixelFormat {
+                num_channels,
+                data_type,
+                endianness: JXL_NATIVE_ENDIAN,
+                align: 0,
+            };
+
+            JxlEncoderAddImageFrame(
+                enc,
+                &pixel_format,
+                image.data.data.as_ptr() as *const c_void,
+                image.data.data.len(),
+            );
+            JxlEncoderCloseInput(enc);
+
+            let mut output = vec![0u8; 65536];
+            let mut next_out = output.as_mut_ptr();
+            let mut avail_out = output.len();
+
+            loop {
+                let status = JxlEncoderProcessOutput(enc, &mut next_out, &mut avail_out);
+                if status == JXL_ENC_SUCCESS {
+                    let used = output.len() - avail_out;
+                    output.set_len(used);
+                    break;
+                } else if status == JXL_ENC_NEED_MORE_OUTPUT {
+                    let offset = next_out as usize - output.as_ptr() as usize;
+                    output.resize(output.len() * 2, 0);
+                    next_out = output.as_mut_ptr().add(offset);
+                    avail_out = output.len() - offset;
+                } else {
+                    return Err(PluginError::Internal {
+                        plugin: "jxl".into(),
+                        message: "JxlEncoderProcessOutput error".into(),
+                    });
+                }
+            }
+
+            tracing::info!(
+                output_bytes = output.len(),
+                "jxl_encoder: libjxl native encoded {} bytes",
+                output.len(),
+            );
+            Ok(output)
+        })();
+
+        JxlEncoderDestroy(enc);
+        result
+    }
 }
 
 static TAGS: LazyLock<Vec<String>> = LazyLock::new(|| {

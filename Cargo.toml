@@ -67,7 +67,7 @@ assertables = "0.9"
 libheif-sys = { version = "0.1" }
 libjxl-sys = { version = "0.1" }
 lcms2-sys = { version = "6" }
-exif = { version = "0.1" }
+kamadak-exif = "0.5"
 
 [profile.release]
 opt-level = 3

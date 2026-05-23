@@ -51,7 +51,15 @@ jobs:
 
       - name: Install Windows build dependencies
         if: runner.os == 'Windows'
-        run: choco install -y cmake protoc --no-progress
+        shell: bash
+        run: |
+          choco install -y cmake protoc --no-progress
+          # Install native libraries via msys2
+          C:/msys64/usr/bin/pacman -S --noconfirm mingw-w64-x86_64-libheif mingw-w64-x86_64-libjxl \
+            mingw-w64-x86_64-libexif mingw-w64-x86_64-libtiff mingw-w64-x86_64-libpng \
+            mingw-w64-x86_64-openexr mingw-w64-x86_64-ninja mingw-w64-x86_64-lcms2 || true
+          echo "C:/msys64/mingw64/bin" >> $GITHUB_PATH
+          echo "C:/msys64/usr/bin" >> $GITHUB_PATH
 
       - name: Verify Rust toolchain
         run: |
@@ -64,12 +72,14 @@ jobs:
 
       - name: Run unit tests
         id: unit_tests
+        shell: bash
         run: |
           cargo test --workspace --no-fail-fast 2>&1 | tee test-results-${{ runner.os }}.txt
           echo "EXIT_CODE=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
 
       - name: Show test summary
         if: always()
+        shell: bash
         run: |
           echo "=== TEST RESULTS ==="
           grep "test result:" test-results-${{ runner.os }}.txt || echo "No test result lines found"

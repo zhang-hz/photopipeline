@@ -3,13 +3,14 @@ use std::sync::LazyLock;
 
 use photopipeline_core::{
     ChannelLayout, DecodeOptions, DecodedImage, EncodeOptions, FormatProbe, HardwareRequirement,
-    ImageFormat, Metadata, PerfTimer, PixelBuffer, PixelFormat as CorePixelFormat, PluginCategory,
-    PluginError, PluginId, PluginResult, PluginVersion, ValidationIssue,
+    ImageFormat, Metadata, PerfTimer, PixelBuffer, PixelFormat, PluginCategory, PluginError,
+    PluginId, PluginResult, PluginVersion, ValidationIssue,
 };
 use photopipeline_plugin::{
     EnumOption, FormatProcessor, GuiLayout, GuiSchema, GuiSection, ParameterField, ParameterSchema,
     ParameterSection, ParameterSet, ParameterType, Plugin, PreviewMode, SectionStyle,
 };
+use tiff::encoder::{TiffEncoder, colortype};
 
 static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterSchema {
     version: 1,
@@ -295,199 +296,68 @@ impl FormatProcessor for TiffEncoderPlugin {
         metadata: &Metadata,
         options: &EncodeOptions,
     ) -> PluginResult<Vec<u8>> {
-        let _timer = PerfTimer::with_target("tiff_encode", "plugin.tiff_encoder");
+        let _timer = PerfTimer::with_target("encode_tiff", &format!("plugins.{}", self.id()));
+        let _ = metadata;
+        let _ = options;
 
-        tracing::info!(
-            input_dims = format!("{}x{}", image.width, image.height),
-            format = ?image.format,
-            "tiff_encoder: encoding {}x{} TIFF",
-            image.width,
-            image.height,
-        );
-        if photopipeline_oiio::OiioContext::available() {
-            let tmp_out =
-                std::env::temp_dir().join(format!("pp_oiio_out_{}.tiff", std::process::id()));
-            if let Ok(()) = photopipeline_oiio::OiioContext::write_image(
-                &tmp_out.to_string_lossy(),
-                image,
-                metadata,
-            ) {
-                if let Ok(data) = std::fs::read(&tmp_out) {
-                    let _ = std::fs::remove_file(&tmp_out);
-                    return Ok(data);
-                }
-                let _ = std::fs::remove_file(&tmp_out);
+        let mut output_buf = Vec::new();
+
+        match (image.layout, image.format) {
+            (ChannelLayout::RGB, PixelFormat::U8) => {
+                let mut tiff = TiffEncoder::new(std::io::Cursor::new(&mut output_buf))
+                    .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
+                let img = tiff
+                    .new_image::<colortype::RGB8>(image.width as u32, image.height as u32)
+                    .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
+                img.write_data(&image.data.data)
+                    .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
+            }
+            (ChannelLayout::RGB, PixelFormat::U16) => {
+                let mut tiff = TiffEncoder::new(std::io::Cursor::new(&mut output_buf))
+                    .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
+                let data_u16: &[u16] = bytemuck::cast_slice(&image.data.data);
+                let img = tiff
+                    .new_image::<colortype::RGB16>(image.width as u32, image.height as u32)
+                    .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
+                img.write_data(bytemuck::cast_slice(data_u16))
+                    .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
+            }
+            (ChannelLayout::RGBA, PixelFormat::U8) => {
+                let mut tiff = TiffEncoder::new(std::io::Cursor::new(&mut output_buf))
+                    .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
+                let img = tiff
+                    .new_image::<colortype::RGBA8>(image.width as u32, image.height as u32)
+                    .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
+                img.write_data(&image.data.data)
+                    .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
+            }
+            (ChannelLayout::Gray, PixelFormat::U8) => {
+                let mut tiff = TiffEncoder::new(std::io::Cursor::new(&mut output_buf))
+                    .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
+                let img = tiff
+                    .new_image::<colortype::Gray8>(image.width as u32, image.height as u32)
+                    .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
+                img.write_data(&image.data.data)
+                    .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
+            }
+            _ => {
+                return Err(PluginError::EncodingFailed(format!(
+                    "unsupported pixel format {:?} for TIFF",
+                    image.format
+                )));
             }
         }
 
-        let _ = options;
-        let width = image.width;
-        let height = image.height;
-        let channels = match image.layout {
-            ChannelLayout::RGB => 3u16,
-            ChannelLayout::RGBA => 4u16,
-            ChannelLayout::Gray => 1u16,
-            ChannelLayout::GrayAlpha => 2u16,
-            _ => 3u16,
-        };
-
-        let bps = match image.format {
-            CorePixelFormat::U8 => 8u16,
-            CorePixelFormat::U16 => 16u16,
-            CorePixelFormat::F16 => 16u16,
-            CorePixelFormat::U32 => 32u16,
-            CorePixelFormat::F32 => 32u16,
-        };
-
-        let bytes_per_sample = bps as u32 / 8;
-        let samples_per_pixel = channels;
-
-        let has_extra_ifd = metadata.exif.is_some();
-        let extra_tags = if has_extra_ifd { 4u16 } else { 0u16 };
-
-        let _rows_per_strip = 1u32;
-        let strip_count = height;
-        let strip_byte_count = width * samples_per_pixel as u32 * bytes_per_sample;
-
-        let ifd_entry_count: u16 = 12 + extra_tags;
-        let ifd_offset: u32 = 8;
-        let ifd_size: u32 = 2 + ifd_entry_count as u32 * 12 + 4;
-        let strip_offsets_start: u32 = ifd_offset + ifd_size;
-        let exif_ifd_offset: u32 = strip_offsets_start + strip_count * 4;
-        let strip_data_start: u32 = if has_extra_ifd {
-            exif_ifd_offset + 4
-        } else {
-            strip_offsets_start + strip_count * 4
-        };
-
-        let total_size = strip_data_start + (strip_byte_count * strip_count);
-        let mut buf = Vec::with_capacity(total_size as usize);
-
-        buf.extend_from_slice(&[0x49, 0x49]);
-        buf.extend_from_slice(&42u16.to_le_bytes());
-        buf.extend_from_slice(&ifd_offset.to_le_bytes());
-
-        buf.extend_from_slice(&ifd_entry_count.to_le_bytes());
-
-        write_ifd_short(&mut buf, 256, width as u16);
-        write_ifd_short(&mut buf, 257, height as u16);
-        write_ifd_long(&mut buf, 258, &[bps as u32]);
-        write_ifd_short(&mut buf, 259, 1);
-        write_ifd_short(&mut buf, 262, 2);
-        write_ifd_long(&mut buf, 273, &[0u32]);
-        write_ifd_short(&mut buf, 277, samples_per_pixel);
-        write_ifd_long(&mut buf, 278, &[height]);
-        write_ifd_long(&mut buf, 279, &[strip_byte_count]);
-        write_ifd_long(&mut buf, 282, &[300, 1]);
-        write_ifd_long(&mut buf, 283, &[300, 1]);
-        write_ifd_short(&mut buf, 296, 2);
-
-        if has_extra_ifd {
-            write_ifd_long(&mut buf, 34665, &[exif_ifd_offset]);
-        }
-
-        buf.extend_from_slice(&[0u8, 0u8, 0u8, 0u8]);
-
-        for i in 0..strip_count {
-            let offset = strip_data_start + i * strip_byte_count;
-            buf.extend_from_slice(&offset.to_le_bytes());
-        }
-
-        if has_extra_ifd {
-            write_exif_ifd(&mut buf, metadata, exif_ifd_offset, strip_data_start);
-        }
-
-        let pixel_data = &image.data.data;
-        let data_size = width as usize
-            * height as usize
-            * samples_per_pixel as usize
-            * bytes_per_sample as usize;
-        let copy_len = data_size.min(pixel_data.len());
-        buf.resize(strip_data_start as usize + copy_len, 0);
-        buf[strip_data_start as usize..strip_data_start as usize + copy_len]
-            .copy_from_slice(&pixel_data[..copy_len]);
-
-        if buf.len() < strip_data_start as usize + data_size {
-            buf.resize(strip_data_start as usize + data_size, 0);
-        }
-
-        let output_size = buf.len();
         tracing::info!(
-            output_bytes = output_size,
-            "tiff_encoder: encoded {} bytes",
-            output_size,
+            target = format!("plugins.{}", self.id()),
+            width = image.width,
+            height = image.height,
+            output_bytes = output_buf.len(),
+            "TIFF encoded"
         );
 
-        Ok(buf)
+        Ok(output_buf)
     }
-}
-
-fn write_ifd_short(buf: &mut Vec<u8>, tag: u16, value: u16) {
-    buf.extend_from_slice(&tag.to_le_bytes());
-    buf.extend_from_slice(&3u16.to_le_bytes());
-    buf.extend_from_slice(&1u32.to_le_bytes());
-    buf.extend_from_slice(&value.to_le_bytes());
-    buf.extend_from_slice(&[0, 0]);
-}
-
-fn write_ifd_long(buf: &mut Vec<u8>, tag: u16, values: &[u32]) {
-    let count = values.len() as u32;
-    buf.extend_from_slice(&tag.to_le_bytes());
-    buf.extend_from_slice(&4u16.to_le_bytes());
-    buf.extend_from_slice(&count.to_le_bytes());
-    let mut bytes = Vec::with_capacity(values.len() * 4);
-    for v in values {
-        bytes.extend_from_slice(&v.to_le_bytes());
-    }
-    if bytes.len() <= 4 {
-        buf.extend_from_slice(&bytes);
-        let padding = 4 - bytes.len();
-        buf.resize(buf.len() + padding, 0);
-    } else {
-        buf.extend_from_slice(&[0; 4]);
-    }
-}
-
-fn write_exif_ifd(
-    buf: &mut Vec<u8>,
-    metadata: &Metadata,
-    exif_offset: u32,
-    _strip_data_start: u32,
-) {
-    let pos = exif_offset as usize;
-    if buf.len() <= pos + 6 {
-        buf.resize(pos + 6, 0);
-    }
-    if let Some(ref _exif) = metadata.exif {
-        buf[pos] = 1;
-        buf[pos + 1] = 0;
-        write_ifd_long_at(buf, pos + 2, 0x8827, &[0]);
-        buf[pos + 14] = 0;
-        buf[pos + 15] = 0;
-        buf[pos + 16] = 0;
-        buf[pos + 17] = 0;
-    } else {
-        buf[pos] = 0;
-        buf[pos + 1] = 0;
-        buf[pos + 2] = 0;
-        buf[pos + 3] = 0;
-        buf[pos + 4] = 0;
-        buf[pos + 5] = 0;
-    }
-}
-
-fn write_ifd_long_at(buf: &mut Vec<u8>, offset: usize, tag: u16, values: &[u32]) {
-    let count = values.len() as u32;
-    let pos = offset;
-    buf[pos..pos + 2].copy_from_slice(&tag.to_le_bytes());
-    buf[pos + 2..pos + 4].copy_from_slice(&4u16.to_le_bytes());
-    buf[pos + 4..pos + 8].copy_from_slice(&count.to_le_bytes());
-    let mut bytes = Vec::with_capacity(values.len() * 4);
-    for v in values {
-        bytes.extend_from_slice(&v.to_le_bytes());
-    }
-    let write_len = bytes.len().min(4);
-    buf[pos + 8..pos + 8 + write_len].copy_from_slice(&bytes[..write_len]);
 }
 
 static TAGS: LazyLock<Vec<String>> = LazyLock::new(|| {

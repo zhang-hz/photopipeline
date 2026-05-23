@@ -1,0 +1,177 @@
+name: Build Bundled Release (Self-Contained)
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  linux-bundled:
+    name: Linux Bundled (x86_64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config \
+            nasm curl ninja-build
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache vendor builds
+        uses: actions/cache@v4
+        with:
+          path: vendor/install/
+          key: vendor-linux-${{ hashFiles('vendor/build-all.sh') }}
+          restore-keys: vendor-linux-
+
+      - name: Build vendor libraries
+        run: |
+          chmod +x vendor/build-all.sh
+          ./vendor/build-all.sh
+
+      - name: Build release binary
+        run: |
+          export PKG_CONFIG_PATH="$PWD/vendor/install/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+          cargo build --release --workspace
+        env:
+          RUSTFLAGS: "-C link-arg=-Wl,-rpath,$ORIGIN/../lib"
+
+      - name: Collect shared libraries
+        run: |
+          chmod +x scripts/collect-libs.sh
+          ./scripts/collect-libs.sh target/release/photopipeline release/lib/
+
+      - name: Package
+        run: |
+          mkdir -p release/bin
+          cp target/release/photopipeline release/bin/
+          cp target/release/photopipeline-server release/bin/ 2>/dev/null || true
+          tar -czf "photopipeline-${{ github.ref_name }}-linux-x86_64.tar.gz" -C release .
+
+      - name: Verify bundled package
+        run: |
+          echo "=== Checking dynamic dependencies ==="
+          ldd release/bin/photopipeline || echo "Static binary or minimal deps"
+          echo ""
+          echo "=== Bundled libraries ==="
+          ls -la release/lib/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: photopipeline-linux-x86_64-bundled
+          path: photopipeline-${{ github.ref_name }}-linux-x86_64.tar.gz
+
+  macos-bundled:
+    name: macOS Bundled
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          brew install cmake pkg-config nasm ninja
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache vendor builds
+        uses: actions/cache@v4
+        with:
+          path: vendor/install/
+          key: vendor-macos-${{ hashFiles('vendor/build-all.sh') }}
+          restore-keys: vendor-macos-
+
+      - name: Build vendor libraries
+        run: |
+          chmod +x vendor/build-all.sh
+          ./vendor/build-all.sh
+
+      - name: Build release binary
+        run: |
+          export PKG_CONFIG_PATH="$PWD/vendor/install/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+          cargo build --release --workspace
+
+      - name: Create app bundle structure
+        run: |
+          mkdir -p "Photopipeline.app/Contents/MacOS"
+          mkdir -p "Photopipeline.app/Contents/Frameworks"
+          cp target/release/photopipeline "Photopipeline.app/Contents/MacOS/"
+          cp target/release/photopipeline-server "Photopipeline.app/Contents/MacOS/" 2>/dev/null || true
+
+      - name: Collect and fix libraries
+        run: |
+          chmod +x scripts/collect-libs.sh
+          ./scripts/collect-libs.sh "Photopipeline.app/Contents/MacOS/photopipeline" "Photopipeline.app/Contents/Frameworks"
+
+      - name: Package DMG
+        run: |
+          hdiutil create -volname Photopipeline \
+            -srcfolder Photopipeline.app \
+            -ov -format UDZO \
+            "photopipeline-${{ github.ref_name }}-macos.dmg"
+
+      - name: Verify bundled package
+        run: |
+          echo "=== Checking dynamic dependencies ==="
+          otool -L Photopipeline.app/Contents/MacOS/photopipeline
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: photopipeline-macos-bundled
+          path: photopipeline-${{ github.ref_name }}-macos.dmg
+
+  windows-bundled:
+    name: Windows Bundled (x86_64)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git C:/vcpkg
+          C:/vcpkg/bootstrap-vcpkg.bat
+          echo "VCPKG_ROOT=C:/vcpkg" >> $env:GITHUB_ENV
+
+      - name: Install libraries via vcpkg
+        run: |
+          C:/vcpkg/vcpkg.exe install `
+            x265:x64-windows `
+            libheif[x265]:x64-windows `
+            libjxl:x64-windows `
+            lcms2:x64-windows `
+            libraw:x64-windows `
+            libpng:x64-windows `
+            tiff:x64-windows `
+            libjpeg-turbo:x64-windows `
+            aom:x64-windows
+
+      - name: Build release binary
+        run: cargo build --release --workspace
+        env:
+          VCPKG_ROOT: "C:/vcpkg"
+
+      - name: Package
+        run: |
+          mkdir -p release
+          copy target\release\photopipeline.exe release\
+          copy target\release\photopipeline-server.exe release\ 2>$null
+          Get-ChildItem C:/vcpkg/installed/x64-windows/bin/*.dll | Copy-Item -Destination release\
+          Compress-Archive -Path release\* -DestinationPath "photopipeline-${{ github.ref_name }}-windows-x86_64.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: photopipeline-windows-x86_64-bundled
+          path: photopipeline-${{ github.ref_name }}-windows-x86_64.zip

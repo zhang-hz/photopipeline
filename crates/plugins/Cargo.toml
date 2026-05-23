@@ -3,6 +3,12 @@ name = "photopipeline-plugins"
 version.workspace = true
 edition.workspace = true
 
+[features]
+libheif-native = []
+libjxl-native = []
+libraw-native = []
+lcms2-native = []
+
 [dependencies]
 photopipeline-core = { path = "../core" }
 photopipeline-plugin = { path = "../plugin" }
@@ -16,7 +22,14 @@ parking_lot.workspace = true
 tracing.workspace = true
 regex.workspace = true
 bytemuck.workspace = true
+kamadak-exif.workspace = true
+tiff = "0.9"
 miniz_oxide = { version = "0.8", features = ["with-alloc"] }
+ravif = { version = "0.11", default-features = false, features = ["threading"] }
+rav1e = { version = "0.7", default-features = false, features = ["threading"] }
+imgref = "1"
+png = "0.17"
+rgb = "0.8"
 
 [dev-dependencies]
 tokio.workspace = true

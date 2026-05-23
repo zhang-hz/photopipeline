@@ -38,10 +38,10 @@ jobs:
       - name: Stress test (run tests 5 times)
         run: |
           for i in 1 2 3 4 5; do
-            echo "=== Iteration $i ==="
-            cargo test --workspace -- --test-threads=1
-            if [ $? -ne 0 ]; then
-              echo "Stress test failed at iteration $i"
+            echo "=== Iteration $i ===" >> test-output.txt
+            cargo test --workspace -- --test-threads=1 2>&1 | tee -a test-output.txt
+            if [ ${PIPESTATUS[0]} -ne 0 ]; then
+              echo "Stress test failed at iteration $i" >> test-output.txt
               exit 1
             fi
           done

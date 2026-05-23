@@ -11,6 +11,7 @@ use photopipeline_plugin::{
     EnumOption, FormatProcessor, GuiLayout, GuiSchema, GuiSection, ParameterField, ParameterSchema,
     ParameterSection, ParameterSet, ParameterType, Plugin, PreviewMode, SectionStyle,
 };
+use png::{BitDepth, ColorType, Compression, Encoder};
 
 static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterSchema {
     version: 1,
@@ -310,7 +311,7 @@ impl FormatProcessor for PngEncoderPlugin {
         metadata: &Metadata,
         options: &EncodeOptions,
     ) -> PluginResult<Vec<u8>> {
-        let _timer = PerfTimer::with_target("png_encode", "plugin.png_encoder");
+        let _timer = PerfTimer::with_target("encode_png", &format!("plugins.{}", self.id()));
 
         tracing::info!(
             input_dims = format!("{}x{}", image.width, image.height),
@@ -319,6 +320,7 @@ impl FormatProcessor for PngEncoderPlugin {
             image.width,
             image.height,
         );
+
         if photopipeline_oiio::OiioContext::available() {
             let tmp_out =
                 std::env::temp_dir().join(format!("pp_oiio_out_{}.png", std::process::id()));
@@ -335,180 +337,102 @@ impl FormatProcessor for PngEncoderPlugin {
             }
         }
 
-        let _ = options;
         let width = image.width;
         let height = image.height;
-        let (color_type, channels) = match image.layout {
-            ChannelLayout::RGB => (2u8, 3u8),
-            ChannelLayout::RGBA => (6u8, 4u8),
-            ChannelLayout::Gray => (0u8, 1u8),
-            ChannelLayout::GrayAlpha => (4u8, 2u8),
-            _ => (2u8, 3u8),
+
+        let (color_type, bit_depth) = match (image.layout, image.format) {
+            (ChannelLayout::Gray, CorePixelFormat::U8) => (ColorType::Grayscale, BitDepth::Eight),
+            (ChannelLayout::Gray, CorePixelFormat::U16 | CorePixelFormat::F16) => {
+                (ColorType::Grayscale, BitDepth::Sixteen)
+            }
+            (ChannelLayout::GrayAlpha, CorePixelFormat::U8) => {
+                (ColorType::GrayscaleAlpha, BitDepth::Eight)
+            }
+            (ChannelLayout::GrayAlpha, CorePixelFormat::U16 | CorePixelFormat::F16) => {
+                (ColorType::GrayscaleAlpha, BitDepth::Sixteen)
+            }
+            (ChannelLayout::RGB, CorePixelFormat::U8) => (ColorType::Rgb, BitDepth::Eight),
+            (ChannelLayout::RGB, CorePixelFormat::U16 | CorePixelFormat::F16) => {
+                (ColorType::Rgb, BitDepth::Sixteen)
+            }
+            (ChannelLayout::RGBA, CorePixelFormat::U8) => (ColorType::Rgba, BitDepth::Eight),
+            (ChannelLayout::RGBA, CorePixelFormat::U16 | CorePixelFormat::F16) => {
+                (ColorType::Rgba, BitDepth::Sixteen)
+            }
+            _ => (ColorType::Rgb, BitDepth::Eight),
         };
 
-        let bit_depth = match image.format {
-            CorePixelFormat::U8 => 8u8,
-            CorePixelFormat::U16 | CorePixelFormat::F16 => 16u8,
-            _ => 8u8,
-        };
+        let icc_chunk_data = image.icc_profile.as_ref().map(|prof| {
+            let mut data = Vec::new();
+            data.extend_from_slice(b"ICC Profile");
+            data.push(0);
+            data.push(0);
+            data.extend_from_slice(&miniz_oxide::deflate::compress_to_vec_zlib(prof, 6));
+            data
+        });
 
-        let bytes_per_sample = bit_depth as usize / 8;
-        let row_bytes_raw = width as usize * channels as usize * bytes_per_sample;
-        let row_bytes_filtered = row_bytes_raw + 1;
+        let mut output_buf = Vec::new();
 
-        let mut buf: Vec<u8> = Vec::new();
+        {
+            let mut encoder = Encoder::new(&mut output_buf, width, height);
+            encoder.set_color(color_type);
+            encoder.set_depth(bit_depth);
+            encoder.set_compression(Compression::Default);
 
-        buf.extend_from_slice(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
-
-        let mut ihdr_data = Vec::new();
-        ihdr_data.extend_from_slice(&width.to_be_bytes());
-        ihdr_data.extend_from_slice(&height.to_be_bytes());
-        ihdr_data.push(bit_depth);
-        ihdr_data.push(color_type);
-        ihdr_data.extend_from_slice(&[0, 0, 0]);
-        write_png_chunk(&mut buf, b"IHDR", &ihdr_data);
-
-        if let Some(ref exif) = metadata.exif {
-            let mut exif_text = String::new();
-            if let Some(ref make) = exif.make {
-                exif_text.push_str(&format!("Make: {}\n", make));
-            }
-            if let Some(ref model) = exif.model {
-                exif_text.push_str(&format!("Model: {}\n", model));
-            }
-            if let Some(iso) = exif.iso {
-                exif_text.push_str(&format!("ISO: {}\n", iso));
-            }
-            if let Some(ref exp) = exif.exposure_time {
-                exif_text.push_str(&format!("ExposureTime: {}\n", exp));
-            }
-            if let Some(ref fnum) = exif.f_number {
-                exif_text.push_str(&format!("FNumber: {}\n", fnum));
-            }
-            if let Some(ref fl) = exif.focal_length {
-                exif_text.push_str(&format!("FocalLength: {}\n", fl));
-            }
-            if !exif_text.is_empty() {
-                let mut kw = b"EXIF".to_vec();
-                kw.push(0);
-                kw.extend_from_slice(exif_text.as_bytes());
-                write_png_chunk(&mut buf, b"tEXt", &kw);
-            }
-        }
-
-        let pixel_data = &image.data.data;
-        let mut raw_filtered = Vec::with_capacity(row_bytes_filtered * height as usize);
-        for y in 0..height as usize {
-            raw_filtered.push(0u8);
-            let row_start = y * row_bytes_raw;
-            let copy_len = row_bytes_raw.min(pixel_data.len().saturating_sub(row_start));
-            if copy_len > 0 {
-                raw_filtered.extend_from_slice(&pixel_data[row_start..row_start + copy_len]);
-                for _ in copy_len..row_bytes_raw {
-                    raw_filtered.push(0);
+            if let Some(ref exif) = metadata.exif {
+                let mut exif_text = String::new();
+                if let Some(ref make) = exif.make {
+                    exif_text.push_str(&format!("Make: {}\n", make));
                 }
-            } else {
-                raw_filtered.resize(raw_filtered.len() + row_bytes_raw, 0);
+                if let Some(ref model) = exif.model {
+                    exif_text.push_str(&format!("Model: {}\n", model));
+                }
+                if let Some(iso) = exif.iso {
+                    exif_text.push_str(&format!("ISO: {}\n", iso));
+                }
+                if let Some(ref exp) = exif.exposure_time {
+                    exif_text.push_str(&format!("ExposureTime: {}\n", exp));
+                }
+                if let Some(ref fnum) = exif.f_number {
+                    exif_text.push_str(&format!("FNumber: {}\n", fnum));
+                }
+                if let Some(ref fl) = exif.focal_length {
+                    exif_text.push_str(&format!("FocalLength: {}\n", fl));
+                }
+                if !exif_text.is_empty() {
+                    encoder.add_text_chunk("EXIF".into(), exif_text).ok();
+                }
             }
+
+            let mut writer = encoder
+                .write_header()
+                .map_err(|e| PluginError::EncodingFailed(format!("PNG header: {}", e)))?;
+
+            if let Some(ref icc) = icc_chunk_data {
+                writer
+                    .write_chunk(png::chunk::iCCP, icc)
+                    .map_err(|e| PluginError::EncodingFailed(format!("PNG iCCP: {}", e)))?;
+            }
+
+            writer
+                .write_image_data(&image.data.data)
+                .map_err(|e| PluginError::EncodingFailed(format!("PNG data: {}", e)))?;
+
+            writer
+                .finish()
+                .map_err(|e| PluginError::EncodingFailed(format!("PNG finish: {}", e)))?;
         }
 
-        let mut zlib_data = Vec::new();
-        zlib_data.push(0x78);
-        zlib_data.push(0x01);
-
-        let mut pos: usize = 0;
-        while pos < raw_filtered.len() {
-            let remaining = raw_filtered.len() - pos;
-            let chunk_size = remaining.min(65535);
-            let is_final = pos + chunk_size >= raw_filtered.len();
-
-            if is_final {
-                zlib_data.push(0x01);
-            } else {
-                zlib_data.push(0x00);
-            }
-
-            let len_le = (chunk_size as u16).to_le_bytes();
-            let nlen_le = (!(chunk_size as u16)).to_le_bytes();
-            zlib_data.extend_from_slice(&len_le);
-            zlib_data.extend_from_slice(&nlen_le);
-            zlib_data.extend_from_slice(&raw_filtered[pos..pos + chunk_size]);
-            pos += chunk_size;
-        }
-
-        let adler = adler32(&raw_filtered);
-        zlib_data.extend_from_slice(&adler.to_be_bytes());
-
-        write_png_chunk(&mut buf, b"IDAT", &zlib_data);
-
-        if image.icc_profile.is_some() {
-            let mut iccp_data = Vec::new();
-            iccp_data.extend_from_slice(b"ICC Profile\0\0");
-            if let Some(ref prof) = image.icc_profile {
-                iccp_data.extend_from_slice(prof);
-            }
-            write_png_chunk(&mut buf, b"iCCP", &iccp_data);
-        }
-
-        write_png_chunk(&mut buf, b"IEND", &[]);
-
-        let output_size = buf.len();
         tracing::info!(
-            output_bytes = output_size,
-            "png_encoder: encoded {} bytes",
-            output_size,
+            target = format!("plugins.{}", self.id()),
+            width = width,
+            height = height,
+            output_bytes = output_buf.len(),
+            "PNG encoded"
         );
 
-        Ok(buf)
+        Ok(output_buf)
     }
-}
-
-fn write_png_chunk(buf: &mut Vec<u8>, chunk_type: &[u8; 4], data: &[u8]) {
-    buf.extend_from_slice(&(data.len() as u32).to_be_bytes());
-    let mut crc_input = Vec::with_capacity(4 + data.len());
-    crc_input.extend_from_slice(chunk_type);
-    crc_input.extend_from_slice(data);
-    let crc = crc32(&crc_input);
-    buf.extend_from_slice(chunk_type);
-    buf.extend_from_slice(data);
-    buf.extend_from_slice(&crc.to_be_bytes());
-}
-
-fn crc32(data: &[u8]) -> u32 {
-    let mut crc: u32 = 0xFFFFFFFF;
-    let table = crc32_table();
-    for &byte in data {
-        let idx = ((crc ^ byte as u32) & 0xFF) as usize;
-        crc = table[idx] ^ (crc >> 8);
-    }
-    crc ^ 0xFFFFFFFF
-}
-
-fn crc32_table() -> [u32; 256] {
-    let mut table = [0u32; 256];
-    for i in 0..256 {
-        let mut c = i as u32;
-        for _ in 0..8 {
-            if c & 1 != 0 {
-                c = 0xEDB88320 ^ (c >> 1);
-            } else {
-                c >>= 1;
-            }
-        }
-        table[i] = c;
-    }
-    table
-}
-
-fn adler32(data: &[u8]) -> u32 {
-    const MOD: u32 = 65521;
-    let mut a: u32 = 1;
-    let mut b: u32 = 0;
-    for &byte in data {
-        a = (a + byte as u32) % MOD;
-        b = (b + a) % MOD;
-    }
-    (b << 16) | a
 }
 
 fn decode_png(data: &[u8]) -> PluginResult<DecodedImage> {
