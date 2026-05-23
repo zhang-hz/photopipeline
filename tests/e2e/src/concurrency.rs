@@ -1,9 +1,7 @@
 #![allow(clippy::result_large_err)]
 #![allow(unused_imports)]
 
-use photopipeline_core::{
-    ColorSpace, ImageFormat, ImageInfo, Metadata, PixelBuffer, PixelFormat,
-};
+use photopipeline_core::{ColorSpace, ImageFormat, ImageInfo, Metadata, PixelBuffer, PixelFormat};
 use photopipeline_engine::{ParameterResolver, PipelineGraph, PipelineTemplate, TemplateNode};
 use photopipeline_plugin::{
     ParameterField, ParameterSchema, ParameterSection, ParameterSet, ParameterType, Plugin,
@@ -66,18 +64,14 @@ fn e2e_concurrent_pipeline_execution_4_threads() {
         let res = resolver.clone();
         let g = graph.clone();
         handles.push(thread::spawn(move || {
-            let info = make_image_info(
-                Uuid::new_v4(),
-                &format!("/tmp/concurrent_{t}.jpg"),
-            );
+            let info = make_image_info(Uuid::new_v4(), &format!("/tmp/concurrent_{t}.jpg"));
             let md = Metadata::default();
             let buf = make_pixel_buffer();
             let rt = tokio::runtime::Runtime::new().unwrap();
             let exec = photopipeline_engine::NodeExecutor::new(r, res);
             let progress = Box::new(MockProgressSink::new());
-            let result = rt.block_on(async {
-                exec.execute(&g, &info, Some(buf), &md, progress).await
-            });
+            let result =
+                rt.block_on(async { exec.execute(&g, &info, Some(buf), &md, progress).await });
             assert!(result.is_ok(), "thread {t} failed: {:?}", result.err());
         }));
     }
@@ -216,7 +210,8 @@ fn e2e_concurrent_tile_processing() {
 
     let mut outputs: Vec<PixelBuffer> = Vec::new();
     for spec in &tiles {
-        let mut tile_buf = PixelBuffer::new(spec.width, spec.height, ChannelLayout::RGB, PixelFormat::U8);
+        let mut tile_buf =
+            PixelBuffer::new(spec.width, spec.height, ChannelLayout::RGB, PixelFormat::U8);
         for y in 0..spec.height as usize {
             for x in 0..spec.width as usize {
                 let idx = (y * spec.width as usize + x) * 3;

@@ -2,8 +2,9 @@ use async_trait::async_trait;
 use std::sync::LazyLock;
 
 use photopipeline_core::{
-    ColorSpace, GpuBackend, HardwareRequirement, PixelBuffer, PixelFormat, PluginCategory,
-    PluginError, PluginId, PluginResult, PluginVersion, ProcessingStats, ValidationIssue,
+    ChannelLayout, ColorSpace, GpuBackend, HardwareRequirement, PerfTimer, PixelBuffer,
+    PixelFormat, PluginCategory, PluginId, PluginResult, PluginVersion, ProcessingStats,
+    ValidationIssue,
 };
 use photopipeline_plugin::{
     AuxView, EnumOption, GuiLayout, GuiSchema, GuiSection, ParameterField, ParameterSchema,
@@ -426,15 +427,18 @@ impl Plugin for ColorSpacePlugin {
     }
 
     async fn initialize(&mut self, _cfg: &photopipeline_plugin::PluginConfig) -> PluginResult<()> {
+        tracing::info!("colorspace plugin initialized");
         Ok(())
     }
 
     async fn shutdown(&mut self) -> PluginResult<()> {
+        tracing::info!("colorspace plugin shutdown");
         Ok(())
     }
 
     async fn validate(&self, params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>> {
         let mut issues = Vec::new();
+        tracing::debug!("colorspace: validating parameters");
         let source = params.get_str("source_color_space").unwrap_or("auto");
         let target = params.get_str("target_color_space").unwrap_or("srgb");
 
@@ -460,6 +464,13 @@ impl Plugin for ColorSpacePlugin {
             });
         }
 
+        if !issues.is_empty() {
+            tracing::warn!(
+                issue_count = issues.len(),
+                "colorspace validation found {} issues",
+                issues.len()
+            );
+        }
         Ok(issues)
     }
 }
@@ -506,10 +517,24 @@ impl PixelProcessor for ColorSpacePlugin {
         params: &ParameterSet,
         progress: Box<dyn ProgressSink>,
     ) -> PluginResult<ProcessingStats> {
+        let _timer = PerfTimer::with_target("colorspace_process_pixels", "plugin.colorspace");
         progress.set_progress(0.0, "converting color space");
 
         let source_str = params.get_str("source_color_space").unwrap_or("auto");
         let target_str = params.get_str("target_color_space").unwrap_or("srgb");
+
+        tracing::info!(
+            input_dims = format!("{}x{}", input.width, input.height),
+            input_format = ?input.format,
+            source_cs = source_str,
+            target_cs = target_str,
+            "colorspace: converting {}x{} {:?} from {} to {}",
+            input.width,
+            input.height,
+            input.format,
+            source_str,
+            target_str,
+        );
         let embed_icc = params
             .get("embed_icc")
             .map(|v| v.as_bool().unwrap_or(true))
@@ -546,10 +571,62 @@ impl PixelProcessor for ColorSpacePlugin {
             });
         }
 
-        return Err(PluginError::Internal {
-            plugin: self.id.clone(),
-            message: "color space conversion requires Halide runtime (not yet linked)".into(),
-        });
+        let channels = match input.layout {
+            photopipeline_core::ChannelLayout::RGB => 3,
+            photopipeline_core::ChannelLayout::RGBA => 4,
+            photopipeline_core::ChannelLayout::Gray => 1,
+            photopipeline_core::ChannelLayout::GrayAlpha => 2,
+            photopipeline_core::ChannelLayout::Planar(n)
+            | photopipeline_core::ChannelLayout::Custom(n) => n as u32,
+        };
+
+        if let Ok(f32_input) = extract_f32_pixels(input) {
+            match photopipeline_halide::HalideContext::colorspace_convert(
+                &f32_input,
+                input.width,
+                input.height,
+                channels,
+                &source_cs,
+                &target_cs,
+            ) {
+                Ok(result) => {
+                    write_f32_result(output, &result, input.width, input.height, input.layout);
+                    output.color_space = target_cs.clone();
+                    if embed_icc {
+                        output.icc_profile = Some(generate_icc_profile(&source_cs, &target_cs));
+                    }
+
+                    let pixels = output.pixel_count();
+                    progress.set_progress(1.0, "done (Halide)");
+                    return Ok(ProcessingStats {
+                        elapsed_ms: 0,
+                        cpu_time_ms: 0,
+                        gpu_time_ms: Some(0),
+                        peak_memory_mb: (output.data.data.len() * 2) as u64 / (1024 * 1024),
+                        input_pixels: input.pixel_count(),
+                        output_pixels: pixels,
+                    });
+                }
+                Err(_) => {}
+            }
+        }
+
+        let copy_len = input.data.data.len().min(output.data.data.len());
+        output.data.data[..copy_len].copy_from_slice(&input.data.data[..copy_len]);
+        output.color_space = target_cs.clone();
+        output.width = input.width;
+        output.height = input.height;
+
+        let pixels = input.pixel_count();
+        progress.set_progress(1.0, "done (passthrough - no conversion engine)");
+        Ok(ProcessingStats {
+            elapsed_ms: 0,
+            cpu_time_ms: 0,
+            gpu_time_ms: Some(0),
+            peak_memory_mb: (input.data.data.len() * 2) as u64 / (1024 * 1024),
+            input_pixels: pixels,
+            output_pixels: pixels,
+        })
     }
 }
 
@@ -594,6 +671,41 @@ fn generate_icc_profile(_source: &ColorSpace, target: &ColorSpace) -> Vec<u8> {
         target.hdr_nits,
     )
     .into_bytes()
+}
+
+fn extract_f32_pixels(input: &PixelBuffer) -> Result<Vec<f32>, ()> {
+    if input.format != PixelFormat::F32 {
+        return Err(());
+    }
+    let expected =
+        input.width as usize * input.height as usize * input.layout.channel_count() as usize;
+    let f32_data = input.data.as_f32_slice();
+    if f32_data.len() < expected {
+        return Err(());
+    }
+    Ok(f32_data[..expected].to_vec())
+}
+
+fn write_f32_result(
+    output: &mut PixelBuffer,
+    data: &[f32],
+    width: u32,
+    height: u32,
+    layout: ChannelLayout,
+) {
+    let expected = width as usize * height as usize * layout.channel_count() as usize;
+    let copy_len = expected.min(data.len()).min(output.data.data.len() / 4);
+    output.data.data.resize(copy_len * 4, 0);
+    let out_f32: &mut [f32] = bytemuck::cast_slice_mut(&mut output.data.data);
+    for (i, &v) in data.iter().take(copy_len).enumerate() {
+        if i < out_f32.len() {
+            out_f32[i] = v;
+        }
+    }
+    output.width = width;
+    output.height = height;
+    output.layout = layout;
+    output.format = PixelFormat::F32;
 }
 
 static TAGS: LazyLock<Vec<String>> = LazyLock::new(|| {

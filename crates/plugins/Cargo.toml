@@ -6,6 +6,8 @@ edition.workspace = true
 [dependencies]
 photopipeline-core = { path = "../core" }
 photopipeline-plugin = { path = "../plugin" }
+photopipeline-halide = { path = "../halide" }
+photopipeline-oiio = { path = "../oiio" }
 serde.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true
@@ -13,6 +15,7 @@ chrono.workspace = true
 parking_lot.workspace = true
 tracing.workspace = true
 regex.workspace = true
+bytemuck.workspace = true
 miniz_oxide = { version = "0.8", features = ["with-alloc"] }
 
 [dev-dependencies]

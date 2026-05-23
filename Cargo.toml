@@ -5,6 +5,9 @@ members = [
     "crates/engine",
     "crates/plugins",
     "crates/external",
+    "crates/server",
+    "crates/halide",
+    "crates/oiio",
     "cli",
     "tests",
     "tests/test_harness",
@@ -41,7 +44,9 @@ uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 rayon = "1"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt", "ansi", "time"] }
+tracing-appender = "0.2"
+color-eyre = "0.6"
 image = { version = "0.25", default-features = false }
 bytemuck = { version = "1", features = ["derive"] }
 enum_dispatch = "0.3"

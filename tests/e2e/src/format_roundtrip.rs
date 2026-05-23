@@ -113,8 +113,11 @@ fn e2e_format_encoder_has_quality_param() {
     for plugin in reg.by_category(photopipeline_core::PluginCategory::Format) {
         let schema = plugin.parameter_schema();
         let defaults = schema.defaults();
-        assert!(!defaults.values.is_empty() || schema.sections.is_empty(),
-            "format plugin {} should have either parameters or empty schema", plugin.id());
+        assert!(
+            !defaults.values.is_empty() || schema.sections.is_empty(),
+            "format plugin {} should have either parameters or empty schema",
+            plugin.id()
+        );
     }
 }
 
@@ -144,7 +147,11 @@ fn e2e_multi_format_batch_processing_outlines() {
     ];
 
     for fmt in &formats {
-        let info = make_image_info(Uuid::new_v4(), &format!("/tmp/format_batch.{}", fmt), fmt.clone());
+        let info = make_image_info(
+            Uuid::new_v4(),
+            &format!("/tmp/format_batch.{}", fmt),
+            fmt.clone(),
+        );
         assert_eq!(info.format, *fmt);
     }
 }

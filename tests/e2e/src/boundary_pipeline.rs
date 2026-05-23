@@ -2,7 +2,7 @@
 #![allow(unused_imports)]
 
 use photopipeline_core::{
-    ChannelLayout, ColorSpace, ColorPrimaries, ExifData, GpsData, ImageFormat, ImageInfo, Metadata,
+    ChannelLayout, ColorPrimaries, ColorSpace, ExifData, GpsData, ImageFormat, ImageInfo, Metadata,
     PixelBuffer, PixelFormat, PluginError, PluginResult, TileLayout, TransferFunction,
 };
 use photopipeline_engine::{
@@ -36,9 +36,7 @@ fn make_image_info(id: Uuid, path: &str) -> ImageInfo {
 
 #[test]
 fn e2e_zero_dimension_image_rejected() {
-    let _result = std::panic::catch_unwind(|| {
-        ImageFixture::new().width(0).height(0).build()
-    });
+    let _result = std::panic::catch_unwind(|| ImageFixture::new().width(0).height(0).build());
     let buf = ImageFixture::new().width(0).height(0).build();
     assert_eq!(buf.data.data.len(), 0);
 }
@@ -59,11 +57,7 @@ fn e2e_max_dimension_image_handled() {
 
 #[test]
 fn e2e_single_row_image_processed() {
-    let buf = ImageFixture::new()
-        .width(256)
-        .height(1)
-        .gradient()
-        .build();
+    let buf = ImageFixture::new().width(256).height(1).gradient().build();
     assert_eq!(buf.height, 1);
     assert_eq!(buf.data.data.len(), 256 * 3);
 }
@@ -232,9 +226,7 @@ fn e2e_pipeline_with_mixed_enabled_disabled_nodes() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let exec = photopipeline_engine::NodeExecutor::new(reg.clone(), resolver.clone());
     let progress = Box::new(MockProgressSink::new());
-    let result = rt.block_on(async {
-        exec.execute(&graph, &info, Some(buf), &md, progress).await
-    });
+    let result = rt.block_on(async { exec.execute(&graph, &info, Some(buf), &md, progress).await });
     assert!(result.is_ok());
 }
 
@@ -395,15 +387,35 @@ fn e2e_plugin_all_registered_have_valid_schemas() {
 
     for plugin in reg.all() {
         let schema = plugin.parameter_schema();
-        assert!(schema.version > 0, "plugin {} has invalid schema version", plugin.id());
+        assert!(
+            schema.version > 0,
+            "plugin {} has invalid schema version",
+            plugin.id()
+        );
 
         for section in &schema.sections {
-            assert!(!section.id.is_empty(), "plugin {} has empty section id", plugin.id());
-            assert!(!section.label.is_empty(), "plugin {} has empty section label", plugin.id());
+            assert!(
+                !section.id.is_empty(),
+                "plugin {} has empty section id",
+                plugin.id()
+            );
+            assert!(
+                !section.label.is_empty(),
+                "plugin {} has empty section label",
+                plugin.id()
+            );
 
             for field in &section.fields {
-                assert!(!field.id.is_empty(), "plugin {} has empty field id", plugin.id());
-                assert!(!field.label.is_empty(), "plugin {} has empty field label", plugin.id());
+                assert!(
+                    !field.id.is_empty(),
+                    "plugin {} has empty field id",
+                    plugin.id()
+                );
+                assert!(
+                    !field.label.is_empty(),
+                    "plugin {} has empty field label",
+                    plugin.id()
+                );
                 assert!(
                     !field.default.is_null() || field.required,
                     "plugin {} field {} has null default and is not required",
@@ -425,19 +437,25 @@ fn e2e_registry_provides_all_processor_types() {
     let reg = Arc::new(Registry::new());
     photopipeline_plugins::register_all(&reg);
 
-    let metadata_count = reg.all().iter().filter(|p| {
-        reg.get_metadata_processor(p.id()).is_some()
-    }).count();
+    let metadata_count = reg
+        .all()
+        .iter()
+        .filter(|p| reg.get_metadata_processor(p.id()).is_some())
+        .count();
     assert!(metadata_count > 0, "should have metadata processors");
 
-    let pixel_count = reg.all().iter().filter(|p| {
-        reg.get_pixel_processor(p.id()).is_some()
-    }).count();
+    let pixel_count = reg
+        .all()
+        .iter()
+        .filter(|p| reg.get_pixel_processor(p.id()).is_some())
+        .count();
     assert!(pixel_count > 0, "should have pixel processors");
 
-    let format_count = reg.all().iter().filter(|p| {
-        reg.get_format_processor(p.id()).is_some()
-    }).count();
+    let format_count = reg
+        .all()
+        .iter()
+        .filter(|p| reg.get_format_processor(p.id()).is_some())
+        .count();
     assert!(format_count > 0, "should have format processors");
 }
 

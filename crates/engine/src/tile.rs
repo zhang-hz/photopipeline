@@ -1,4 +1,4 @@
-use photopipeline_core::{PixelBuffer, PluginError, PluginResult, TileLayout};
+use photopipeline_core::{PerfTimer, PixelBuffer, PluginError, PluginResult, TileLayout};
 use photopipeline_plugin::{ParameterSet, PixelProcessor, ProgressSink};
 
 #[derive(Debug, Clone)]
@@ -14,6 +14,7 @@ struct TileResult {
 }
 
 impl TileEngine {
+    #[tracing::instrument(skip_all)]
     pub fn new(default_tile_size: u32, overlap: u32, max_parallel: usize) -> Self {
         Self {
             default_tile_size,
@@ -22,6 +23,7 @@ impl TileEngine {
         }
     }
 
+    #[tracing::instrument(skip_all, fields(total_tiles, tile_size = self.default_tile_size))]
     pub async fn process_tiled(
         &self,
         processor: &dyn PixelProcessor,
@@ -38,6 +40,22 @@ impl TileEngine {
 
         let tile_count = layout.total_tiles;
 
+        tracing::debug!(
+            total_tiles = tile_count,
+            tile_size = self.default_tile_size,
+            overlap = self.overlap,
+            input_width = input.width,
+            input_height = input.height,
+            "Processing tiled: {}x{} image with {} tiles of {}px (overlap {})",
+            input.width,
+            input.height,
+            tile_count,
+            self.default_tile_size,
+            self.overlap,
+        );
+
+        let _timer = PerfTimer::with_target("process_tiled", "tile");
+
         let mut output = PixelBuffer::new(input.width, input.height, input.layout, input.format);
         output.color_space = input.color_space.clone();
         output.icc_profile = input.icc_profile.clone();
@@ -47,10 +65,33 @@ impl TileEngine {
 
         for (i, spec) in tile_specs.iter().enumerate() {
             if progress.is_canceled() {
+                tracing::warn!(
+                    tile_index = i,
+                    total_tiles = tile_count,
+                    "Tile processing canceled at tile {}/{}",
+                    i + 1,
+                    tile_count,
+                );
                 return Err(PluginError::Canceled {
                     plugin: processor.id().clone(),
                 });
             }
+
+            tracing::trace!(
+                tile_index = i,
+                total = tile_count,
+                x = spec.x_offset,
+                y = spec.y_offset,
+                w = spec.width,
+                h = spec.height,
+                "Processing tile {}/{} @ ({},{}) {}x{}",
+                i + 1,
+                tile_count,
+                spec.x_offset,
+                spec.y_offset,
+                spec.width,
+                spec.height,
+            );
 
             let fraction = (i as f32) / (tile_count.max(1) as f32);
             progress.set_progress(

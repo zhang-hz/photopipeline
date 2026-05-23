@@ -1,6 +1,15 @@
 name: Build Halide
 
-on: [workflow_dispatch]
+on:
+  push:
+    paths:
+      - 'halide_generators/**'
+      - 'crates/halide/**'
+  pull_request:
+    paths:
+      - 'halide_generators/**'
+      - 'crates/halide/**'
+  workflow_dispatch:
 
 jobs:
   build:

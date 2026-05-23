@@ -5,7 +5,6 @@ mod config;
 use clap::{Parser, Subcommand};
 use photopipeline_plugin::Registry;
 use std::sync::Arc;
-use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
 #[command(
@@ -72,16 +71,21 @@ enum BatchCmd {
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
-        )
-        .init();
+    photopipeline_core::telemetry::init_telemetry(photopipeline_core::telemetry::TelemetryConfig {
+        output: photopipeline_core::telemetry::LogOutput::Console,
+        default_filter: "info".to_string(),
+        ansi_colors: true,
+        ..Default::default()
+    });
+
+    photopipeline_core::panic_hook::install_panic_hook();
 
     let cli = Cli::parse();
     let registry = Arc::new(Registry::new());
 
     photopipeline_plugins::register_all(&registry);
+
+    tracing::info!("CLI started");
 
     match cli.command {
         Commands::Pipeline(PipelineCmd::Run {
@@ -111,4 +115,6 @@ async fn main() {
             commands::batch::validate(&config, &pattern).await;
         }
     }
+
+    tracing::info!("CLI finished");
 }

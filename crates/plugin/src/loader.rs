@@ -58,6 +58,7 @@ impl PluginLoader for NativePluginLoader {
     }
 
     async fn probe(&self, path: &Path) -> PluginResult<Option<PluginManifest>> {
+        tracing::trace!(path = %path.display(), "NativePluginLoader probing path");
         if !path.exists() || !path.is_file() {
             return Ok(None);
         }
@@ -138,6 +139,11 @@ impl PluginLoaderManager {
     }
 
     pub async fn discover_and_load(&self, registry: &Registry) -> PluginResult<Vec<PluginId>> {
+        tracing::info!(
+            search_paths = ?self.search_paths,
+            "Discovering and loading plugins from {} paths",
+            self.search_paths.len(),
+        );
         let mut loaded = vec![];
         for dir in &self.search_paths {
             if let Ok(entries) = std::fs::read_dir(dir) {
@@ -149,17 +155,32 @@ impl PluginLoaderManager {
                                 match loader.load(&manifest, &path).await {
                                     Ok(plugin) => {
                                         let id = plugin.id().clone();
+                                        tracing::info!(
+                                            plugin_id = %id,
+                                            path = %path.display(),
+                                            "Loaded plugin: {} from {}",
+                                            id,
+                                            path.display(),
+                                        );
                                         registry.register(Arc::from(plugin))?;
                                         loaded.push(id);
                                     }
                                     Err(e) => {
                                         tracing::warn!(
+                                            plugin_id = %manifest.id,
+                                            error = %e,
                                             "Failed to load plugin {}: {}",
                                             manifest.id,
                                             e
                                         );
                                     }
                                 }
+                            } else {
+                                tracing::trace!(
+                                    plugin_id = %manifest.id,
+                                    "Plugin {} already loaded, skipping",
+                                    manifest.id,
+                                );
                             }
                             break;
                         }
@@ -167,6 +188,11 @@ impl PluginLoaderManager {
                 }
             }
         }
+        tracing::info!(
+            loaded_count = loaded.len(),
+            "Discovered and loaded {} plugins",
+            loaded.len()
+        );
         Ok(loaded)
     }
 }

@@ -101,7 +101,9 @@ fn default_parallel() -> usize {
 }
 
 impl PipelineTemplate {
+    #[tracing::instrument(skip_all)]
     pub fn validate(&self) -> Result<(), String> {
+        tracing::debug!("Validating pipeline template");
         if self.nodes.is_empty() {
             return Err("pipeline must have at least one node".into());
         }
@@ -117,7 +119,13 @@ impl PipelineTemplate {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn into_graph(self) -> PipelineGraph {
+        tracing::debug!(
+            "Building graph from template: {} nodes, {} edges",
+            self.nodes.len(),
+            self.edges.len()
+        );
         PipelineGraph::from_template(&self)
     }
 }
@@ -132,6 +140,7 @@ impl PipelineGraph {
 
     pub fn add_node(&mut self, plugin_id: String, label: String) -> NodeId {
         let id = Uuid::new_v4();
+        tracing::trace!(plugin_id = %plugin_id, label = %label, node_id = %id, "Adding node: {} ({})", label, plugin_id);
         let input_port = Uuid::new_v4();
         let output_port = Uuid::new_v4();
         self.nodes.push(PipelineNode {
@@ -148,6 +157,7 @@ impl PipelineGraph {
     }
 
     pub fn remove_node(&mut self, node_id: NodeId) -> bool {
+        tracing::trace!(node_id = %node_id, "Removing node");
         let port_ids: HashSet<PortId> = self
             .nodes
             .iter()
@@ -164,7 +174,9 @@ impl PipelineGraph {
         true
     }
 
+    #[tracing::instrument(skip_all, fields(from = %from_port, to = %to_port))]
     pub fn connect(&mut self, from_port: PortId, to_port: PortId) -> Result<(), PluginError> {
+        tracing::trace!("Connecting port {} -> {}", from_port, to_port);
         if from_port == to_port {
             return Err(PluginError::ValidationFailed(
                 "cannot connect a port to itself".into(),
@@ -195,10 +207,16 @@ impl PipelineGraph {
     pub fn disconnect(&mut self, from_port: PortId, to_port: PortId) -> bool {
         let len_before = self.edges.len();
         self.edges.retain(|e| *e != (from_port, to_port));
-        self.edges.len() < len_before
+        let disconnected = self.edges.len() < len_before;
+        if disconnected {
+            tracing::trace!(from = %from_port, to = %to_port, "Disconnected port {} -> {}", from_port, to_port);
+        }
+        disconnected
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn topological_order(&self) -> Result<Vec<NodeId>, PluginError> {
+        tracing::debug!("Computing topological order for {} nodes", self.nodes.len());
         let mut in_degree: HashMap<NodeId, usize> = HashMap::new();
         let mut adjacency: HashMap<NodeId, Vec<NodeId>> = HashMap::new();
         let port_to_node: HashMap<PortId, NodeId> = self.build_port_map();
@@ -244,19 +262,32 @@ impl PipelineGraph {
         Ok(order)
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn has_cycle(&self) -> bool {
-        self.topological_order().is_err()
+        let result = self.topological_order().is_err();
+        if result {
+            tracing::debug!("Graph has a cycle");
+        }
+        result
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn validate_graph(&self) -> Result<(), Vec<String>> {
         let mut issues = Vec::new();
+        tracing::debug!(
+            "Validating graph with {} nodes, {} edges",
+            self.nodes.len(),
+            self.edges.len()
+        );
         let port_map = self.build_port_map();
 
         for &(from, to) in &self.edges {
             if !port_map.contains_key(&from) {
+                tracing::debug!(port = %from, "Validation: unknown source port");
                 issues.push(format!("edge references unknown source port {}", from));
             }
             if !port_map.contains_key(&to) {
+                tracing::debug!(port = %to, "Validation: unknown destination port");
                 issues.push(format!("edge references unknown destination port {}", to));
             }
         }
@@ -267,23 +298,37 @@ impl PipelineGraph {
         }
 
         if let Err(e) = self.topological_order() {
+            tracing::debug!("Cycle detected in graph: {}", e);
             issues.push(format!("cycle detected: {}", e));
         }
 
         if issues.is_empty() {
+            tracing::debug!("Graph validation passed");
             Ok(())
         } else {
+            tracing::debug!(
+                issue_count = issues.len(),
+                "Graph validation found {} issues",
+                issues.len()
+            );
             Err(issues)
         }
     }
 
+    #[tracing::instrument(skip_all, fields(node_count = template.nodes.len(), edge_count = template.edges.len()))]
     pub fn from_template(template: &PipelineTemplate) -> Self {
+        tracing::debug!(
+            "Building graph from template: {} nodes, {} edges",
+            template.nodes.len(),
+            template.edges.len(),
+        );
         let mut graph = PipelineGraph::new();
         let mut id_map: HashMap<String, NodeId> = HashMap::new();
         let mut output_ports: HashMap<String, PortId> = HashMap::new();
         let mut input_ports: HashMap<String, PortId> = HashMap::new();
 
         for tn in &template.nodes {
+            tracing::trace!(node_id = %tn.id, plugin = %tn.plugin, "Processing template node: {} ({})", tn.id, tn.plugin);
             let label = tn.label.clone().unwrap_or_else(|| tn.id.clone());
             let node_id = graph.add_node(tn.plugin.clone(), label);
             id_map.insert(tn.id.clone(), node_id);
@@ -302,12 +347,16 @@ impl PipelineGraph {
         }
 
         for te in &template.edges {
+            tracing::trace!(from = %te.from, to = %te.to, "Processing template edge: {} -> {}", te.from, te.to);
             if let (Some(&from_port), Some(&to_port)) =
                 (output_ports.get(&te.from), input_ports.get(&te.to))
                 && let Err(e) = graph.connect(from_port, to_port)
             {
                 tracing::warn!(
-                    "template edge {} -> {} connection failed: {}",
+                    from = %te.from,
+                    to = %te.to,
+                    error = %e,
+                    "Template edge {} -> {} connection failed: {}",
                     te.from,
                     te.to,
                     e
@@ -318,15 +367,19 @@ impl PipelineGraph {
         graph
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn node(&self, id: NodeId) -> Option<&PipelineNode> {
         self.nodes.iter().find(|n| n.id == id)
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn node_mut(&mut self, id: NodeId) -> Option<&mut PipelineNode> {
         self.nodes.iter_mut().find(|n| n.id == id)
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn port_owner(&self, port_id: PortId) -> Option<NodeId> {
+        tracing::trace!(port_id = %port_id, "Looking up port owner");
         self.build_port_map().get(&port_id).copied()
     }
 

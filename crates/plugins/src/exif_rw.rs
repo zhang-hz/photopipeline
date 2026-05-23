@@ -4,8 +4,8 @@ use std::sync::LazyLock;
 
 use photopipeline_core::{
     ExifData, GpsData, HardwareRequirement, IptcData, Metadata, MetadataScope, MetadataTarget,
-    MetadataWriteReport, PluginCategory, PluginError, PluginId, PluginResult, PluginVersion,
-    RawExifTag, ValidationIssue, XmpData,
+    MetadataWriteReport, PerfTimer, PluginCategory, PluginError, PluginId, PluginResult,
+    PluginVersion, RawExifTag, ValidationIssue, XmpData,
 };
 use photopipeline_plugin::{
     EnumOption, GuiLayout, GuiSchema, GuiSection, MetadataProcessor, ParameterField,
@@ -298,15 +298,18 @@ impl Plugin for ExifRwPlugin {
     }
 
     async fn initialize(&mut self, _cfg: &photopipeline_plugin::PluginConfig) -> PluginResult<()> {
+        tracing::info!(version = %PluginVersion::new(1,0,0), "exif_rw plugin initialized");
         Ok(())
     }
 
     async fn shutdown(&mut self) -> PluginResult<()> {
+        tracing::info!("exif_rw plugin shutdown");
         Ok(())
     }
 
     async fn validate(&self, params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>> {
         let mut issues = Vec::new();
+        tracing::debug!("exif_rw: validating parameters");
         if let Some(v) = params.get_str("read_exif")
             && v != "true"
             && v != "false"
@@ -323,6 +326,13 @@ impl Plugin for ExifRwPlugin {
                 param: "exiftool_path".into(),
                 message: "ExifTool path cannot be empty".into(),
             });
+        }
+        if !issues.is_empty() {
+            tracing::warn!(
+                issue_count = issues.len(),
+                "exif_rw validation found {} issues",
+                issues.len()
+            );
         }
         Ok(issues)
     }
@@ -344,7 +354,16 @@ impl MetadataProcessor for ExifRwPlugin {
         target: &MetadataTarget,
         params: &ParameterSet,
     ) -> PluginResult<Metadata> {
+        let _timer = PerfTimer::with_target("exif_rw_read_metadata", "plugin.exif_rw");
         let exiftool = params.get_str("exiftool_path").unwrap_or("exiftool");
+
+        tracing::info!(target_path = %target.path, exiftool = exiftool, "exif_rw: reading metadata from {}", target.path);
+        tracing::debug!(
+            exiftool_cmd = %exiftool,
+            args = "-json -G",
+            "exif_rw: running exiftool to read metadata",
+        );
+
         let mut cmd = Command::new(exiftool);
         cmd.arg("-json").arg("-G").arg(&target.path);
 
@@ -354,12 +373,25 @@ impl MetadataProcessor for ExifRwPlugin {
         })?;
 
         if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            tracing::error!(
+                tool = exiftool,
+                exit_code = ?output.status.code(),
+                stderr = %stderr,
+                "exif_rw: exiftool read failed",
+            );
             return Err(PluginError::MissingTool {
                 plugin: self.id.clone(),
                 tool: exiftool.to_string(),
                 required: "exiftool 12.00+".into(),
             });
         }
+
+        tracing::trace!(
+            stdout_len = output.stdout.len(),
+            "exif_rw: exiftool produced {} bytes of JSON output",
+            output.stdout.len()
+        );
 
         let json_str = String::from_utf8_lossy(&output.stdout);
         let parsed: Vec<serde_json::Value> =
@@ -573,6 +605,7 @@ impl MetadataProcessor for ExifRwPlugin {
         metadata: &Metadata,
         params: &ParameterSet,
     ) -> PluginResult<MetadataWriteReport> {
+        let _timer = PerfTimer::with_target("exif_rw_write_metadata", "plugin.exif_rw");
         let exiftool = params.get_str("exiftool_path").unwrap_or("exiftool");
         let overwrite = params
             .get("overwrite_original")
@@ -683,6 +716,14 @@ impl MetadataProcessor for ExifRwPlugin {
                 }
             }
         }
+
+        tracing::info!(
+            tags_written = tags_written,
+            tags_skipped = tags_skipped,
+            "exif_rw: wrote {} tags, skipped {} tags",
+            tags_written,
+            tags_skipped,
+        );
 
         Ok(MetadataWriteReport {
             tags_written,

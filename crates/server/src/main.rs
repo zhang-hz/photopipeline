@@ -1,39 +1,63 @@
 use std::sync::Arc;
-use parking_lot::RwLock;
 use tokio::signal;
 use tonic::transport::Server;
-use tracing_subscriber::EnvFilter;
 
-use photopipeline_server::services::{
-    pipeline::PipelineServiceImpl,
-    image::ImageServiceImpl,
-    batch::BatchServiceImpl,
-};
-use photopipeline_server::pb::{
-    pipeline::pipeline_service_server::PipelineServiceServer,
-    image::image_service_server::ImageServiceServer,
-    batch::batch_service_server::BatchServiceServer,
-};
+use photopipeline_engine::ParameterResolver;
+use photopipeline_plugin::Registry;
+
 use photopipeline_server::SharedState;
+use photopipeline_server::pb::{
+    batch::batch_service_server::BatchServiceServer,
+    image::image_service_server::ImageServiceServer,
+    pipeline::pipeline_service_server::PipelineServiceServer,
+};
+use photopipeline_server::services::{
+    batch::BatchServiceImpl, image::ImageServiceImpl, pipeline::PipelineServiceImpl,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive("info".parse().unwrap()))
-        .init();
+    photopipeline_core::telemetry::init_telemetry(photopipeline_core::telemetry::TelemetryConfig {
+        output: photopipeline_core::telemetry::LogOutput::Console,
+        default_filter: "photopipeline_server=info".to_string(),
+        ansi_colors: true,
+        ..Default::default()
+    });
 
-    let state = Arc::new(RwLock::new(SharedState::default()));
+    photopipeline_core::panic_hook::install_panic_hook();
+
+    let registry = Arc::new(Registry::new());
+    photopipeline_plugins::register_all(&registry);
+    let plugin_count = registry.all().len();
+    tracing::info!("Registered {} plugins", plugin_count);
+    tracing::debug!(plugin_count = plugin_count, "Plugin registration complete");
+
+    let resolver = Arc::new(ParameterResolver::new());
+
+    let state = Arc::new(SharedState::new(registry, resolver));
+
     let addr = "0.0.0.0:50051".parse()?;
 
-    tracing::info!("Starting gRPC server on {}", addr);
+    tracing::info!(
+        "Photopipeline gRPC server v{} starting on {}",
+        env!("CARGO_PKG_VERSION"),
+        addr
+    );
 
     Server::builder()
-        .add_service(PipelineServiceServer::new(PipelineServiceImpl::new(state.clone())))
-        .add_service(ImageServiceServer::new(ImageServiceImpl::new(state.clone())))
-        .add_service(BatchServiceServer::new(BatchServiceImpl::new(state.clone())))
+        .add_service(PipelineServiceServer::new(PipelineServiceImpl::new(
+            state.clone(),
+        )))
+        .add_service(ImageServiceServer::new(ImageServiceImpl::new(
+            state.clone(),
+        )))
+        .add_service(BatchServiceServer::new(BatchServiceImpl::new(
+            state.clone(),
+        )))
         .serve_with_shutdown(addr, shutdown_signal())
         .await?;
 
+    tracing::info!("gRPC server stopped");
     Ok(())
 }
 

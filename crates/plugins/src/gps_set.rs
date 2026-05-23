@@ -3,8 +3,8 @@ use std::sync::LazyLock;
 
 use photopipeline_core::{
     GpsData, GpxTrack, HardwareRequirement, Metadata, MetadataScope, MetadataTarget,
-    MetadataWriteReport, PluginCategory, PluginError, PluginId, PluginResult, PluginVersion,
-    ValidationIssue,
+    MetadataWriteReport, PerfTimer, PluginCategory, PluginError, PluginId, PluginResult,
+    PluginVersion, ValidationIssue,
 };
 use photopipeline_plugin::{
     AuxView, EnumOption, GuiLayout, GuiSchema, GuiSection, MetadataProcessor, ParameterField,
@@ -292,16 +292,19 @@ impl Plugin for GpsSetPlugin {
     }
 
     async fn initialize(&mut self, _cfg: &photopipeline_plugin::PluginConfig) -> PluginResult<()> {
+        tracing::info!("gps_set plugin initialized");
         Ok(())
     }
 
     async fn shutdown(&mut self) -> PluginResult<()> {
+        tracing::info!("gps_set plugin shutdown");
         Ok(())
     }
 
     async fn validate(&self, params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>> {
         let mut issues = Vec::new();
         let mode = params.get_str("gps_mode").unwrap_or("manual");
+        tracing::debug!("gps_set: validating parameters (mode={})", mode);
 
         if mode == "manual" {
             if let Some(lat) = params.get("latitude")
@@ -334,6 +337,13 @@ impl Plugin for GpsSetPlugin {
             });
         }
 
+        if !issues.is_empty() {
+            tracing::warn!(
+                issue_count = issues.len(),
+                "gps_set validation found {} issues",
+                issues.len()
+            );
+        }
         Ok(issues)
     }
 }
@@ -349,6 +359,7 @@ impl MetadataProcessor for GpsSetPlugin {
         _target: &MetadataTarget,
         _params: &ParameterSet,
     ) -> PluginResult<Metadata> {
+        tracing::trace!("gps_set: read_metadata (no-op)");
         Ok(Metadata::default())
     }
 
@@ -358,7 +369,9 @@ impl MetadataProcessor for GpsSetPlugin {
         metadata: &Metadata,
         params: &ParameterSet,
     ) -> PluginResult<MetadataWriteReport> {
+        let _timer = PerfTimer::with_target("gps_set_write_metadata", "plugin.gps_set");
         let mode = params.get_str("gps_mode").unwrap_or("manual");
+        tracing::info!(target_path = %target.path, mode = mode, "gps_set: writing GPS metadata to {} (mode={})", target.path, mode);
         let mut gps = GpsData::default();
 
         match mode {
@@ -454,6 +467,10 @@ impl MetadataProcessor for GpsSetPlugin {
             _ => {}
         }
 
+        tracing::debug!(
+            tool = "exiftool",
+            "gps_set: invoking exiftool to write GPS data"
+        );
         let mut cmd = std::process::Command::new("exiftool");
         cmd.arg("-overwrite_original");
 
@@ -490,12 +507,33 @@ impl MetadataProcessor for GpsSetPlugin {
             error: e,
         })?;
 
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            tracing::error!(
+                tool = "exiftool",
+                exit_code = ?output.status.code(),
+                stderr = %stderr,
+                "gps_set: exiftool write failed",
+            );
+        } else {
+            tracing::trace!(
+                stdout_len = output.stdout.len(),
+                "gps_set: exiftool write succeeded"
+            );
+        }
+
         let tags_written = if output.status.success() { 8 } else { 0 };
         let warnings = if !output.status.success() {
             vec![String::from_utf8_lossy(&output.stderr).to_string()]
         } else {
             vec![]
         };
+
+        tracing::info!(
+            tags_written = tags_written,
+            "gps_set: wrote {} GPS tags",
+            tags_written,
+        );
 
         Ok(MetadataWriteReport {
             tags_written,

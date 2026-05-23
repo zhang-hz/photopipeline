@@ -4,7 +4,7 @@ use std::sync::LazyLock;
 
 use photopipeline_core::{
     AlignedBuffer, ChannelLayout, ColorSpace, DecodeOptions, DecodedImage, EncodeOptions,
-    FormatProbe, HardwareRequirement, ImageFormat, Metadata, PixelBuffer, PixelFormat,
+    FormatProbe, HardwareRequirement, ImageFormat, Metadata, PerfTimer, PixelBuffer, PixelFormat,
     PluginCategory, PluginError, PluginId, PluginResult, PluginVersion, ValidationIssue,
 };
 use photopipeline_plugin::{
@@ -275,14 +275,17 @@ impl Plugin for RawInputPlugin {
     }
 
     async fn initialize(&mut self, _cfg: &photopipeline_plugin::PluginConfig) -> PluginResult<()> {
+        tracing::info!("raw_input plugin initialized (dcraw/libraw pending)");
         Ok(())
     }
     async fn shutdown(&mut self) -> PluginResult<()> {
+        tracing::info!("raw_input plugin shutdown");
         Ok(())
     }
 
     async fn validate(&self, params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>> {
         let mut issues = Vec::new();
+        tracing::debug!("raw_input: validating parameters");
         let mode = params.get_str("raw_mode").unwrap_or("auto");
         if mode == "dcraw" {
             let path = params.get_str("dcraw_path").unwrap_or("dcraw");
@@ -397,6 +400,12 @@ impl FormatProcessor for RawInputPlugin {
     }
 
     async fn decode(&self, data: &[u8], options: &DecodeOptions) -> PluginResult<DecodedImage> {
+        let _timer = PerfTimer::with_target("raw_input_decode", "plugin.raw_input");
+        tracing::info!(
+            data_len = data.len(),
+            "raw_input: decoding {} bytes of RAW data",
+            data.len(),
+        );
         if data.is_empty() {
             return Err(PluginError::DecodingFailed("Empty input data".into()));
         }
@@ -455,6 +464,7 @@ impl FormatProcessor for RawInputPlugin {
         _metadata: &Metadata,
         _options: &EncodeOptions,
     ) -> PluginResult<Vec<u8>> {
+        tracing::trace!("raw_input: encode called (not supported)");
         Err(PluginError::UnsupportedFormat(
             "RAW format is input-only".into(),
         ))

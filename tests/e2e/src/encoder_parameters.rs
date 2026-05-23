@@ -56,12 +56,17 @@ fn e2e_png_encoder_compression_level() {
     if let Some(p) = plugin {
         let schema = p.parameter_schema();
         let defaults = schema.defaults();
-        let has_compression =
-            defaults.get("compression").is_some()
+        let has_compression = defaults.get("compression").is_some()
             || defaults.get("level").is_some()
             || schema.sections.is_empty();
-        assert!(has_compression || schema.sections.iter().any(|s| s.fields.iter().any(|f| f.id.contains("compress") || f.id.contains("level"))),
-            "expected png_encoder to have compression or level parameter");
+        assert!(
+            has_compression
+                || schema.sections.iter().any(|s| s
+                    .fields
+                    .iter()
+                    .any(|f| f.id.contains("compress") || f.id.contains("level"))),
+            "expected png_encoder to have compression or level parameter"
+        );
     }
 }
 
@@ -275,9 +280,7 @@ fn e2e_encoder_no_output_path_handled() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let exec = photopipeline_engine::NodeExecutor::new(reg.clone(), resolver.clone());
     let progress = Box::new(MockProgressSink::new());
-    let result = rt.block_on(async {
-        exec.execute(&graph, &info, Some(buf), &md, progress).await
-    });
+    let result = rt.block_on(async { exec.execute(&graph, &info, Some(buf), &md, progress).await });
     let _ = result;
 }
 

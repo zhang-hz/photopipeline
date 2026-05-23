@@ -1,6 +1,4 @@
-use test_harness::fixtures::gpx::{
-    gpx_duplicate_timestamps, gpx_empty, gpx_simple_track,
-};
+use test_harness::fixtures::gpx::{gpx_duplicate_timestamps, gpx_empty, gpx_simple_track};
 use test_harness::fixtures::metadata::gps_beijing;
 
 #[test]
@@ -72,10 +70,16 @@ fn e2e_gpx_max_interpolation_gap_enforced() {
 
     let query_time = start + Duration::minutes(30);
     let result = track.interpolate_at(&query_time);
-    assert!(result.is_some(), "interpolation should succeed at gap boundary");
+    assert!(
+        result.is_some(),
+        "interpolation should succeed at gap boundary"
+    );
 
     let gap_secs = (far.timestamp_millis() - start.timestamp_millis()) as f64 / 1000.0;
-    assert!(gap_secs > 300.0, "gap should be larger than default max gap");
+    assert!(
+        gap_secs > 300.0,
+        "gap should be larger than default max gap"
+    );
 }
 
 #[test]

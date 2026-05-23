@@ -8,18 +8,25 @@ use std::sync::Arc;
 use crate::config;
 
 pub async fn run(registry: &Arc<Registry>, config_path: &str, pattern: &str, output_dir: &str) {
+    tracing::info!(
+        config_path = config_path,
+        pattern = pattern,
+        output_dir = output_dir,
+        "Running batch"
+    );
+
     let content = std::fs::read_to_string(config_path).unwrap_or_else(|e| {
-        eprintln!("Error reading config: {}", e);
+        tracing::error!(config_path = config_path, error = %e, "Error reading config: {}", e);
         std::process::exit(1);
     });
 
     let template = config::load_template(&content).unwrap_or_else(|e| {
-        eprintln!("Error parsing config: {}", e);
+        tracing::error!(config_path = config_path, error = %e, "Error parsing config: {}", e);
         std::process::exit(1);
     });
 
     if let Err(e) = template.validate() {
-        eprintln!("Pipeline validation error: {}", e);
+        tracing::error!(config_path = config_path, error = %e, "Pipeline validation error: {}", e);
         std::process::exit(1);
     }
 
@@ -29,7 +36,7 @@ pub async fn run(registry: &Arc<Registry>, config_path: &str, pattern: &str, out
     let out_dir = Path::new(output_dir);
     if !out_dir.exists() {
         std::fs::create_dir_all(out_dir).unwrap_or_else(|e| {
-            eprintln!("Error creating output directory: {}", e);
+            tracing::error!(output_dir = output_dir, error = %e, "Error creating output directory: {}", e);
             std::process::exit(1);
         });
     }
@@ -37,7 +44,7 @@ pub async fn run(registry: &Arc<Registry>, config_path: &str, pattern: &str, out
     let entries: Vec<_> = match glob(pattern) {
         Ok(paths) => paths.filter_map(|p| p.ok()).collect(),
         Err(e) => {
-            eprintln!("Error with glob pattern: {}", e);
+            tracing::error!(pattern = pattern, error = %e, "Error with glob pattern: {}", e);
             std::process::exit(1);
         }
     };
@@ -56,16 +63,22 @@ pub async fn run(registry: &Arc<Registry>, config_path: &str, pattern: &str, out
     let resolver = Arc::new(ParameterResolver::default());
     let _executor = NodeExecutor::new(registry.clone(), resolver);
 
+    let _timer = photopipeline_core::PerfTimer::with_target("batch_run", "batch");
+
     for (i, entry) in entries.iter().enumerate() {
         let filename = entry.file_name().unwrap_or_default().to_string_lossy();
         let out_path = out_dir.join(format!("processed_{}", filename));
 
-        println!(
+        tracing::info!(
+            index = i + 1,
+            total = entries.len(),
+            input = %entry.display(),
+            output = %out_path.display(),
             "[{}/{}] {} -> {}",
             i + 1,
             entries.len(),
             entry.display(),
-            out_path.display()
+            out_path.display(),
         );
 
         for (j, node) in graph.nodes.iter().enumerate() {
@@ -73,22 +86,38 @@ pub async fn run(registry: &Arc<Registry>, config_path: &str, pattern: &str, out
         }
     }
 
+    tracing::info!(
+        file_count = entries.len(),
+        "Batch complete. {} files processed.",
+        entries.len()
+    );
     println!("Batch complete. {} files processed.", entries.len());
 }
 
 pub async fn validate(config_path: &str, pattern: &str) {
+    tracing::info!(
+        config_path = config_path,
+        pattern = pattern,
+        "Validating batch config"
+    );
+    tracing::debug!(
+        "Loading batch config from '{}' with pattern '{}'",
+        config_path,
+        pattern
+    );
+
     let content = std::fs::read_to_string(config_path).unwrap_or_else(|e| {
-        eprintln!("Error reading config: {}", e);
+        tracing::error!(config_path = config_path, error = %e, "Error reading config: {}", e);
         std::process::exit(1);
     });
 
     let template = config::load_template(&content).unwrap_or_else(|e| {
-        eprintln!("Error parsing config: {}", e);
+        tracing::error!(config_path = config_path, error = %e, "Error parsing config: {}", e);
         std::process::exit(1);
     });
 
     if let Err(e) = template.validate() {
-        eprintln!("Pipeline validation error: {}", e);
+        tracing::error!(config_path = config_path, error = %e, "Pipeline validation error: {}", e);
         std::process::exit(1);
     }
 
@@ -97,7 +126,7 @@ pub async fn validate(config_path: &str, pattern: &str) {
     let entries: Vec<_> = match glob(pattern) {
         Ok(paths) => paths.filter_map(|p| p.ok()).collect(),
         Err(e) => {
-            eprintln!("Error with glob pattern: {}", e);
+            tracing::error!(pattern = pattern, error = %e, "Error with glob pattern: {}", e);
             std::process::exit(1);
         }
     };

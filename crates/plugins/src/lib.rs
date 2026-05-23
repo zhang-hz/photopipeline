@@ -35,13 +35,16 @@ use photopipeline_plugin::{
 use std::sync::Arc;
 
 pub fn register_all(registry: &Registry) {
+    tracing::info!("Registering all builtin plugins");
     {
         let p: Arc<exif_rw::ExifRwPlugin> = Arc::new(exif_rw::ExifRwPlugin::new());
+        tracing::trace!("Registering exif_rw plugin");
         let _ = registry.register(p.clone() as Arc<dyn Plugin>);
         let _ = registry.register_metadata_processor(p.clone() as Arc<dyn MetadataProcessor>);
     }
     {
         let p: Arc<gps_set::GpsSetPlugin> = Arc::new(gps_set::GpsSetPlugin::new());
+        tracing::trace!("Registering gps_set plugin");
         let _ = registry.register(p.clone() as Arc<dyn Plugin>);
         let _ = registry.register_metadata_processor(p.clone() as Arc<dyn MetadataProcessor>);
     }

@@ -264,21 +264,35 @@ impl Plugin for JxlEncoderPlugin {
     }
 
     async fn shutdown(&mut self) -> PluginResult<()> {
+        tracing::info!("jxl_encoder plugin shutdown");
         Ok(())
     }
 
     async fn validate(&self, params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>> {
         let mut issues = Vec::new();
+        tracing::debug!("jxl_encoder: validating parameters");
         let path = params.get_str("cjxl_path").unwrap_or("cjxl");
         let check = Command::new(path).arg("--version").output();
         match check {
             Ok(o) if o.status.success() => {}
             _ => {
+                tracing::warn!(
+                    tool_path = path,
+                    "jxl_encoder: cjxl not found at '{}'",
+                    path
+                );
                 issues.push(ValidationIssue::Warning {
                     param: "cjxl_path".into(),
                     message: format!("cjxl binary '{}' not found", path),
                 });
             }
+        }
+        if !issues.is_empty() {
+            tracing::debug!(
+                issue_count = issues.len(),
+                "jxl_encoder validation found {} issues",
+                issues.len()
+            );
         }
         Ok(issues)
     }
@@ -296,15 +310,18 @@ impl FormatProcessor for JxlEncoderPlugin {
 
     fn can_decode(&self, probe: &FormatProbe) -> bool {
         if let Some(ref ext) = probe.extension
-            && ext.to_lowercase() == "jxl"
+            && (ext.to_lowercase() == "jxl" || ext.to_lowercase() == "jpegxl")
         {
+            tracing::trace!(extension = %ext, "jxl_encoder: can_decode matched extension");
             return true;
         }
         if let Some(ref magic) = probe.magic_bytes {
             if magic.len() >= 2 && (magic[0] == 0xFF && magic[1] == 0x0A) {
+                tracing::trace!("jxl_encoder: can_decode matched magic bytes");
                 return true;
             }
             if magic.len() >= 12 && &magic[0..4] == b"JXL " {
+                tracing::trace!("jxl_encoder: can_decode matched JXL marker");
                 return true;
             }
         }
@@ -327,8 +344,37 @@ impl FormatProcessor for JxlEncoderPlugin {
         metadata: &Metadata,
         options: &EncodeOptions,
     ) -> PluginResult<Vec<u8>> {
+        let _timer = photopipeline_core::PerfTimer::with_target("jxl_encode", "plugin.jxl_encoder");
         let quality = options.quality.unwrap_or(90.0);
         let lossless = options.lossless;
+
+        tracing::info!(
+            input_dims = format!("{}x{}", image.width, image.height),
+            format = ?image.format,
+            quality = quality,
+            lossless = lossless,
+            "jxl_encoder: encoding {}x{} JPEG XL (q={}, lossless={})",
+            image.width,
+            image.height,
+            quality,
+            lossless,
+        );
+
+        if photopipeline_oiio::OiioContext::available() {
+            let tmp_out =
+                std::env::temp_dir().join(format!("pp_oiio_out_{}.jxl", std::process::id()));
+            if let Ok(()) = photopipeline_oiio::OiioContext::write_image(
+                &tmp_out.to_string_lossy(),
+                image,
+                metadata,
+            ) {
+                if let Ok(data) = std::fs::read(&tmp_out) {
+                    let _ = std::fs::remove_file(&tmp_out);
+                    return Ok(data);
+                }
+                let _ = std::fs::remove_file(&tmp_out);
+            }
+        }
 
         let _ = metadata;
 
@@ -353,6 +399,13 @@ impl FormatProcessor for JxlEncoderPlugin {
         write_temp_rgb(&tmp_input, image)?;
 
         let cjxl = "cjxl";
+        tracing::debug!(
+            tool = cjxl,
+            args = ?cmd_args,
+            input = %tmp_input.display(),
+            output = %tmp_output.display(),
+            "jxl_encoder: invoking cjxl to encode",
+        );
         let result = Command::new(cjxl)
             .args(&cmd_args)
             .arg(&tmp_input)
@@ -367,10 +420,24 @@ impl FormatProcessor for JxlEncoderPlugin {
                     plugin: self.id.clone(),
                     error: e,
                 })?;
+                let output_size = data.len();
+                tracing::info!(
+                    output_bytes = output_size,
+                    "jxl_encoder: encoded {} bytes",
+                    output_size,
+                );
                 let _ = std::fs::remove_file(&tmp_output);
                 Ok(data)
             }
             Ok(output) => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                tracing::error!(
+                    tool = "cjxl",
+                    exit_code = ?output.status.code(),
+                    stderr = %stderr,
+                    "jxl_encoder: cjxl failed with exit code {:?}",
+                    output.status.code(),
+                );
                 let _ = std::fs::remove_file(&tmp_output);
                 Err(PluginError::MissingTool {
                     plugin: self.id.clone(),
@@ -379,6 +446,11 @@ impl FormatProcessor for JxlEncoderPlugin {
                 })
             }
             Err(e) => {
+                tracing::error!(
+                    tool = "cjxl",
+                    error = %e,
+                    "jxl_encoder: cjxl invocation failed",
+                );
                 let _ = std::fs::remove_file(&tmp_output);
                 Err(PluginError::Io {
                     plugin: self.id.clone(),

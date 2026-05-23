@@ -35,7 +35,8 @@ fn make_image_info(id: Uuid, path: &str) -> ImageInfo {
 #[test]
 fn e2e_invalid_toml_syntax() {
     let invalid_toml = b"[[invalid section\n  key = value with no quotes\n  [[nested broken\n";
-    let result: Result<PipelineTemplate, _> = toml::from_str(std::str::from_utf8(invalid_toml).unwrap_or(""));
+    let result: Result<PipelineTemplate, _> =
+        toml::from_str(std::str::from_utf8(invalid_toml).unwrap_or(""));
     assert!(result.is_err() || std::str::from_utf8(invalid_toml).is_err());
 }
 
@@ -67,10 +68,7 @@ fn e2e_wrong_plugin_id_in_template() {
     };
     let graph = template.into_graph();
     assert_eq!(graph.nodes.len(), 1);
-    assert_eq!(
-        graph.nodes[0].plugin_id,
-        "wrong.plugin.id.nonexistent"
-    );
+    assert_eq!(graph.nodes[0].plugin_id, "wrong.plugin.id.nonexistent");
 
     let plugin_id = &graph.nodes[0].plugin_id;
     let found = reg.get(plugin_id);
@@ -149,7 +147,9 @@ fn e2e_parameter_wrong_type_string_for_int() {
         }],
     };
 
-    let actual_type = ps.get("count").map(|v| if v.is_string() { "string" } else { "other" });
+    let actual_type = ps
+        .get("count")
+        .map(|v| if v.is_string() { "string" } else { "other" });
     let schema_expects = "integer";
     assert_eq!(actual_type, Some("string"));
     assert_ne!(actual_type.map(|t| t), Some(schema_expects));
@@ -305,13 +305,19 @@ fn e2e_path_traversal_in_file_parameter() {
     for path in &traversal_paths {
         let has_traversal =
             path.contains("..") || path.contains("/etc/") || path.contains("\\windows\\");
-        assert!(has_traversal, "path '{path}' should be detected as suspicious");
+        assert!(
+            has_traversal,
+            "path '{path}' should be detected as suspicious"
+        );
     }
 
     let safe_path = "photos/vacation/img_001.jpg";
     let no_traversal =
         !safe_path.contains("..") && !safe_path.contains("/etc/") && !safe_path.contains("\\");
-    assert!(no_traversal, "safe path should not trigger traversal detection");
+    assert!(
+        no_traversal,
+        "safe path should not trigger traversal detection"
+    );
 }
 
 #[test]
@@ -336,7 +342,12 @@ fn e2e_unicode_in_plugin_id() {
 
 #[test]
 fn e2e_zero_bytes_input_file() {
-    let buf = PixelBuffer::new(0, 0, photopipeline_core::ChannelLayout::RGB, PixelFormat::U8);
+    let buf = PixelBuffer::new(
+        0,
+        0,
+        photopipeline_core::ChannelLayout::RGB,
+        PixelFormat::U8,
+    );
     assert_eq!(buf.data.data.len(), 0);
     assert_eq!(buf.width, 0);
     assert_eq!(buf.height, 0);
@@ -359,7 +370,10 @@ fn e2e_non_image_file_as_input() {
     for path in &non_image_paths {
         let ext = path.rsplit('.').next().unwrap_or("");
         let is_image_ext = image_extensions.contains(&ext);
-        assert!(!is_image_ext, "path '{path}' with ext '{ext}' should not be an image");
+        assert!(
+            !is_image_ext,
+            "path '{path}' with ext '{ext}' should not be an image"
+        );
 
         let is_txt = ext == "txt";
         let is_sh = ext == "sh";
@@ -453,12 +467,7 @@ fn e2e_invalid_expression_syntax() {
     let info = make_image_info(Uuid::new_v4(), "/tmp/bad_expr.jpg");
     let md = Metadata::default();
 
-    let bad_exprs = vec![
-        "${xyz + }",
-        "${a ? b :}",
-        "${== 42}",
-        "${",
-    ];
+    let bad_exprs = vec!["${xyz + }", "${a ? b :}", "${== 42}", "${"];
 
     for expr in bad_exprs {
         let result = engine.evaluate(expr, &md, &info);

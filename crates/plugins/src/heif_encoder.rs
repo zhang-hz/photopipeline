@@ -275,6 +275,7 @@ impl Plugin for HeifEncoderPlugin {
     }
 
     async fn shutdown(&mut self) -> PluginResult<()> {
+        tracing::info!("heif_encoder plugin shutdown");
         Ok(())
     }
 
@@ -295,6 +296,11 @@ impl Plugin for HeifEncoderPlugin {
         if !path.is_empty() {
             let check = Command::new(path).arg("--version").output();
             if check.is_err() || !check.unwrap().status.success() {
+                tracing::warn!(
+                    tool_path = path,
+                    "heif_encoder: heif-enc not found at '{}'",
+                    path
+                );
                 issues.push(ValidationIssue::Warning {
                     param: "heif_enc_path".into(),
                     message: format!("heif-enc binary '{}' not found or not functional", path),
@@ -302,6 +308,13 @@ impl Plugin for HeifEncoderPlugin {
             }
         }
 
+        if !issues.is_empty() {
+            tracing::debug!(
+                issue_count = issues.len(),
+                "heif_encoder validation found {} issues",
+                issues.len()
+            );
+        }
         Ok(issues)
     }
 }
@@ -324,6 +337,7 @@ impl FormatProcessor for HeifEncoderPlugin {
         if let Some(ref ext) = probe.extension {
             let ext_low = ext.to_lowercase();
             if ext_low == "heif" || ext_low == "heic" || ext_low == "hif" {
+                tracing::trace!(extension = %ext, "heif_encoder: can_decode matched extension");
                 return true;
             }
         }
@@ -332,6 +346,7 @@ impl FormatProcessor for HeifEncoderPlugin {
             && &magic[4..8] == b"ftyp"
             && (&magic[8..12] == b"heic" || &magic[8..12] == b"heix" || &magic[8..12] == b"mif1")
         {
+            tracing::trace!("heif_encoder: can_decode matched magic bytes");
             return true;
         }
         false
@@ -353,8 +368,40 @@ impl FormatProcessor for HeifEncoderPlugin {
         metadata: &Metadata,
         options: &EncodeOptions,
     ) -> PluginResult<Vec<u8>> {
+        let _timer =
+            photopipeline_core::PerfTimer::with_target("heif_encode", "plugin.heif_encoder");
         let quality = options.quality.unwrap_or(95.0);
         let lossless = options.lossless;
+
+        tracing::info!(
+            input_dims = format!("{}x{}", image.width, image.height),
+            format = ?image.format,
+            quality = quality,
+            lossless = lossless,
+            "heif_encoder: encoding {}x{} HEIF (q={}, lossless={})",
+            image.width,
+            image.height,
+            quality,
+            lossless,
+        );
+
+        if photopipeline_oiio::OiioContext::available() {
+            if let Ok(()) = photopipeline_oiio::OiioContext::write_image(
+                &format!("/tmp/pp_oiio_out_{}.heic", std::process::id()),
+                image,
+                metadata,
+            ) {
+                if let Ok(data) =
+                    std::fs::read(format!("/tmp/pp_oiio_out_{}.heic", std::process::id()))
+                {
+                    let _ = std::fs::remove_file(format!(
+                        "/tmp/pp_oiio_out_{}.heic",
+                        std::process::id()
+                    ));
+                    return Ok(data);
+                }
+            }
+        }
 
         let _ = metadata;
 
@@ -393,6 +440,13 @@ impl FormatProcessor for HeifEncoderPlugin {
         write_ppm(&tmp_input, image)?;
 
         let heif_enc = "heif-enc";
+        tracing::debug!(
+            tool = heif_enc,
+            args = ?cmd_args,
+            input = %tmp_input.display(),
+            output = %tmp_output.display(),
+            "heif_encoder: invoking heif-enc to encode",
+        );
         match Command::new(heif_enc)
             .args(&cmd_args)
             .arg("-o")
@@ -405,11 +459,25 @@ impl FormatProcessor for HeifEncoderPlugin {
                     plugin: self.id.clone(),
                     error: e,
                 })?;
+                let output_size = data.len();
+                tracing::info!(
+                    output_bytes = output_size,
+                    "heif_encoder: encoded {} bytes",
+                    output_size,
+                );
                 let _ = std::fs::remove_file(&tmp_input);
                 let _ = std::fs::remove_file(&tmp_output);
                 Ok(data)
             }
             Ok(output) => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                tracing::error!(
+                    tool = "heif-enc",
+                    exit_code = ?output.status.code(),
+                    stderr = %stderr,
+                    "heif_encoder: heif-enc failed with exit code {:?}",
+                    output.status.code(),
+                );
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 let _ = std::fs::remove_file(&tmp_input);
                 let _ = std::fs::remove_file(&tmp_output);
@@ -420,6 +488,11 @@ impl FormatProcessor for HeifEncoderPlugin {
                 })
             }
             Err(e) => {
+                tracing::error!(
+                    tool = "heif-enc",
+                    error = %e,
+                    "heif_encoder: heif-enc invocation failed",
+                );
                 let _ = std::fs::remove_file(&tmp_input);
                 let _ = std::fs::remove_file(&tmp_output);
                 Err(PluginError::Io {

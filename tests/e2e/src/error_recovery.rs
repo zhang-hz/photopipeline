@@ -2,8 +2,8 @@
 #![allow(unused_imports)]
 
 use photopipeline_core::{
-    ColorSpace, ExifData, GpsData, GpxPoint, GpxTrack, ImageFormat, ImageInfo, Metadata, PixelBuffer,
-    PixelFormat, PluginError, PluginResult, ValidationIssue,
+    ColorSpace, ExifData, GpsData, GpxPoint, GpxTrack, ImageFormat, ImageInfo, Metadata,
+    PixelBuffer, PixelFormat, PluginError, PluginResult, ValidationIssue,
 };
 use photopipeline_engine::{
     ExpressionEngine, NodeRunState, NodeStatus, ParameterResolver, PipelineGraph, PipelineNode,
@@ -74,10 +74,7 @@ fn e2e_missing_plugin_in_template_returns_not_found() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let exec = photopipeline_engine::NodeExecutor::new(reg.clone(), resolver.clone());
     let progress = Box::new(MockProgressSink::new());
-    let result = rt.block_on(async {
-        exec.execute(&graph, &info, Some(buf), &md, progress)
-            .await
-    });
+    let result = rt.block_on(async { exec.execute(&graph, &info, Some(buf), &md, progress).await });
     assert!(result.is_err());
     let err = result.unwrap_err();
     let msg = err.to_string();
@@ -102,17 +99,15 @@ fn e2e_missing_input_file_returns_file_not_found() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let exec = photopipeline_engine::NodeExecutor::new(reg.clone(), resolver.clone());
     let progress = Box::new(MockProgressSink::new());
-    let result = rt.block_on(async {
-        exec.execute(&graph, &info, Some(buf), &md, progress)
-            .await
-    });
+    let result = rt.block_on(async { exec.execute(&graph, &info, Some(buf), &md, progress).await });
     assert!(result.is_err());
 }
 
 #[test]
 fn e2e_corrupted_toml_config_returns_parse_error() {
     let corrupted = b"[[[invalid\n = ::: broken [[[" as &[u8];
-    let result: Result<PipelineTemplate, _> = toml::from_str(std::str::from_utf8(corrupted).unwrap_or(""));
+    let result: Result<PipelineTemplate, _> =
+        toml::from_str(std::str::from_utf8(corrupted).unwrap_or(""));
     assert!(result.is_err() || std::str::from_utf8(corrupted).is_err());
 }
 
@@ -153,10 +148,7 @@ fn e2e_pipeline_with_validation_error_stops_execution() {
     let buf = make_pixel_buffer();
     let exec = photopipeline_engine::NodeExecutor::new(reg.clone(), resolver.clone());
     let progress = Box::new(MockProgressSink::new());
-    let result = rt.block_on(async {
-        exec.execute(&graph, &info, Some(buf), &md, progress)
-            .await
-    });
+    let result = rt.block_on(async { exec.execute(&graph, &info, Some(buf), &md, progress).await });
     let _ = result;
 }
 
@@ -175,8 +167,13 @@ fn e2e_pipeline_with_warning_only_continues() {
         param: "p".into(),
         message: "m".into(),
     }];
-    let has_error = vi.iter().any(|issue| matches!(issue, ValidationIssue::Error { .. }));
-    assert!(!has_error, "warning-only issues should not be treated as errors");
+    let has_error = vi
+        .iter()
+        .any(|issue| matches!(issue, ValidationIssue::Error { .. }));
+    assert!(
+        !has_error,
+        "warning-only issues should not be treated as errors"
+    );
 }
 
 #[test]
@@ -218,9 +215,7 @@ fn e2e_encode_without_pixel_buffer_returns_error() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let exec = photopipeline_engine::NodeExecutor::new(reg.clone(), resolver.clone());
     let progress = Box::new(MockProgressSink::new());
-    let result = rt.block_on(async {
-        exec.execute(&graph, &info, None, &md, progress).await
-    });
+    let result = rt.block_on(async { exec.execute(&graph, &info, None, &md, progress).await });
     assert!(result.is_err());
 }
 

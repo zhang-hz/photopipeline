@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 
 use photopipeline_core::{
     ChannelLayout, DecodeOptions, DecodedImage, EncodeOptions, FormatProbe, HardwareRequirement,
-    ImageFormat, Metadata, PixelBuffer, PixelFormat as CorePixelFormat, PluginCategory,
+    ImageFormat, Metadata, PerfTimer, PixelBuffer, PixelFormat as CorePixelFormat, PluginCategory,
     PluginError, PluginId, PluginResult, PluginVersion, ValidationIssue,
 };
 use photopipeline_plugin::{
@@ -237,13 +237,16 @@ impl Plugin for TiffEncoderPlugin {
     }
 
     async fn initialize(&mut self, _cfg: &photopipeline_plugin::PluginConfig) -> PluginResult<()> {
+        tracing::info!("tiff_encoder plugin initialized (builtin)");
         Ok(())
     }
     async fn shutdown(&mut self) -> PluginResult<()> {
+        tracing::info!("tiff_encoder plugin shutdown");
         Ok(())
     }
 
     async fn validate(&self, _params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>> {
+        tracing::debug!("tiff_encoder: validating parameters (always ok)");
         Ok(vec![])
     }
 }
@@ -260,16 +263,18 @@ impl FormatProcessor for TiffEncoderPlugin {
 
     fn can_decode(&self, probe: &FormatProbe) -> bool {
         if let Some(ref ext) = probe.extension {
-            let e = ext.to_lowercase();
-            if e == "tiff" || e == "tif" {
+            let lower = ext.to_lowercase();
+            if lower == "tiff" || lower == "tif" {
+                tracing::trace!(extension = %ext, "tiff_encoder: can_decode matched extension");
                 return true;
             }
         }
-        if let Some(ref magic) = probe.magic_bytes
-            && magic.len() >= 4
-            && (&magic[0..4] == b"II\x2A\x00" || &magic[0..4] == b"MM\x00\x2A")
-        {
-            return true;
+        if let Some(ref magic) = probe.magic_bytes {
+            if magic.len() >= 4 && (&magic[0..4] == b"II\x2A\x00" || &magic[0..4] == b"MM\x00\x2A")
+            {
+                tracing::trace!("tiff_encoder: can_decode matched TIFF magic bytes");
+                return true;
+            }
         }
         false
     }
@@ -288,8 +293,34 @@ impl FormatProcessor for TiffEncoderPlugin {
         &self,
         image: &PixelBuffer,
         metadata: &Metadata,
-        _options: &EncodeOptions,
+        options: &EncodeOptions,
     ) -> PluginResult<Vec<u8>> {
+        let _timer = PerfTimer::with_target("tiff_encode", "plugin.tiff_encoder");
+
+        tracing::info!(
+            input_dims = format!("{}x{}", image.width, image.height),
+            format = ?image.format,
+            "tiff_encoder: encoding {}x{} TIFF",
+            image.width,
+            image.height,
+        );
+        if photopipeline_oiio::OiioContext::available() {
+            let tmp_out =
+                std::env::temp_dir().join(format!("pp_oiio_out_{}.tiff", std::process::id()));
+            if let Ok(()) = photopipeline_oiio::OiioContext::write_image(
+                &tmp_out.to_string_lossy(),
+                image,
+                metadata,
+            ) {
+                if let Ok(data) = std::fs::read(&tmp_out) {
+                    let _ = std::fs::remove_file(&tmp_out);
+                    return Ok(data);
+                }
+                let _ = std::fs::remove_file(&tmp_out);
+            }
+        }
+
+        let _ = options;
         let width = image.width;
         let height = image.height;
         let channels = match image.layout {
@@ -379,6 +410,13 @@ impl FormatProcessor for TiffEncoderPlugin {
         if buf.len() < strip_data_start as usize + data_size {
             buf.resize(strip_data_start as usize + data_size, 0);
         }
+
+        let output_size = buf.len();
+        tracing::info!(
+            output_bytes = output_size,
+            "tiff_encoder: encoded {} bytes",
+            output_size,
+        );
 
         Ok(buf)
     }

@@ -1,11 +1,11 @@
 [package]
-name = "photopipeline-oiio"
+name = "photopipeline-halide"
 version.workspace = true
 edition.workspace = true
 
 [features]
 default = []
-oiio = []
+halide-runtime = []
 
 [dependencies]
 photopipeline-core = { path = "../core" }
@@ -13,3 +13,4 @@ thiserror.workspace = true
 
 [build-dependencies]
 pkg-config = "0.3"
+cmake = "0.1"

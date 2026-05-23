@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 
 use photopipeline_core::{
     AlignedBuffer, ChannelLayout, ColorSpace, DecodeOptions, DecodedImage, EncodeOptions,
-    FormatProbe, HardwareRequirement, ImageFormat, Metadata, PixelBuffer,
+    FormatProbe, HardwareRequirement, ImageFormat, Metadata, PerfTimer, PixelBuffer,
     PixelFormat as CorePixelFormat, PluginCategory, PluginError, PluginId, PluginResult,
     PluginVersion, ValidationIssue,
 };
@@ -248,13 +248,17 @@ impl Plugin for PngEncoderPlugin {
     }
 
     async fn initialize(&mut self, _cfg: &photopipeline_plugin::PluginConfig) -> PluginResult<()> {
+        tracing::info!("png_encoder plugin initialized (builtin)");
         Ok(())
     }
     async fn shutdown(&mut self) -> PluginResult<()> {
+        tracing::info!("png_encoder plugin shutdown");
         Ok(())
     }
 
-    async fn validate(&self, _params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>> {
+    async fn validate(&self, params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>> {
+        tracing::debug!("png_encoder: validating parameters (always ok)");
+        let _ = params;
         Ok(vec![])
     }
 }
@@ -273,25 +277,26 @@ impl FormatProcessor for PngEncoderPlugin {
         if let Some(ref ext) = probe.extension
             && ext.to_lowercase() == "png"
         {
+            tracing::trace!(extension = %ext, "png_encoder: can_decode matched extension");
             return true;
         }
         if let Some(ref magic) = probe.magic_bytes
             && magic.len() >= 8
-            && magic[0] == 0x89
-            && magic[1] == 0x50
-            && magic[2] == 0x4E
-            && magic[3] == 0x47
-            && magic[4] == 0x0D
-            && magic[5] == 0x0A
-            && magic[6] == 0x1A
-            && magic[7] == 0x0A
+            && &magic[0..8] == b"\x89PNG\r\n\x1a\n"
         {
+            tracing::trace!("png_encoder: can_decode matched PNG signature");
             return true;
         }
         false
     }
 
     async fn decode(&self, data: &[u8], _options: &DecodeOptions) -> PluginResult<DecodedImage> {
+        let _timer = PerfTimer::with_target("png_decode", "plugin.png_encoder");
+        tracing::info!(
+            data_len = data.len(),
+            "png_encoder: decoding {} bytes of PNG data",
+            data.len(),
+        );
         decode_png(data)
     }
 
@@ -303,8 +308,34 @@ impl FormatProcessor for PngEncoderPlugin {
         &self,
         image: &PixelBuffer,
         metadata: &Metadata,
-        _options: &EncodeOptions,
+        options: &EncodeOptions,
     ) -> PluginResult<Vec<u8>> {
+        let _timer = PerfTimer::with_target("png_encode", "plugin.png_encoder");
+
+        tracing::info!(
+            input_dims = format!("{}x{}", image.width, image.height),
+            format = ?image.format,
+            "png_encoder: encoding {}x{} PNG",
+            image.width,
+            image.height,
+        );
+        if photopipeline_oiio::OiioContext::available() {
+            let tmp_out =
+                std::env::temp_dir().join(format!("pp_oiio_out_{}.png", std::process::id()));
+            if let Ok(()) = photopipeline_oiio::OiioContext::write_image(
+                &tmp_out.to_string_lossy(),
+                image,
+                metadata,
+            ) {
+                if let Ok(data) = std::fs::read(&tmp_out) {
+                    let _ = std::fs::remove_file(&tmp_out);
+                    return Ok(data);
+                }
+                let _ = std::fs::remove_file(&tmp_out);
+            }
+        }
+
+        let _ = options;
         let width = image.width;
         let height = image.height;
         let (color_type, channels) = match image.layout {
@@ -420,6 +451,13 @@ impl FormatProcessor for PngEncoderPlugin {
         }
 
         write_png_chunk(&mut buf, b"IEND", &[]);
+
+        let output_size = buf.len();
+        tracing::info!(
+            output_bytes = output_size,
+            "png_encoder: encoded {} bytes",
+            output_size,
+        );
 
         Ok(buf)
     }

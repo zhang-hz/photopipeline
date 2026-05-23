@@ -2,8 +2,9 @@ use async_trait::async_trait;
 use std::sync::LazyLock;
 
 use photopipeline_core::{
-    ColorSpace, GpuBackend, HardwareRequirement, PixelBuffer, PixelFormat, PluginCategory,
-    PluginError, PluginId, PluginResult, PluginVersion, ProcessingStats, ValidationIssue,
+    ColorSpace, GpuBackend, HardwareRequirement, PerfTimer, PixelBuffer, PixelFormat,
+    PluginCategory, PluginError, PluginId, PluginResult, PluginVersion, ProcessingStats,
+    ValidationIssue,
 };
 use photopipeline_plugin::{
     AuxView, EnumOption, GuiLayout, GuiSchema, GuiSection, ParameterField, ParameterSchema,
@@ -325,15 +326,18 @@ impl Plugin for Lut3dPlugin {
     }
 
     async fn initialize(&mut self, _cfg: &photopipeline_plugin::PluginConfig) -> PluginResult<()> {
+        tracing::info!("lut3d plugin initialized");
         Ok(())
     }
 
     async fn shutdown(&mut self) -> PluginResult<()> {
+        tracing::info!("lut3d plugin shutdown");
         Ok(())
     }
 
     async fn validate(&self, params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>> {
         let mut issues = Vec::new();
+        tracing::debug!("lut3d: validating parameters");
         let lut_path = params.get_str("lut_path").unwrap_or("");
         if lut_path.is_empty() {
             issues.push(ValidationIssue::Warning {
@@ -358,6 +362,13 @@ impl Plugin for Lut3dPlugin {
             });
         }
 
+        if !issues.is_empty() {
+            tracing::warn!(
+                issue_count = issues.len(),
+                "lut3d validation found {} issues",
+                issues.len()
+            );
+        }
         Ok(issues)
     }
 }
@@ -402,9 +413,19 @@ impl PixelProcessor for Lut3dPlugin {
         params: &ParameterSet,
         progress: Box<dyn ProgressSink>,
     ) -> PluginResult<ProcessingStats> {
+        let _timer = PerfTimer::with_target("lut3d_process_pixels", "plugin.lut3d");
         progress.set_progress(0.0, "applying LUT");
 
         let lut_path = params.get_str("lut_path").unwrap_or("");
+        tracing::info!(
+            input_dims = format!("{}x{}", input.width, input.height),
+            input_format = ?input.format,
+            lut_path = lut_path,
+            "lut3d: processing {}x{} with LUT {}",
+            input.width,
+            input.height,
+            lut_path,
+        );
 
         if lut_path.is_empty() {
             output.data.data.copy_from_slice(&input.data.data);

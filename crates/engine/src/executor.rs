@@ -82,10 +82,18 @@ pub struct ExecutionResult {
 }
 
 impl NodeExecutor {
+    #[tracing::instrument(skip_all)]
     pub fn new(registry: Arc<Registry>, resolver: Arc<ParameterResolver>) -> Self {
+        let registry_size = registry.manifests().len();
+        tracing::info!(
+            registry_plugins = registry_size,
+            "NodeExecutor created with {} plugins in registry",
+            registry_size,
+        );
         Self { registry, resolver }
     }
 
+    #[tracing::instrument(skip_all, fields(image_id = %image_info.id, node_count = graph.nodes.len()))]
     pub async fn execute(
         &self,
         graph: &PipelineGraph,
@@ -94,16 +102,36 @@ impl NodeExecutor {
         metadata: &Metadata,
         progress: Box<dyn ProgressSink>,
     ) -> PluginResult<ExecutionResult> {
+        let _timer = photopipeline_core::PerfTimer::with_target("pipeline_execute", "pipeline");
+
         let order = graph.topological_order()?;
         let node_count = order.len();
+
+        tracing::info!(
+            image_path = %image_info.path,
+            buffer_provided = buffer.is_some(),
+            "Starting pipeline execution: {} nodes, image {}",
+            node_count,
+            image_info.filename,
+        );
 
         let mut ctx = ExecutionContext::new(image_info.clone(), buffer, metadata.clone());
         for node in &graph.nodes {
             ctx.node_states.entry(node.id).or_default();
         }
 
+        let mut nodes_completed: u32 = 0;
+        let mut nodes_failed: u32 = 0;
+        let mut nodes_skipped: u32 = 0;
+
         for (i, node_id) in order.iter().enumerate() {
             if progress.is_canceled() {
+                tracing::warn!(
+                    node_index = i,
+                    "Pipeline execution canceled at node {}/{}",
+                    i + 1,
+                    node_count,
+                );
                 return Err(PluginError::Canceled {
                     plugin: graph
                         .node(*node_id)
@@ -114,10 +142,19 @@ impl NodeExecutor {
 
             let node = match graph.node(*node_id) {
                 Some(n) => n,
-                None => continue,
+                None => {
+                    tracing::debug!(node_id = %node_id, "Node not found in graph, skipping");
+                    continue;
+                }
             };
 
             if !node.enabled {
+                tracing::debug!(
+                    node_label = %node.label,
+                    plugin_id = %node.plugin_id,
+                    "Node '{}' is disabled, skipping",
+                    node.label,
+                );
                 ctx.node_states.insert(
                     *node_id,
                     NodeRunState {
@@ -125,6 +162,7 @@ impl NodeExecutor {
                         started_at: None,
                     },
                 );
+                nodes_skipped += 1;
                 continue;
             }
 
@@ -132,6 +170,18 @@ impl NodeExecutor {
                 .registry
                 .get(&node.plugin_id)
                 .ok_or_else(|| PluginError::NotFound(node.plugin_id.clone()))?;
+
+            tracing::info!(
+                node_label = %node.label,
+                plugin_id = %node.plugin_id,
+                node_index = i + 1,
+                node_count = node_count,
+                "Starting node [{}/{}] {} (plugin: {})",
+                i + 1,
+                node_count,
+                node.label,
+                node.plugin_id,
+            );
 
             let resolved_params = self.resolver.resolve(
                 *node_id,
@@ -152,6 +202,13 @@ impl NodeExecutor {
                 .any(|iss| matches!(iss, photopipeline_core::ValidationIssue::Error { .. }))
             {
                 let err_msgs: Vec<String> = issues.iter().map(|i| i.to_string()).collect();
+                tracing::error!(
+                    node_label = %node.label,
+                    plugin_id = %node.plugin_id,
+                    validation_errors = %err_msgs.join("; "),
+                    "Node '{}' validation failed",
+                    node.label,
+                );
                 ctx.node_states.insert(
                     *node_id,
                     NodeRunState {
@@ -159,6 +216,7 @@ impl NodeExecutor {
                         started_at: Some(chrono::Utc::now()),
                     },
                 );
+                nodes_failed += 1;
                 return Err(PluginError::ValidationFailed(err_msgs.join("; ")));
             }
 
@@ -174,13 +232,83 @@ impl NodeExecutor {
             let fraction = (i as f32) / (node_count.max(1) as f32);
             progress.set_progress(fraction, &format!("processing node {}", node.label));
 
+            let node_timer = photopipeline_core::PerfTimer::with_target(
+                format!("node:{}", node.label),
+                "pipeline.node",
+            );
+
             let stats = if plugin.requires_pixel_access() {
-                self.process_pixel_node(&mut ctx, node, &final_params)
-                    .await?
+                tracing::debug!(
+                    node_label = %node.label,
+                    "Executing pixel-processing node '{}'",
+                    node.label,
+                );
+                match self.process_pixel_node(&mut ctx, node, &final_params).await {
+                    Ok(s) => s,
+                    Err(e) => {
+                        tracing::error!(
+                            node_label = %node.label,
+                            plugin_id = %node.plugin_id,
+                            error = %e,
+                            "Node '{}' execution failed: {}",
+                            node.label,
+                            e,
+                        );
+                        ctx.node_states.insert(
+                            *node_id,
+                            NodeRunState {
+                                status: NodeStatus::Failed(e.to_string()),
+                                started_at: Some(started_at),
+                            },
+                        );
+                        nodes_failed += 1;
+                        return Err(e);
+                    }
+                }
             } else {
-                self.process_metadata_node(&mut ctx, node, &final_params)
-                    .await?
+                tracing::debug!(
+                    node_label = %node.label,
+                    "Executing metadata-processing node '{}'",
+                    node.label,
+                );
+                match self
+                    .process_metadata_node(&mut ctx, node, &final_params)
+                    .await
+                {
+                    Ok(s) => s,
+                    Err(e) => {
+                        tracing::error!(
+                            node_label = %node.label,
+                            plugin_id = %node.plugin_id,
+                            error = %e,
+                            "Node '{}' execution failed: {}",
+                            node.label,
+                            e,
+                        );
+                        ctx.node_states.insert(
+                            *node_id,
+                            NodeRunState {
+                                status: NodeStatus::Failed(e.to_string()),
+                                started_at: Some(started_at),
+                            },
+                        );
+                        nodes_failed += 1;
+                        return Err(e);
+                    }
+                }
             };
+
+            let node_ms = node_timer.elapsed_ms();
+            drop(node_timer);
+
+            tracing::info!(
+                node_label = %node.label,
+                plugin_id = %node.plugin_id,
+                elapsed_ms = node_ms,
+                "Node '{}' completed in {}ms",
+                node.label,
+                node_ms,
+            );
 
             ctx.node_states.insert(
                 *node_id,
@@ -189,7 +317,23 @@ impl NodeExecutor {
                     started_at: Some(started_at),
                 },
             );
+            nodes_completed += 1;
         }
+
+        let total_ms = _timer.elapsed_ms();
+        drop(_timer);
+
+        tracing::info!(
+            total_elapsed_ms = total_ms,
+            nodes_completed = nodes_completed,
+            nodes_failed = nodes_failed,
+            nodes_skipped = nodes_skipped,
+            "Pipeline execution complete: {}ms total, {} completed, {} failed, {} skipped",
+            total_ms,
+            nodes_completed,
+            nodes_failed,
+            nodes_skipped,
+        );
 
         progress.set_progress(1.0, "complete");
 
@@ -200,6 +344,7 @@ impl NodeExecutor {
         })
     }
 
+    #[tracing::instrument(skip_all, fields(node = %node.label))]
     async fn process_pixel_node(
         &self,
         ctx: &mut ExecutionContext,
@@ -217,6 +362,17 @@ impl NodeExecutor {
         let mut output = PixelBuffer::new(input.width, input.height, input.layout, input.format);
         output.color_space = input.color_space.clone();
         output.icc_profile = input.icc_profile.clone();
+
+        tracing::debug!(
+            input_width = input.width,
+            input_height = input.height,
+            input_format = ?input.format,
+            "Processing pixel node '{}' with ({},{}) {:?} input",
+            node.label,
+            input.width,
+            input.height,
+            input.format,
+        );
 
         let processor = self
             .registry
@@ -244,11 +400,23 @@ impl NodeExecutor {
             )
             .await?;
 
+        tracing::debug!(
+            output_width = output.width,
+            output_height = output.height,
+            elapsed_ms = stats.elapsed_ms,
+            "Pixel node '{}' produced ({},{}) output in {}ms",
+            node.label,
+            output.width,
+            output.height,
+            stats.elapsed_ms,
+        );
+
         ctx.buffer = Some(output);
 
         Ok(stats)
     }
 
+    #[tracing::instrument(skip_all, fields(node = %node.label))]
     async fn process_metadata_node(
         &self,
         ctx: &mut ExecutionContext,
@@ -264,6 +432,13 @@ impl NodeExecutor {
             path: ctx.image_info.path.clone(),
             format: ctx.image_info.format.clone(),
         };
+
+        tracing::debug!(
+            target_path = %target.path,
+            "Reading metadata for node '{}' from {}",
+            node.label,
+            target.path,
+        );
 
         match processor.read_metadata(&target, params).await {
             Ok(read_meta) => {
@@ -284,6 +459,11 @@ impl NodeExecutor {
                     if read_meta.gps.is_some() {
                         ctx.metadata.gps = read_meta.gps;
                     }
+                    tracing::debug!(
+                        node_label = %node.label,
+                        "Metadata read successful for node '{}'",
+                        node.label,
+                    );
                 }
             }
             Err(e) => {
@@ -295,6 +475,13 @@ impl NodeExecutor {
             path: ctx.image_info.path.clone(),
             format: ctx.image_info.format.clone(),
         };
+
+        tracing::debug!(
+            target_path = %write_target.path,
+            "Writing metadata for node '{}' to {}",
+            node.label,
+            write_target.path,
+        );
 
         match processor
             .write_metadata(&mut write_target, &ctx.metadata, params)

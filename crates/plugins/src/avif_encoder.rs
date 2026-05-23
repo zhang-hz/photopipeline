@@ -284,15 +284,18 @@ impl Plugin for AvifEncoderPlugin {
     }
 
     async fn initialize(&mut self, _cfg: &photopipeline_plugin::PluginConfig) -> PluginResult<()> {
+        tracing::info!("avif_encoder plugin initialized (avifenc required)");
         Ok(())
     }
 
     async fn shutdown(&mut self) -> PluginResult<()> {
+        tracing::info!("avif_encoder plugin shutdown");
         Ok(())
     }
 
     async fn validate(&self, params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>> {
         let mut issues = Vec::new();
+        tracing::debug!("avif_encoder: validating parameters");
         if let Some(q) = params.get("quality").and_then(|v| v.as_f64())
             && (!(0.0..=100.0).contains(&q))
         {
@@ -308,6 +311,13 @@ impl Plugin for AvifEncoderPlugin {
                 param: "speed".into(),
                 message: "Speed must be between 0 and 10".into(),
             });
+        }
+        if !issues.is_empty() {
+            tracing::warn!(
+                issue_count = issues.len(),
+                "avif_encoder validation found {} issues",
+                issues.len()
+            );
         }
         Ok(issues)
     }
@@ -327,6 +337,7 @@ impl FormatProcessor for AvifEncoderPlugin {
         if let Some(ref ext) = probe.extension
             && ext.to_lowercase() == "avif"
         {
+            tracing::trace!(extension = %ext, "avif_encoder: can_decode matched extension");
             return true;
         }
         if let Some(ref magic) = probe.magic_bytes
@@ -334,6 +345,7 @@ impl FormatProcessor for AvifEncoderPlugin {
             && &magic[4..8] == b"ftyp"
             && &magic[8..12] == b"avif"
         {
+            tracing::trace!("avif_encoder: can_decode matched magic bytes");
             return true;
         }
         false
@@ -355,7 +367,34 @@ impl FormatProcessor for AvifEncoderPlugin {
         metadata: &Metadata,
         options: &EncodeOptions,
     ) -> PluginResult<Vec<u8>> {
+        let _timer =
+            photopipeline_core::PerfTimer::with_target("avif_encode", "plugin.avif_encoder");
         let quality = options.quality.unwrap_or(85.0);
+        tracing::info!(
+            input_dims = format!("{}x{}", image.width, image.height),
+            format = ?image.format,
+            quality = quality,
+            "avif_encoder: encoding {}x{} AVIF (q={})",
+            image.width,
+            image.height,
+            quality,
+        );
+
+        if photopipeline_oiio::OiioContext::available() {
+            let tmp_out =
+                std::env::temp_dir().join(format!("pp_oiio_out_{}.avif", std::process::id()));
+            if let Ok(()) = photopipeline_oiio::OiioContext::write_image(
+                &tmp_out.to_string_lossy(),
+                image,
+                metadata,
+            ) {
+                if let Ok(data) = std::fs::read(&tmp_out) {
+                    let _ = std::fs::remove_file(&tmp_out);
+                    return Ok(data);
+                }
+                let _ = std::fs::remove_file(&tmp_out);
+            }
+        }
 
         let pid = std::process::id();
         let tmp_input = std::env::temp_dir().join(format!("pp_avif_in_{}.ppm", pid));
@@ -377,6 +416,14 @@ impl FormatProcessor for AvifEncoderPlugin {
             let _ = make;
         }
 
+        tracing::debug!(
+            tool = "avifenc",
+            quality = quality,
+            input = %tmp_input.display(),
+            output = %tmp_output.display(),
+            "avif_encoder: invoking avifenc to encode",
+        );
+
         let result = cmd.output();
 
         let _ = std::fs::remove_file(&tmp_input);
@@ -387,10 +434,24 @@ impl FormatProcessor for AvifEncoderPlugin {
                     plugin: self.id.clone(),
                     error: e,
                 })?;
+                let output_size = data.len();
+                tracing::info!(
+                    output_bytes = output_size,
+                    "avif_encoder: encoded {} bytes",
+                    output_size,
+                );
                 let _ = std::fs::remove_file(&tmp_output);
                 Ok(data)
             }
             Ok(output) => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                tracing::error!(
+                    tool = "avifenc",
+                    exit_code = ?output.status.code(),
+                    stderr = %stderr,
+                    "avif_encoder: avifenc failed with exit code {:?}",
+                    output.status.code(),
+                );
                 let _ = std::fs::remove_file(&tmp_output);
                 Err(PluginError::MissingTool {
                     plugin: self.id.clone(),
@@ -402,6 +463,11 @@ impl FormatProcessor for AvifEncoderPlugin {
                 })
             }
             Err(e) => {
+                tracing::error!(
+                    tool = "avifenc",
+                    error = %e,
+                    "avif_encoder: avifenc invocation failed",
+                );
                 let _ = std::fs::remove_file(&tmp_output);
                 Err(PluginError::Io {
                     plugin: self.id.clone(),

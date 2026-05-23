@@ -1,4 +1,5 @@
 use indicatif::{ProgressBar, ProgressStyle};
+use photopipeline_core::PerfTimer;
 use photopipeline_engine::executor::NodeExecutor;
 use photopipeline_engine::params::ParameterResolver;
 use photopipeline_plugin::Registry;
@@ -8,10 +9,18 @@ use std::sync::Arc;
 use crate::config;
 
 pub async fn run(registry: &Arc<Registry>, config_path: &str, input: &str, output: &str) {
+    let _timer = PerfTimer::with_target("pipeline_cli_run", "cli");
+    tracing::info!(
+        config_path = config_path,
+        input = input,
+        output = output,
+        "Running pipeline"
+    );
+
     let content = match std::fs::read_to_string(config_path) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("Error reading config '{}': {}", config_path, e);
+            tracing::error!(config_path = config_path, error = %e, "Error reading config '{}': {}", config_path, e);
             std::process::exit(1);
         }
     };
@@ -19,18 +28,18 @@ pub async fn run(registry: &Arc<Registry>, config_path: &str, input: &str, outpu
     let template = match config::load_template(&content) {
         Ok(t) => t,
         Err(e) => {
-            eprintln!("Error: {}", e);
+            tracing::error!(config_path = config_path, error = %e, "Error: {}", e);
             std::process::exit(1);
         }
     };
 
     if let Err(e) = template.validate() {
-        eprintln!("Pipeline validation error: {}", e);
+        tracing::error!(config_path = config_path, error = %e, "Pipeline validation error: {}", e);
         std::process::exit(1);
     }
 
     if !Path::new(input).exists() {
-        eprintln!("Error: input file '{}' not found", input);
+        tracing::error!(input = input, "Error: input file '{}' not found", input);
         std::process::exit(1);
     }
 
@@ -65,10 +74,13 @@ pub async fn run(registry: &Arc<Registry>, config_path: &str, input: &str, outpu
 }
 
 pub async fn validate(config_path: &str) {
+    tracing::info!(config_path = config_path, "Validating pipeline config");
+    tracing::debug!("Loading pipeline config from '{}'", config_path);
+
     let content = match std::fs::read_to_string(config_path) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("Error reading config '{}': {}", config_path, e);
+            tracing::error!(config_path = config_path, error = %e, "Error reading config '{}': {}", config_path, e);
             std::process::exit(1);
         }
     };
@@ -76,13 +88,13 @@ pub async fn validate(config_path: &str) {
     let template = match config::load_template(&content) {
         Ok(t) => t,
         Err(e) => {
-            eprintln!("Error: {}", e);
+            tracing::error!(config_path = config_path, error = %e, "Error: {}", e);
             std::process::exit(1);
         }
     };
 
     if let Err(e) = template.validate() {
-        eprintln!("Pipeline validation error: {}", e);
+        tracing::error!(config_path = config_path, error = %e, "Pipeline validation error: {}", e);
         std::process::exit(1);
     }
 

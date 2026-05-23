@@ -3,11 +3,19 @@ use photopipeline_plugin::trait_def::PluginManifest;
 use std::sync::Arc;
 
 pub fn list(registry: &Arc<Registry>) {
+    tracing::info!("Listing plugins");
     let manifests = registry.manifests();
     if manifests.is_empty() {
+        tracing::warn!("No plugins registered");
         println!("No plugins registered.");
         return;
     }
+
+    tracing::info!(
+        plugin_count = manifests.len(),
+        "Found {} plugins",
+        manifests.len()
+    );
 
     println!("Registered plugins ({})", manifests.len());
     println!("{:<30} {:<12} {:<15} ID", "NAME", "VERSION", "CATEGORY");
@@ -33,11 +41,13 @@ pub fn list(registry: &Arc<Registry>) {
 }
 
 pub fn info(registry: &Arc<Registry>, plugin_id: &str) {
+    tracing::info!(plugin_id = plugin_id, "Getting plugin info");
     match registry.manifest(&plugin_id.to_string()) {
         Some(manifest) => {
             print_manifest(&manifest);
         }
         None => {
+            tracing::error!(plugin_id = plugin_id, "Plugin not found: {}", plugin_id);
             eprintln!("Plugin '{}' not found.", plugin_id);
             std::process::exit(1);
         }

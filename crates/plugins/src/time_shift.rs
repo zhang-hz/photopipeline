@@ -3,7 +3,7 @@ use std::process::Command;
 use std::sync::LazyLock;
 
 use photopipeline_core::{
-    HardwareRequirement, Metadata, MetadataScope, MetadataTarget, MetadataWriteReport,
+    HardwareRequirement, Metadata, MetadataScope, MetadataTarget, MetadataWriteReport, PerfTimer,
     PluginCategory, PluginError, PluginId, PluginResult, PluginVersion, ValidationIssue,
 };
 use photopipeline_plugin::{
@@ -406,10 +406,12 @@ impl Plugin for TimeShiftPlugin {
     }
 
     async fn initialize(&mut self, _cfg: &photopipeline_plugin::PluginConfig) -> PluginResult<()> {
+        tracing::info!("time_shift plugin initialized");
         Ok(())
     }
 
     async fn shutdown(&mut self) -> PluginResult<()> {
+        tracing::info!("time_shift plugin shutdown");
         Ok(())
     }
 
@@ -418,6 +420,12 @@ impl Plugin for TimeShiftPlugin {
         let hours = params.get_i64("shift_hours").unwrap_or(0);
         let minutes = params.get_i64("shift_minutes").unwrap_or(0);
         let seconds = params.get_i64("shift_seconds").unwrap_or(0);
+        tracing::debug!(
+            "time_shift: validating (hours={}, minutes={}, seconds={})",
+            hours,
+            minutes,
+            seconds
+        );
 
         if hours == 0 && minutes == 0 && seconds == 0 {
             let src_tz = params.get_str("source_timezone").unwrap_or("UTC");
@@ -430,6 +438,13 @@ impl Plugin for TimeShiftPlugin {
             }
         }
 
+        if !issues.is_empty() {
+            tracing::warn!(
+                issue_count = issues.len(),
+                "time_shift validation found {} issues",
+                issues.len()
+            );
+        }
         Ok(issues)
     }
 }
@@ -445,6 +460,7 @@ impl MetadataProcessor for TimeShiftPlugin {
         _target: &MetadataTarget,
         _params: &ParameterSet,
     ) -> PluginResult<Metadata> {
+        tracing::trace!("time_shift: read_metadata (no-op)");
         Ok(Metadata::default())
     }
 
@@ -454,11 +470,24 @@ impl MetadataProcessor for TimeShiftPlugin {
         metadata: &Metadata,
         params: &ParameterSet,
     ) -> PluginResult<MetadataWriteReport> {
+        let _timer = PerfTimer::with_target("time_shift_write_metadata", "plugin.time_shift");
         let hours = params.get_i64("shift_hours").unwrap_or(0);
         let minutes = params.get_i64("shift_minutes").unwrap_or(0);
         let seconds = params.get_i64("shift_seconds").unwrap_or(0);
         let increment = params.get_f64("increment_per_image").unwrap_or(0.0);
         let batch_index = params.get_i64("batch_image_index").unwrap_or(0);
+
+        tracing::info!(
+            target_path = %target.path,
+            shift_h = hours,
+            shift_m = minutes,
+            shift_s = seconds,
+            "time_shift: applying time shift to {} ({}h {}m {}s)",
+            target.path,
+            hours,
+            minutes,
+            seconds,
+        );
 
         let total_shift = hours as f64 * 3600.0
             + minutes as f64 * 60.0
@@ -490,6 +519,12 @@ impl MetadataProcessor for TimeShiftPlugin {
 
         exiftool_args.push(target.path.clone());
 
+        tracing::debug!(
+            tool = "exiftool",
+            args = ?exiftool_args,
+            "time_shift: invoking exiftool to shift timestamp",
+        );
+
         let mut cmd = Command::new("exiftool");
         for arg in &exiftool_args {
             cmd.arg(arg);
@@ -500,12 +535,30 @@ impl MetadataProcessor for TimeShiftPlugin {
             error: e,
         })?;
 
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            tracing::error!(
+                tool = "exiftool",
+                exit_code = ?output.status.code(),
+                stderr = %stderr,
+                "time_shift: exiftool write failed",
+            );
+        } else {
+            tracing::trace!("time_shift: exiftool write succeeded");
+        }
+
         let tags_written = if output.status.success() { 2 } else { 0 };
         let warnings = if !output.status.success() {
             vec![String::from_utf8_lossy(&output.stderr).to_string()]
         } else {
             vec![]
         };
+
+        tracing::info!(
+            tags_written = tags_written,
+            "time_shift: wrote {} timestamp tags",
+            tags_written,
+        );
 
         Ok(MetadataWriteReport {
             tags_written,

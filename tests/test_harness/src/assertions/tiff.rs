@@ -201,11 +201,7 @@ mod tests {
             data.extend_from_slice(&count.to_le_bytes());
 
             if value_fits {
-                let inline: u32 = if tag_id == 296 {
-                    2
-                } else {
-                    1
-                };
+                let inline: u32 = if tag_id == 296 { 2 } else { 1 };
                 data.extend_from_slice(&inline.to_le_bytes());
             } else {
                 let off = next_value_offset as u32;

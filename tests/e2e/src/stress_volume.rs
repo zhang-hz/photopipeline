@@ -5,8 +5,7 @@ use photopipeline_core::{
     ColorSpace, ExifData, ImageFormat, ImageInfo, Metadata, PixelBuffer, PixelFormat, PluginError,
 };
 use photopipeline_engine::{
-    GroupCondition, ParameterResolver, PipelineGraph, PipelineTemplate, TemplateEdge,
-    TemplateNode,
+    GroupCondition, ParameterResolver, PipelineGraph, PipelineTemplate, TemplateEdge, TemplateNode,
 };
 use photopipeline_plugin::{
     ParameterField, ParameterSchema, ParameterSection, ParameterSet, ParameterType, Plugin,
@@ -63,21 +62,20 @@ fn e2e_1000_image_batch_processing() {
         let buf = ImageFixture::new()
             .width(16)
             .height(16)
-            .solid((i % 256) as u8, ((i * 7) % 256) as u8, ((i * 13) % 256) as u8)
+            .solid(
+                (i % 256) as u8,
+                ((i * 7) % 256) as u8,
+                ((i * 13) % 256) as u8,
+            )
             .build();
-        let info = make_image_info(
-            Uuid::new_v4(),
-            &format!("/tmp/batch_{i:04}.jpg"),
-        );
+        let info = make_image_info(Uuid::new_v4(), &format!("/tmp/batch_{i:04}.jpg"));
         let md = Metadata::default();
 
         let rt = tokio::runtime::Runtime::new().unwrap();
         let exec = photopipeline_engine::NodeExecutor::new(reg.clone(), resolver.clone());
         let progress = Box::new(MockProgressSink::new());
-        let result = rt.block_on(async {
-            exec.execute(&graph, &info, Some(buf), &md, progress)
-                .await
-        });
+        let result =
+            rt.block_on(async { exec.execute(&graph, &info, Some(buf), &md, progress).await });
         match result {
             Ok(_) => success += 1,
             Err(_) => failures += 1,
@@ -251,17 +249,26 @@ fn e2e_rapid_register_unregister_1000_cycles() {
     for cycle in 0..1000 {
         photopipeline_plugins::register_all(&reg);
         let count_before = reg.manifests().len();
-        assert!(count_before >= 14, "cycle {cycle}: expected >=14 plugins, got {count_before}");
+        assert!(
+            count_before >= 14,
+            "cycle {cycle}: expected >=14 plugins, got {count_before}"
+        );
 
         for manifest in reg.manifests() {
             reg.unregister(&manifest.id);
         }
 
         let count_after = reg.manifests().len();
-        assert_eq!(count_after, 0, "cycle {cycle}: expected empty after unregister");
+        assert_eq!(
+            count_after, 0,
+            "cycle {cycle}: expected empty after unregister"
+        );
 
         let all_after = reg.all();
-        assert!(all_after.is_empty(), "cycle {cycle}: all() should be empty after unregister");
+        assert!(
+            all_after.is_empty(),
+            "cycle {cycle}: all() should be empty after unregister"
+        );
     }
 
     photopipeline_plugins::register_all(&reg);
@@ -306,7 +313,11 @@ fn e2e_continuous_pipeline_execution_100_iterations() {
             exec.execute(&graph, &info, Some(buf.clone()), &md, progress)
                 .await
         });
-        assert!(result.is_ok(), "iteration {iter} failed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "iteration {iter} failed: {:?}",
+            result.err()
+        );
     }
 }
 

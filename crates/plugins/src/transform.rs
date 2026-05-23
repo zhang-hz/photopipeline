@@ -2,8 +2,9 @@ use async_trait::async_trait;
 use std::sync::LazyLock;
 
 use photopipeline_core::{
-    ChannelLayout, ColorSpace, GpuBackend, HardwareRequirement, PixelBuffer, PixelFormat,
-    PluginCategory, PluginId, PluginResult, PluginVersion, ProcessingStats, ValidationIssue,
+    ChannelLayout, ColorSpace, GpuBackend, HardwareRequirement, PerfTimer, PixelBuffer,
+    PixelFormat, PluginCategory, PluginId, PluginResult, PluginVersion, ProcessingStats,
+    ValidationIssue,
 };
 use photopipeline_plugin::{
     AuxView, EnumOption, GuiLayout, GuiSchema, GuiSection, ParameterField, ParameterSchema,
@@ -468,15 +469,18 @@ impl Plugin for TransformPlugin {
     }
 
     async fn initialize(&mut self, _cfg: &photopipeline_plugin::PluginConfig) -> PluginResult<()> {
+        tracing::info!("transform plugin initialized");
         Ok(())
     }
 
     async fn shutdown(&mut self) -> PluginResult<()> {
+        tracing::info!("transform plugin shutdown");
         Ok(())
     }
 
     async fn validate(&self, params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>> {
         let mut issues = Vec::new();
+        tracing::debug!("transform: validating parameters");
         let mode = params.get_str("resize_mode").unwrap_or("none");
 
         if mode == "absolute" {
@@ -525,6 +529,13 @@ impl Plugin for TransformPlugin {
             }
         }
 
+        if !issues.is_empty() {
+            tracing::warn!(
+                issue_count = issues.len(),
+                "transform validation found {} issues",
+                issues.len()
+            );
+        }
         Ok(issues)
     }
 }
@@ -569,9 +580,20 @@ impl PixelProcessor for TransformPlugin {
         params: &ParameterSet,
         progress: Box<dyn ProgressSink>,
     ) -> PluginResult<ProcessingStats> {
+        let _timer = PerfTimer::with_target("transform_process_pixels", "plugin.transform");
         progress.set_progress(0.0, "transforming");
 
         let mode = params.get_str("resize_mode").unwrap_or("none");
+        tracing::info!(
+            input_dims = format!("{}x{}", input.width, input.height),
+            input_format = ?input.format,
+            resize_mode = mode,
+            "transform: processing {}x{} {:?} (mode={})",
+            input.width,
+            input.height,
+            input.format,
+            mode,
+        );
         let crop_enabled = params
             .get("crop_enabled")
             .and_then(|v| v.as_bool())
@@ -679,6 +701,50 @@ impl PixelProcessor for TransformPlugin {
                 );
             }
             "lanczos3" => {
+                if let Ok(f32_input) = extract_transform_f32(input, channels) {
+                    match photopipeline_halide::HalideContext::resize(
+                        &f32_input,
+                        input.width,
+                        input.height,
+                        channels as u32,
+                        target_w,
+                        target_h,
+                        "lanczos3",
+                    ) {
+                        Ok(result) => {
+                            write_transform_f32_result(output, &result, target_w, target_h, input);
+                            if flip_h || flip_v {
+                                flip_buffer(
+                                    output,
+                                    target_w,
+                                    target_h,
+                                    channels,
+                                    target_w as usize * channels,
+                                    flip_h,
+                                    flip_v,
+                                );
+                            }
+                            output.width = target_w;
+                            output.height = target_h;
+                            output.layout = input.layout;
+                            output.format = input.format;
+                            output.color_space = input.color_space.clone();
+                            output.icc_profile = input.icc_profile.clone();
+
+                            let pixels = target_w as u64 * target_h as u64;
+                            progress.set_progress(1.0, "done (Halide lanczos3)");
+                            return Ok(ProcessingStats {
+                                elapsed_ms: 0,
+                                cpu_time_ms: 0,
+                                gpu_time_ms: Some(0),
+                                peak_memory_mb: (output.data.data.len() * 2) as u64 / (1024 * 1024),
+                                input_pixels: input.width as u64 * input.height as u64,
+                                output_pixels: pixels,
+                            });
+                        }
+                        Err(_) => {}
+                    }
+                }
                 bilinear_resize(
                     input, output, target_w, target_h, channels, in_stride, out_stride,
                 );
@@ -705,6 +771,15 @@ impl PixelProcessor for TransformPlugin {
 
         let pixels = target_w as u64 * target_h as u64;
         progress.set_progress(1.0, "done");
+
+        tracing::info!(
+            output_dims = format!("{}x{}", target_w, target_h),
+            output_pixels = pixels,
+            "transform: produced {}x{} output ({} pixels)",
+            target_w,
+            target_h,
+            pixels,
+        );
 
         Ok(ProcessingStats {
             elapsed_ms: 0,
@@ -861,3 +936,31 @@ static TAGS: LazyLock<Vec<String>> = LazyLock::new(|| {
         "lanczos".into(),
     ]
 });
+
+fn extract_transform_f32(input: &PixelBuffer, _channels: usize) -> Result<Vec<f32>, ()> {
+    let count = input.width as usize * input.height as usize * _channels;
+    let f32_data = input.data.as_f32_slice();
+    if f32_data.len() < count {
+        return Err(());
+    }
+    Ok(f32_data[..count].to_vec())
+}
+
+fn write_transform_f32_result(
+    output: &mut PixelBuffer,
+    data: &[f32],
+    width: u32,
+    height: u32,
+    input: &PixelBuffer,
+) {
+    let channels = input.layout.channel_count() as usize;
+    let expected = width as usize * height as usize * channels;
+    let copy_len = expected.min(data.len()).min(output.data.data.len() / 4);
+    output.data.data.resize(copy_len * 4, 0);
+    let out_f32: &mut [f32] = bytemuck::cast_slice_mut(&mut output.data.data);
+    for (i, &v) in data.iter().take(copy_len).enumerate() {
+        if i < out_f32.len() {
+            out_f32[i] = v;
+        }
+    }
+}

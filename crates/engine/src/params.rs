@@ -34,7 +34,11 @@ impl ExpressionEngine {
         metadata: &photopipeline_core::Metadata,
         image_info: &ImageInfo,
     ) -> Result<serde_json::Value, String> {
-        let re = Regex::new(r"\$\{([^}]+)\}").map_err(|e| e.to_string())?;
+        tracing::trace!(expression = %expr, "Evaluating expression");
+        let re = Regex::new(r"\$\{([^}]+)\}").map_err(|e| {
+            tracing::debug!(expression = %expr, error = %e, "Expression regex compile error");
+            e.to_string()
+        })?;
         let mut result = expr.to_string();
 
         for cap in re.captures_iter(expr) {
@@ -44,7 +48,9 @@ impl ExpressionEngine {
             result = result.replace(full_match, &resolved);
         }
 
-        Ok(serde_json::Value::String(result))
+        let val = serde_json::Value::String(result.clone());
+        tracing::trace!(expression = %expr, result = %result, "Expression evaluated: {} -> {}", expr, result);
+        Ok(val)
     }
 
     fn evaluate_inner(
@@ -70,6 +76,7 @@ impl ExpressionEngine {
             let result = self.eval_comparison(expr, metadata, image_info)?;
             Ok(result.to_string())
         } else {
+            tracing::debug!(expression = %expr, "Unknown expression variable");
             self.resolve_variable(expr.trim(), metadata, image_info)
         }
     }
@@ -165,6 +172,7 @@ impl ExpressionEngine {
         image_info: &ImageInfo,
     ) -> Result<String, String> {
         let var = var.trim();
+        tracing::trace!(variable = %var, "Resolving variable");
 
         if var.starts_with("exif.") {
             self.resolve_exif_var(&var[5..], metadata)
@@ -186,10 +194,10 @@ impl ExpressionEngine {
         field: &str,
         metadata: &photopipeline_core::Metadata,
     ) -> Result<String, String> {
-        let exif = metadata
-            .exif
-            .as_ref()
-            .ok_or_else(|| "no exif data available".to_string())?;
+        let exif = metadata.exif.as_ref().ok_or_else(|| {
+            tracing::trace!(field = field, "No EXIF data available for field");
+            "no exif data available".to_string()
+        })?;
 
         match field {
             "iso" => Ok(exif
@@ -210,7 +218,10 @@ impl ExpressionEngine {
             "make" => Ok(exif.make.clone().unwrap_or_default()),
             "model" => Ok(exif.model.clone().unwrap_or_default()),
             "lens" => Ok(exif.lens_model.clone().unwrap_or_default()),
-            _ => Err(format!("unknown exif field '{}'", field)),
+            _ => {
+                tracing::trace!(field = field, "Unknown EXIF field requested");
+                Err(format!("unknown exif field '{}'", field))
+            }
         }
     }
 
@@ -220,12 +231,16 @@ impl ExpressionEngine {
             "width" => Ok(image_info.width.to_string()),
             "height" => Ok(image_info.height.to_string()),
             "filesize" => Ok(image_info.file_size_bytes.to_string()),
-            _ => Err(format!("unknown image field '{}'", field)),
+            _ => {
+                tracing::trace!(field = field, "Unknown image field requested");
+                Err(format!("unknown image field '{}'", field))
+            }
         }
     }
 }
 
 impl ParameterResolver {
+    #[tracing::instrument(skip_all)]
     pub fn new() -> Self {
         Self {
             template_params: HashMap::new(),
@@ -235,10 +250,13 @@ impl ParameterResolver {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn set_template_params(&mut self, node_id: NodeId, params: ParameterSet) {
+        tracing::trace!(node_id = %node_id, "Setting template params for node");
         self.template_params.insert(node_id, params);
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn add_group_override(
         &mut self,
         condition: GroupCondition,
@@ -247,10 +265,13 @@ impl ParameterResolver {
         self.group_overrides.push((condition, params));
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn set_image_override(&mut self, image_id: ImageId, node_id: NodeId, params: ParameterSet) {
+        tracing::trace!(image_id = %image_id, node_id = %node_id, "Setting image override");
         self.image_overrides.insert((image_id, node_id), params);
     }
 
+    #[tracing::instrument(skip_all, fields(node_id = %node_id, image_id = %image_id))]
     pub fn resolve(
         &self,
         node_id: NodeId,
@@ -259,9 +280,13 @@ impl ParameterResolver {
         metadata: &photopipeline_core::Metadata,
         image_info: &ImageInfo,
     ) -> ParameterSet {
+        tracing::debug!(
+            "Resolving parameters: plugin_defaults -> template -> group -> image -> expressions"
+        );
         let mut result = self.resolve_plugin_defaults(schema);
 
         if let Some(template_params) = self.template_params.get(&node_id) {
+            tracing::trace!("Merging template params for node");
             result.merge(template_params);
         }
 
@@ -276,11 +301,13 @@ impl ParameterResolver {
             if self.evaluate_condition(condition, metadata, image_info)
                 && let Some(group_params) = node_params.get(&node_id)
             {
+                tracing::trace!("Merging group override params for node");
                 result.merge(group_params);
             }
         }
 
         if let Some(image_params) = self.image_overrides.get(&(image_id, node_id)) {
+            tracing::trace!("Merging image override params for node");
             result.merge(image_params);
         }
 
@@ -311,7 +338,7 @@ impl ParameterResolver {
         metadata: &photopipeline_core::Metadata,
         image_info: &ImageInfo,
     ) -> bool {
-        match condition {
+        let result = match condition {
             GroupCondition::Always => true,
             GroupCondition::And(conditions) => conditions
                 .iter()
@@ -373,7 +400,9 @@ impl ParameterResolver {
                         .unwrap_or(false)
                 })
                 .unwrap_or(false),
-        }
+        };
+        tracing::trace!(condition_type = ?condition, result = result, "Condition evaluated to {}", result);
+        result
     }
 
     fn get_exif_tag(exif: &photopipeline_core::ExifData, tag: &str) -> Option<String> {

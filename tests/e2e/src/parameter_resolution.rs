@@ -242,10 +242,7 @@ fn e2e_group_overrides_template() {
     group_params.insert("threshold".into(), json!(150));
     let mut node_map = std::collections::HashMap::new();
     node_map.insert(node_id, group_params);
-    resolver.add_group_override(
-        photopipeline_engine::GroupCondition::Always,
-        node_map,
-    );
+    resolver.add_group_override(photopipeline_engine::GroupCondition::Always, node_map);
 
     let metadata = Metadata::default();
     let image_info = make_test_image_info();
@@ -268,10 +265,7 @@ fn e2e_image_overrides_group() {
     group_params.insert("threshold".into(), json!(150));
     let mut node_map = std::collections::HashMap::new();
     node_map.insert(node_id, group_params);
-    resolver.add_group_override(
-        photopipeline_engine::GroupCondition::Always,
-        node_map,
-    );
+    resolver.add_group_override(photopipeline_engine::GroupCondition::Always, node_map);
 
     let mut image_params = ParameterSet::new();
     image_params.insert("threshold".into(), json!(99));
@@ -298,10 +292,7 @@ fn e2e_image_overrides_all() {
     group_params.insert("threshold".into(), json!(20));
     let mut node_map = std::collections::HashMap::new();
     node_map.insert(node_id, group_params);
-    resolver.add_group_override(
-        photopipeline_engine::GroupCondition::Always,
-        node_map,
-    );
+    resolver.add_group_override(photopipeline_engine::GroupCondition::Always, node_map);
 
     let mut image_params = ParameterSet::new();
     image_params.insert("threshold".into(), json!(30));
@@ -529,7 +520,11 @@ fn e2e_expression_ternary_evaluation() {
     let metadata = make_test_metadata(800);
     let image_info = make_test_image_info();
     let result = engine
-        .evaluate("${exif.iso >= 400 ? 'high' : 'low'}", &metadata, &image_info)
+        .evaluate(
+            "${exif.iso >= 400 ? 'high' : 'low'}",
+            &metadata,
+            &image_info,
+        )
         .unwrap();
     assert_eq!(result, json!("high"));
 

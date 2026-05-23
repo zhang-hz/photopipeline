@@ -2,11 +2,13 @@ use photopipeline_core::{
     ChannelLayout, ColorSpace, ExifData, GpsData, ImageFormat, ImageInfo, Metadata, PixelBuffer,
     PixelFormat,
 };
-use photopipeline_engine::{NodeStatus, ParameterResolver, PipelineTemplate, TemplateEdge, TemplateNode};
+use photopipeline_engine::{
+    NodeStatus, ParameterResolver, PipelineTemplate, TemplateEdge, TemplateNode,
+};
 use photopipeline_plugin::registry::Registry;
 use photopipeline_plugin::{ParameterSet, ProgressSink};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use test_harness::fixtures::image::ImageFixture;
 use test_harness::fixtures::metadata::{exif_sony_a7r5, gps_beijing};
 use test_harness::mocks::progress::MockProgressSink;
@@ -141,7 +143,13 @@ fn e2e_metadata_pipeline_gps_and_time_shift() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let result = rt.block_on(async {
         executor
-            .execute(&graph, &image_info, Some(pb), &metadata, Box::new(NoopProgress))
+            .execute(
+                &graph,
+                &image_info,
+                Some(pb),
+                &metadata,
+                Box::new(NoopProgress),
+            )
             .await
     });
 
@@ -225,7 +233,13 @@ fn e2e_pixel_pipeline_transform_and_colorspace() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let result = rt.block_on(async {
         executor
-            .execute(&graph, &image_info, Some(pb), &metadata, Box::new(NoopProgress))
+            .execute(
+                &graph,
+                &image_info,
+                Some(pb),
+                &metadata,
+                Box::new(NoopProgress),
+            )
             .await
     });
 
@@ -333,13 +347,22 @@ fn e2e_hdr_pipeline_raw_to_heif() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let result = rt.block_on(async {
         executor
-            .execute(&graph, &image_info, Some(pb), &metadata, Box::new(NoopProgress))
+            .execute(
+                &graph,
+                &image_info,
+                Some(pb),
+                &metadata,
+                Box::new(NoopProgress),
+            )
             .await
     });
 
     // HDR pipeline with auto lens correction requires LensFun runtime.
     // Expected to fail gracefully with Internal error (not panic).
-    assert!(result.is_err(), "HDR pipeline should fail without LensFun runtime");
+    assert!(
+        result.is_err(),
+        "HDR pipeline should fail without LensFun runtime"
+    );
 }
 
 #[test]
@@ -390,11 +413,21 @@ fn e2e_single_node_pipeline_transform() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let result = rt.block_on(async {
         executor
-            .execute(&graph, &image_info, Some(pb), &metadata, Box::new(NoopProgress))
+            .execute(
+                &graph,
+                &image_info,
+                Some(pb),
+                &metadata,
+                Box::new(NoopProgress),
+            )
             .await
     });
 
-    assert!(result.is_ok(), "single node pipeline failed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "single node pipeline failed: {:?}",
+        result.err()
+    );
     let exec_result = result.unwrap();
     assert!(exec_result.buffer.is_some());
     let buf = exec_result.buffer.unwrap();
@@ -486,16 +519,41 @@ fn e2e_pipeline_with_disabled_node() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let result = rt.block_on(async {
         executor
-            .execute(&graph, &image_info, Some(pb), &metadata, Box::new(NoopProgress))
+            .execute(
+                &graph,
+                &image_info,
+                Some(pb),
+                &metadata,
+                Box::new(NoopProgress),
+            )
             .await
     });
 
-    assert!(result.is_ok(), "disabled node pipeline failed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "disabled node pipeline failed: {:?}",
+        result.err()
+    );
     let exec_result = result.unwrap();
 
-    let first_id = graph.nodes.iter().find(|n| n.label == "First Resize").unwrap().id;
-    let middle_id = graph.nodes.iter().find(|n| n.label == "Disabled Colorspace").unwrap().id;
-    let last_id = graph.nodes.iter().find(|n| n.label == "Last Resize").unwrap().id;
+    let first_id = graph
+        .nodes
+        .iter()
+        .find(|n| n.label == "First Resize")
+        .unwrap()
+        .id;
+    let middle_id = graph
+        .nodes
+        .iter()
+        .find(|n| n.label == "Disabled Colorspace")
+        .unwrap()
+        .id;
+    let last_id = graph
+        .nodes
+        .iter()
+        .find(|n| n.label == "Last Resize")
+        .unwrap()
+        .id;
 
     let first_state = exec_result.node_states.get(&first_id).unwrap();
     let middle_state = exec_result.node_states.get(&middle_id).unwrap();
@@ -563,11 +621,20 @@ fn e2e_pipeline_node_validation_failure() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let result = rt.block_on(async {
             executor
-                .execute(&graph, &image_info, Some(pb), &metadata, Box::new(NoopProgress))
+                .execute(
+                    &graph,
+                    &image_info,
+                    Some(pb),
+                    &metadata,
+                    Box::new(NoopProgress),
+                )
                 .await
         });
 
-        assert!(result.is_ok(), "same source/target should be warning only, not error");
+        assert!(
+            result.is_ok(),
+            "same source/target should be warning only, not error"
+        );
     }
 
     {
@@ -612,7 +679,10 @@ fn e2e_pipeline_node_validation_failure() {
                 .await
         });
 
-        assert!(result.is_err(), "heif_encoder quality=200 should fail validation");
+        assert!(
+            result.is_err(),
+            "heif_encoder quality=200 should fail validation"
+        );
         let err = result.unwrap_err();
         let err_msg = format!("{:?}", err);
         assert!(
@@ -636,10 +706,7 @@ fn e2e_empty_graph_should_fail_validation() {
     let result = template.validate();
     assert!(result.is_err(), "empty graph should fail validation");
     let err = result.unwrap_err();
-    assert!(
-        err.contains("node"),
-        "error should mention missing nodes"
-    );
+    assert!(err.contains("node"), "error should mention missing nodes");
 }
 
 #[test]
@@ -744,7 +811,11 @@ fn e2e_large_linear_pipeline_100_nodes() {
             .await
     });
 
-    assert!(result.is_ok(), "100-node pipeline failed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "100-node pipeline failed: {:?}",
+        result.err()
+    );
     let exec_result = result.unwrap();
 
     let completed = exec_result
@@ -876,11 +947,21 @@ fn e2e_diamond_pipeline_topology() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let result = rt.block_on(async {
         executor
-            .execute(&graph, &image_info, Some(pb), &metadata, Box::new(NoopProgress))
+            .execute(
+                &graph,
+                &image_info,
+                Some(pb),
+                &metadata,
+                Box::new(NoopProgress),
+            )
             .await
     });
 
-    assert!(result.is_ok(), "diamond pipeline failed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "diamond pipeline failed: {:?}",
+        result.err()
+    );
 }
 
 #[test]

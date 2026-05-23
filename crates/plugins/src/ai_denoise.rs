@@ -3,7 +3,7 @@ use parking_lot::RwLock;
 use std::sync::LazyLock;
 
 use photopipeline_core::{
-    AiBackend, ColorSpace, GpuBackend, HardwareRequirement, PixelBuffer, PixelFormat,
+    AiBackend, ColorSpace, GpuBackend, HardwareRequirement, PerfTimer, PixelBuffer, PixelFormat,
     PluginCategory, PluginError, PluginId, PluginResult, PluginVersion, ProcessingStats, Tensor,
     ValidationIssue,
 };
@@ -378,6 +378,7 @@ impl Plugin for AiDenoisePlugin {
 
     async fn validate(&self, params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>> {
         let mut issues = Vec::new();
+        tracing::debug!("ai_denoise: validating parameters");
         let strength = params
             .get("denoise_strength")
             .and_then(|v| v.as_f64())
@@ -411,6 +412,13 @@ impl Plugin for AiDenoisePlugin {
             });
         }
 
+        if !issues.is_empty() {
+            tracing::warn!(
+                issue_count = issues.len(),
+                "ai_denoise validation found {} issues",
+                issues.len()
+            );
+        }
         Ok(issues)
     }
 }
@@ -450,7 +458,19 @@ impl PixelProcessor for AiDenoisePlugin {
         params: &ParameterSet,
         progress: Box<dyn ProgressSink>,
     ) -> PluginResult<ProcessingStats> {
+        let _timer = PerfTimer::with_target("ai_denoise_process_pixels", "plugin.ai_denoise");
         progress.set_progress(0.0, "preparing for AI denoise");
+
+        tracing::info!(
+            input_dims = format!("{}x{}", input.width, input.height),
+            input_format = ?input.format,
+            model_loaded = *self.model_loaded.read(),
+            "ai_denoise: processing {}x{} {:?} (model loaded: {})",
+            input.width,
+            input.height,
+            input.format,
+            *self.model_loaded.read(),
+        );
 
         let strength = params
             .get("denoise_strength")
@@ -535,6 +555,10 @@ impl AiProcessor for AiDenoisePlugin {
     }
 
     async fn load_model(&mut self, backend: &AiBackend) -> PluginResult<()> {
+        let _timer = photopipeline_core::PerfTimer::with_target(
+            "ai_denoise_load_model",
+            "plugin.ai_denoise",
+        );
         let model_name = "standard_v2";
         tracing::info!(
             "AI Denoise: loading model '{}' on backend {:?} (ONNX Runtime placeholder)",
@@ -565,6 +589,7 @@ impl AiProcessor for AiDenoisePlugin {
     }
 
     async fn unload_model(&mut self) -> PluginResult<()> {
+        tracing::debug!("ai_denoise: unloading model");
         if *self.model_loaded.read() {
             tracing::info!(
                 "AI Denoise: unloading model '{}'",
@@ -578,6 +603,8 @@ impl AiProcessor for AiDenoisePlugin {
     }
 
     async fn infer(&self, input: &Tensor, params: &ParameterSet) -> PluginResult<Tensor> {
+        let _timer =
+            photopipeline_core::PerfTimer::with_target("ai_denoise_infer", "plugin.ai_denoise");
         let _strength = params
             .get("denoise_strength")
             .and_then(|v| v.as_f64())

@@ -1,23 +1,145 @@
 use std::sync::Arc;
-use parking_lot::RwLock;
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
-use futures::stream;
+use uuid::Uuid;
+
+use photopipeline_core::{ImageInfo, Metadata};
+use photopipeline_engine::{NodeExecutor, PipelineTemplate, TemplateEdge, TemplateNode};
+use photopipeline_plugin::ProgressSink;
 
 use crate::pb::pipeline::{
-    pipeline_service_server::PipelineService,
-    ExecuteProgress, ExecuteRequest, NodeSchema, PipelineId,
-    PipelineSpec, PluginId, ValidationIssue,
-    ValidationResult,
+    ExecuteProgress, ExecuteRequest, NodeSchema, PipelineId, PipelineSpec, PluginId,
+    ValidationIssue, ValidationResult, execute_progress::Stage as ProtoStage,
+    pipeline_service_server::PipelineService, validation_issue::Severity as ProtoSeverity,
 };
-use crate::SharedState;
+use crate::{SharedState, json_to_prost_value, prost_struct_to_params, schema_to_prost_struct};
 
 pub struct PipelineServiceImpl {
-    state: Arc<RwLock<SharedState>>,
+    state: Arc<SharedState>,
 }
 
 impl PipelineServiceImpl {
-    pub fn new(state: Arc<RwLock<SharedState>>) -> Self {
+    pub fn new(state: Arc<SharedState>) -> Self {
         Self { state }
+    }
+}
+
+fn build_template(spec: &PipelineSpec) -> PipelineTemplate {
+    let nodes: Vec<TemplateNode> = spec
+        .nodes
+        .iter()
+        .map(|n| {
+            let params = n.params.as_ref().map(|s| prost_struct_to_params(s));
+            TemplateNode {
+                id: n.id.clone(),
+                plugin: n.plugin_id.clone(),
+                label: if n.label.is_empty() {
+                    Some(n.id.clone())
+                } else {
+                    Some(n.label.clone())
+                },
+                enabled: n.enabled,
+                params,
+            }
+        })
+        .collect();
+
+    let edges: Vec<TemplateEdge> = spec
+        .edges
+        .iter()
+        .map(|e| TemplateEdge {
+            from: e.from.clone(),
+            to: e.to.clone(),
+        })
+        .collect();
+
+    PipelineTemplate {
+        metadata: Default::default(),
+        nodes,
+        edges,
+        overrides: vec![],
+        groups: vec![],
+        batch: None,
+    }
+}
+
+fn build_image_info(path: &str) -> ImageInfo {
+    let filename = std::path::Path::new(path)
+        .file_name()
+        .map(|f| f.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    let format = detect_format_from_ext(path);
+
+    let file_size_bytes = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+
+    ImageInfo {
+        id: Uuid::new_v4(),
+        path: path.to_string(),
+        filename,
+        format,
+        width: 0,
+        height: 0,
+        file_size_bytes,
+        pixel_format: photopipeline_core::PixelFormat::U8,
+        color_space: photopipeline_core::ColorSpace::default(),
+    }
+}
+
+fn detect_format_from_ext(path: &str) -> photopipeline_core::ImageFormat {
+    use photopipeline_core::ImageFormat;
+    let lower = path.to_lowercase();
+    if lower.ends_with(".arw")
+        || lower.ends_with(".cr2")
+        || lower.ends_with(".nef")
+        || lower.ends_with(".dng")
+    {
+        ImageFormat::RAW
+    } else if lower.ends_with(".heif") || lower.ends_with(".heic") {
+        ImageFormat::HEIF
+    } else if lower.ends_with(".avif") {
+        ImageFormat::AVIF
+    } else if lower.ends_with(".jxl") {
+        ImageFormat::JXL
+    } else if lower.ends_with(".png") {
+        ImageFormat::PNG
+    } else if lower.ends_with(".tiff") || lower.ends_with(".tif") {
+        ImageFormat::TIFF
+    } else if lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
+        ImageFormat::JPEG
+    } else if lower.ends_with(".webp") {
+        ImageFormat::WEBP
+    } else if lower.ends_with(".exr") {
+        ImageFormat::OpenEXR
+    } else if lower.ends_with(".bmp") {
+        ImageFormat::BMP
+    } else {
+        ImageFormat::Unknown("unknown".to_string())
+    }
+}
+
+struct ChannelProgressSink {
+    sender: mpsc::Sender<Result<ExecuteProgress, Status>>,
+    node_id: String,
+    node_label: String,
+    start: std::time::Instant,
+}
+
+impl ProgressSink for ChannelProgressSink {
+    fn set_progress(&self, fraction: f32, message: &str) {
+        let _ = self.sender.send(Ok(ExecuteProgress {
+            stage: ProtoStage::Processing as i32,
+            node_id: self.node_id.clone(),
+            node_label: self.node_label.clone(),
+            fraction,
+            message: message.to_string(),
+            elapsed_ms: self.start.elapsed().as_millis() as i64,
+        }));
+    }
+
+    fn is_canceled(&self) -> bool {
+        false
     }
 }
 
@@ -29,10 +151,11 @@ impl PipelineService for PipelineServiceImpl {
     ) -> Result<Response<PipelineId>, Status> {
         let _spec = request.into_inner();
         let id = uuid::Uuid::new_v4().to_string();
+        tracing::info!(pipeline_id = %id, "create_pipeline RPC called, created {}", id);
         Ok(Response::new(PipelineId { id }))
     }
 
-    type ExecuteStream = stream::Iter<std::vec::IntoIter<Result<ExecuteProgress, Status>>>;
+    type ExecuteStream = ReceiverStream<Result<ExecuteProgress, Status>>;
 
     async fn execute(
         &self,
@@ -41,60 +164,83 @@ impl PipelineService for PipelineServiceImpl {
         let req = request.into_inner();
         let pipeline_id = req.pipeline_id.clone();
         let image_path = req.image_path.clone();
+        tracing::info!("execute: pipeline={}, image={}", pipeline_id, image_path);
 
-        let stages = vec![
-            ExecuteProgress {
-                stage: 0,
-                node_id: String::new(),
-                node_label: format!("Loading {}", image_path),
-                fraction: 0.0,
-                message: "Starting pipeline...".into(),
-                elapsed_ms: 0,
-            },
-            ExecuteProgress {
-                stage: 1,
-                node_id: "decode".into(),
-                node_label: "Decoding".into(),
-                fraction: 0.25,
-                message: "Decoding image...".into(),
-                elapsed_ms: 100,
-            },
-            ExecuteProgress {
-                stage: 2,
-                node_id: "process".into(),
-                node_label: "Processing".into(),
-                fraction: 0.5,
-                message: "Applying pipeline nodes...".into(),
-                elapsed_ms: 250,
-            },
-            ExecuteProgress {
-                stage: 2,
-                node_id: "process".into(),
-                node_label: "Processing".into(),
-                fraction: 0.75,
-                message: "Finishing processing...".into(),
-                elapsed_ms: 500,
-            },
-            ExecuteProgress {
-                stage: 3,
-                node_id: "encode".into(),
-                node_label: "Encoding".into(),
-                fraction: 0.9,
-                message: "Encoding output...".into(),
-                elapsed_ms: 750,
-            },
-            ExecuteProgress {
-                stage: 4,
-                node_id: String::new(),
-                node_label: "Complete".into(),
-                fraction: 1.0,
-                message: format!("Pipeline {} done", pipeline_id),
-                elapsed_ms: 1000,
-            },
-        ];
+        let graph_id = Uuid::parse_str(&pipeline_id)
+            .map_err(|e| Status::invalid_argument(format!("invalid pipeline id: {}", e)))?;
 
-        let iter = stages.into_iter().map(Ok).collect::<Vec<_>>().into_iter();
-        Ok(Response::new(stream::iter(iter)))
+        let graph = {
+            let graphs = self.state.graphs.read();
+            graphs.get(&graph_id).cloned()
+        }
+        .ok_or_else(|| Status::not_found(format!("pipeline not found: {}", pipeline_id)))?;
+
+        if !std::path::Path::new(&image_path).exists() {
+            return Err(Status::not_found(format!(
+                "image file not found: {}",
+                image_path
+            )));
+        }
+
+        let image_info = build_image_info(&image_path);
+        let metadata = Metadata::default();
+
+        let (tx, rx) = mpsc::channel::<Result<ExecuteProgress, Status>>(256);
+        let start = std::time::Instant::now();
+
+        let progress = ChannelProgressSink {
+            sender: tx.clone(),
+            node_id: String::new(),
+            node_label: String::new(),
+            start,
+        };
+
+        let _ = tx.send(Ok(ExecuteProgress {
+            stage: ProtoStage::Loading as i32,
+            node_id: String::new(),
+            node_label: format!("Loading {}", image_path),
+            fraction: 0.0,
+            message: "Starting pipeline...".into(),
+            elapsed_ms: 0,
+        }));
+
+        let executor = NodeExecutor::new(self.state.registry.clone(), self.state.resolver.clone());
+
+        tokio::spawn(async move {
+            match executor
+                .execute(&graph, &image_info, None, &metadata, Box::new(progress))
+                .await
+            {
+                Ok(_result) => {
+                    let _ = tx.send(Ok(ExecuteProgress {
+                        stage: ProtoStage::Done as i32,
+                        node_id: String::new(),
+                        node_label: "Complete".into(),
+                        fraction: 1.0,
+                        message: format!(
+                            "Pipeline {} done in {}ms",
+                            pipeline_id,
+                            start.elapsed().as_millis()
+                        ),
+                        elapsed_ms: start.elapsed().as_millis() as i64,
+                    }));
+                    tracing::info!("Pipeline {} completed successfully", pipeline_id);
+                }
+                Err(e) => {
+                    let _ = tx.send(Ok(ExecuteProgress {
+                        stage: ProtoStage::Error as i32,
+                        node_id: String::new(),
+                        node_label: "Error".into(),
+                        fraction: 0.0,
+                        message: e.to_string(),
+                        elapsed_ms: start.elapsed().as_millis() as i64,
+                    }));
+                    tracing::error!("Pipeline {} failed: {}", pipeline_id, e);
+                }
+            }
+        });
+
+        Ok(Response::new(ReceiverStream::new(rx)))
     }
 
     async fn validate(
@@ -102,11 +248,20 @@ impl PipelineService for PipelineServiceImpl {
         request: Request<PipelineSpec>,
     ) -> Result<Response<ValidationResult>, Status> {
         let spec = request.into_inner();
+        tracing::info!(
+            node_count = spec.nodes.len(),
+            "validate RPC called with {} nodes",
+            spec.nodes.len()
+        );
+        tracing::info!("validate: name={}, nodes={}", spec.name, spec.nodes.len());
+
+        let template = build_template(&spec);
 
         let mut issues = Vec::new();
+
         if spec.nodes.is_empty() {
             issues.push(ValidationIssue {
-                severity: 2,
+                severity: ProtoSeverity::Error as i32,
                 param: "nodes".into(),
                 message: "Pipeline must have at least one node".into(),
             });
@@ -116,24 +271,46 @@ impl PipelineService for PipelineServiceImpl {
         for edge in &spec.edges {
             if !node_ids.contains(&edge.from.as_str()) {
                 issues.push(ValidationIssue {
-                    severity: 2,
+                    severity: ProtoSeverity::Error as i32,
                     param: "edges".into(),
                     message: format!("Edge references unknown source node '{}'", edge.from),
                 });
             }
             if !node_ids.contains(&edge.to.as_str()) {
                 issues.push(ValidationIssue {
-                    severity: 2,
+                    severity: ProtoSeverity::Error as i32,
                     param: "edges".into(),
                     message: format!("Edge references unknown target node '{}'", edge.to),
                 });
             }
         }
 
-        Ok(Response::new(ValidationResult {
-            valid: issues.iter().all(|i| i.severity < 2),
-            issues,
-        }))
+        for node in &spec.nodes {
+            if !self.state.registry.is_loaded(&node.plugin_id) {
+                issues.push(ValidationIssue {
+                    severity: ProtoSeverity::Error as i32,
+                    param: format!("nodes.{}.plugin_id", node.id),
+                    message: format!("Plugin '{}' is not registered", node.plugin_id),
+                });
+            }
+        }
+
+        match template.validate() {
+            Ok(()) => {}
+            Err(e) => {
+                issues.push(ValidationIssue {
+                    severity: ProtoSeverity::Error as i32,
+                    param: "template".into(),
+                    message: e,
+                });
+            }
+        }
+
+        let valid = !issues
+            .iter()
+            .any(|i| i.severity >= ProtoSeverity::Error as i32);
+
+        Ok(Response::new(ValidationResult { valid, issues }))
     }
 
     async fn get_node_schema(
@@ -141,14 +318,35 @@ impl PipelineService for PipelineServiceImpl {
         request: Request<PluginId>,
     ) -> Result<Response<NodeSchema>, Status> {
         let pid = request.into_inner();
+        tracing::info!(plugin_id = %pid.id, "get_node_schema RPC called for plugin {}", pid.id);
+        tracing::info!("get_node_schema: plugin={}", pid.id);
+
+        let plugin = self
+            .state
+            .registry
+            .get(&pid.id)
+            .ok_or_else(|| Status::not_found(format!("plugin not found: {}", pid.id)))?;
+
+        let schema = plugin.parameter_schema();
+        let gui = plugin.gui_schema();
+
+        let parameter_schema = Some(schema_to_prost_struct(schema));
+        let gui_schema = serde_json::to_value(gui).ok().map(|v| {
+            let pv = json_to_prost_value(&v);
+            match pv.kind {
+                Some(prost_types::value::Kind::StructValue(s)) => s,
+                _ => prost_types::Struct::default(),
+            }
+        });
+
         Ok(Response::new(NodeSchema {
             plugin_id: pid.id.clone(),
-            name: format!("Plugin {}", pid.id),
-            version: "1.0.0".into(),
-            category: "transform".into(),
-            description: format!("Schema for plugin {}", pid.id),
-            parameter_schema: None,
-            gui_schema: None,
+            name: plugin.name().to_string(),
+            version: plugin.version().to_string(),
+            category: plugin.category().to_string(),
+            description: plugin.description().to_string(),
+            parameter_schema,
+            gui_schema,
         }))
     }
 }

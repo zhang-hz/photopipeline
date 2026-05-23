@@ -1,20 +1,16 @@
 #![allow(clippy::result_large_err)]
 #![allow(unused_imports)]
 
-use photopipeline_core::{
-    ColorSpace, ImageFormat, ImageInfo, Metadata, PixelFormat, PluginError,
-};
+use photopipeline_core::{ColorSpace, ImageFormat, ImageInfo, Metadata, PixelFormat, PluginError};
 use photopipeline_engine::{ParameterResolver, PipelineTemplate, TemplateNode};
-use photopipeline_plugin::{
-    ParameterSet, PluginQuery, registry::Registry,
-};
+use photopipeline_plugin::{ParameterSet, PluginQuery, registry::Registry};
 use photopipeline_plugins;
 use std::io::Write;
 use std::process::Command;
 use std::sync::Arc;
+use tempfile::TempDir;
 use test_harness::fixtures::image::ImageFixture;
 use test_harness::mocks::encoder::MockEncoder;
-use tempfile::TempDir;
 use uuid::Uuid;
 
 fn photopipeline_binary() -> Option<String> {
@@ -161,7 +157,10 @@ fn e2e_cli_pipeline_run_valid_config() {
     match status {
         Ok(s) => {
             let code = s.code().unwrap_or(-1);
-            assert!(code == 0 || code == 1, "exit code should be 0 or 1, got {code}");
+            assert!(
+                code == 0 || code == 1,
+                "exit code should be 0 or 1, got {code}"
+            );
         }
         Err(e) => {
             eprintln!("could not run photopipeline binary: {e}");
@@ -234,10 +233,7 @@ fn e2e_cli_plugin_list_shows_14_plugins() {
         return;
     };
 
-    let output = Command::new(&bin)
-        .arg("plugin")
-        .arg("list")
-        .output();
+    let output = Command::new(&bin).arg("plugin").arg("list").output();
 
     match output {
         Ok(o) => {
@@ -381,10 +377,7 @@ fn e2e_cli_missing_required_args() {
         return;
     };
 
-    let output = Command::new(&bin)
-        .arg("pipeline")
-        .arg("run")
-        .output();
+    let output = Command::new(&bin).arg("pipeline").arg("run").output();
 
     match output {
         Ok(o) => {
@@ -405,9 +398,7 @@ fn e2e_cli_help_output() {
         return;
     };
 
-    let output = Command::new(&bin)
-        .arg("--help")
-        .output();
+    let output = Command::new(&bin).arg("--help").output();
 
     match output {
         Ok(o) => {
@@ -432,9 +423,7 @@ fn e2e_cli_version_output() {
         return;
     };
 
-    let output = Command::new(&bin)
-        .arg("--version")
-        .output();
+    let output = Command::new(&bin).arg("--version").output();
 
     match output {
         Ok(o) => {

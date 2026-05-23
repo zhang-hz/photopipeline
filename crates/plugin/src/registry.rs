@@ -28,6 +28,7 @@ impl Default for Registry {
 }
 
 impl Registry {
+    #[tracing::instrument(skip_all)]
     pub fn new() -> Self {
         Self {
             entries: DashMap::new(),
@@ -44,6 +45,16 @@ impl Registry {
 
     pub fn register(&self, plugin: Arc<dyn Plugin>) -> PluginResult<()> {
         let id = plugin.id().clone();
+        tracing::info!(
+            plugin_id = %id,
+            name = plugin.name(),
+            version = %plugin.version(),
+            category = ?plugin.category(),
+            "Registering plugin: {} (v{}) [{}]",
+            plugin.name(),
+            plugin.version(),
+            plugin.category().to_string(),
+        );
         let manifest = PluginManifest {
             id: id.clone(),
             name: plugin.name().to_string(),
@@ -71,6 +82,7 @@ impl Registry {
     }
 
     pub fn unregister(&self, id: &PluginId) -> Option<Arc<dyn Plugin>> {
+        tracing::info!(plugin_id = %id, "Unregistering plugin: {}", id);
         self.manifests.remove(id);
         self.load_order.write().retain(|i| i != id);
         self.metadata_processors.remove(id);
@@ -83,7 +95,11 @@ impl Registry {
     }
 
     pub fn get(&self, id: &PluginId) -> Option<Arc<dyn Plugin>> {
-        self.entries.get(id).map(|e| e.value().plugin.clone())
+        let result = self.entries.get(id).map(|e| e.value().plugin.clone());
+        if result.is_none() {
+            tracing::trace!(plugin_id = %id, "Plugin lookup miss: {}", id);
+        }
+        result
     }
 
     pub fn get_metadata_processor(&self, id: &PluginId) -> Option<Arc<dyn MetadataProcessor>> {
@@ -116,6 +132,7 @@ impl Registry {
     }
 
     pub fn query(&self, q: &PluginQuery) -> Vec<Arc<dyn Plugin>> {
+        tracing::trace!(?q, "Querying registry with filter");
         self.entries
             .iter()
             .filter(|entry| {
@@ -162,10 +179,17 @@ impl Registry {
     }
 
     pub fn all(&self) -> Vec<Arc<dyn Plugin>> {
-        self.entries
+        let plugins = self
+            .entries
             .iter()
             .map(|e| e.value().plugin.clone())
-            .collect()
+            .collect::<Vec<_>>();
+        tracing::trace!(
+            plugin_count = plugins.len(),
+            "Listing all {} plugins",
+            plugins.len()
+        );
+        plugins
     }
 
     pub fn manifest(&self, id: &PluginId) -> Option<PluginManifest> {
@@ -196,30 +220,35 @@ impl Registry {
         plugin: Arc<dyn MetadataProcessor>,
     ) -> PluginResult<()> {
         let id = plugin.id().clone();
+        tracing::debug!(plugin_id = %id, "Registering metadata processor: {}", id);
         self.metadata_processors.insert(id, plugin);
         Ok(())
     }
 
     pub fn register_pixel_processor(&self, plugin: Arc<dyn PixelProcessor>) -> PluginResult<()> {
         let id = plugin.id().clone();
+        tracing::debug!(plugin_id = %id, "Registering pixel processor: {}", id);
         self.pixel_processors.insert(id, plugin);
         Ok(())
     }
 
     pub fn register_format_processor(&self, plugin: Arc<dyn FormatProcessor>) -> PluginResult<()> {
         let id = plugin.id().clone();
+        tracing::debug!(plugin_id = %id, "Registering format processor: {}", id);
         self.format_processors.insert(id, plugin);
         Ok(())
     }
 
     pub fn register_gpu_processor(&self, plugin: Arc<dyn GpuProcessor>) -> PluginResult<()> {
         let id = plugin.id().clone();
+        tracing::debug!(plugin_id = %id, "Registering GPU processor: {}", id);
         self.gpu_processors.insert(id, plugin);
         Ok(())
     }
 
     pub fn register_ai_processor(&self, plugin: Arc<dyn AiProcessor>) -> PluginResult<()> {
         let id = plugin.id().clone();
+        tracing::debug!(plugin_id = %id, "Registering AI processor: {}", id);
         self.ai_processors.insert(id, plugin);
         Ok(())
     }
@@ -229,6 +258,7 @@ impl Registry {
         plugin: Arc<dyn ExternalToolProcessor>,
     ) -> PluginResult<()> {
         let id = plugin.id().clone();
+        tracing::debug!(plugin_id = %id, "Registering external tool processor: {}", id);
         self.external_tool_processors.insert(id, plugin);
         Ok(())
     }

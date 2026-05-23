@@ -2,8 +2,9 @@ use async_trait::async_trait;
 use std::sync::LazyLock;
 
 use photopipeline_core::{
-    ColorSpace, GpuBackend, HardwareRequirement, PixelBuffer, PixelFormat, PluginCategory,
-    PluginError, PluginId, PluginResult, PluginVersion, ProcessingStats, ValidationIssue,
+    ColorSpace, GpuBackend, HardwareRequirement, PerfTimer, PixelBuffer, PixelFormat,
+    PluginCategory, PluginError, PluginId, PluginResult, PluginVersion, ProcessingStats,
+    ValidationIssue,
 };
 use photopipeline_plugin::{
     AuxView, EnumOption, GuiLayout, GuiSchema, GuiSection, ParameterField, ParameterSchema,
@@ -309,11 +310,13 @@ impl Plugin for LensCorrectPlugin {
     }
 
     async fn shutdown(&mut self) -> PluginResult<()> {
+        tracing::info!("lens_correct plugin shutdown");
         Ok(())
     }
 
     async fn validate(&self, params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>> {
         let mut issues = Vec::new();
+        tracing::debug!("lens_correct: validating parameters");
         let mode = params.get_str("correction_mode").unwrap_or("auto");
 
         if mode == "manual" {
@@ -339,6 +342,13 @@ impl Plugin for LensCorrectPlugin {
             });
         }
 
+        if !issues.is_empty() {
+            tracing::warn!(
+                issue_count = issues.len(),
+                "lens_correct validation found {} issues",
+                issues.len()
+            );
+        }
         Ok(issues)
     }
 }
@@ -383,7 +393,17 @@ impl PixelProcessor for LensCorrectPlugin {
         params: &ParameterSet,
         progress: Box<dyn ProgressSink>,
     ) -> PluginResult<ProcessingStats> {
+        let _timer = PerfTimer::with_target("lens_correct_process_pixels", "plugin.lens_correct");
         progress.set_progress(0.0, "analyzing lens parameters");
+
+        tracing::info!(
+            input_dims = format!("{}x{}", input.width, input.height),
+            input_format = ?input.format,
+            "lens_correct: processing {}x{} {:?}",
+            input.width,
+            input.height,
+            input.format,
+        );
 
         let mode = params.get_str("correction_mode").unwrap_or("auto");
         let correct_dist = params
