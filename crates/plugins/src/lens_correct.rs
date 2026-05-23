@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 
 use photopipeline_core::{
     ColorSpace, GpuBackend, HardwareRequirement, PixelBuffer, PixelFormat, PluginCategory,
-    PluginId, PluginResult, PluginVersion, ProcessingStats, ValidationIssue,
+    PluginError, PluginId, PluginResult, PluginVersion, ProcessingStats, ValidationIssue,
 };
 use photopipeline_plugin::{
     AuxView, EnumOption, GuiLayout, GuiSchema, GuiSection, ParameterField, ParameterSchema,
@@ -433,34 +433,29 @@ impl PixelProcessor for LensCorrectPlugin {
             .collect();
 
         if active.is_empty() {
-            tracing::info!("LensCorrect: no corrections enabled, passing through");
-        } else {
-            tracing::info!(
-                "LensCorrect: detected lens correction requested. Corrections: {:?}. LensFun integration pending.",
-                active,
-            );
+            output.data.data.copy_from_slice(&input.data.data);
+            output.width = input.width;
+            output.height = input.height;
+            output.layout = input.layout;
+            output.format = input.format;
+            output.color_space = input.color_space.clone();
+            output.icc_profile = input.icc_profile.clone();
+
+            progress.set_progress(1.0, "done (no corrections)");
+            return Ok(ProcessingStats {
+                elapsed_ms: 0,
+                cpu_time_ms: 0,
+                gpu_time_ms: None,
+                peak_memory_mb: (input.data.data.len() * 2) as u64 / (1024 * 1024),
+                input_pixels: input.pixel_count(),
+                output_pixels: input.pixel_count(),
+            });
         }
 
-        progress.set_progress(0.7, "applying corrections (passthrough)");
-
-        output.data.data.copy_from_slice(&input.data.data);
-        output.width = input.width;
-        output.height = input.height;
-        output.layout = input.layout;
-        output.format = input.format;
-        output.color_space = input.color_space.clone();
-        output.icc_profile = input.icc_profile.clone();
-
-        progress.set_progress(1.0, "done");
-
-        Ok(ProcessingStats {
-            elapsed_ms: 0,
-            cpu_time_ms: 0,
-            gpu_time_ms: None,
-            peak_memory_mb: (input.data.data.len() * 2) as u64 / (1024 * 1024),
-            input_pixels: input.pixel_count(),
-            output_pixels: input.pixel_count(),
-        })
+        return Err(PluginError::Internal {
+            plugin: self.id.clone(),
+            message: format!("LensFun runtime required for corrections: {:?}", active),
+        });
     }
 }
 

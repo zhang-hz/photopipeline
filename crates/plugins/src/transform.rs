@@ -732,7 +732,9 @@ fn nearest_resize(
     for y in 0..target_h {
         let src_y = ((y as f64 + 0.5) * scale_y - 0.5).round() as usize;
         let src_y = src_y.min(input.height as usize - 1);
-        let src_row = &input.data.data[src_y * in_stride..(src_y + 1) * in_stride];
+        let row_start = src_y * in_stride;
+        let row_end = ((src_y + 1) * in_stride).min(input.data.data.len());
+        let src_row = &input.data.data[row_start..row_end];
         let dst_row_start = y as usize * out_stride;
 
         for x in 0..target_w {
@@ -741,8 +743,12 @@ fn nearest_resize(
             let src_offset = src_x * channels;
             let dst_offset = dst_row_start + x as usize * channels;
 
+            if dst_offset + channels > output.data.data.len() {
+                continue;
+            }
             for c in 0..channels {
-                output.data.data[dst_offset + c] = src_row[src_offset + c];
+                output.data.data[dst_offset + c] =
+                    src_row.get(src_offset + c).copied().unwrap_or(0);
             }
         }
     }
@@ -782,8 +788,12 @@ fn bilinear_resize(
         let src_y1 = (src_y0 + 1).min(input.height as usize - 1);
         let frac_y = src_y_f - src_y_f.floor();
 
-        let row0 = &input.data.data[src_y0 * in_stride..(src_y0 + 1) * in_stride];
-        let row1 = &input.data.data[src_y1 * in_stride..(src_y1 + 1) * in_stride];
+        let row0_start = src_y0 * in_stride;
+        let row0_end = (src_y0 + 1) * in_stride;
+        let row1_start = src_y1 * in_stride;
+        let row1_end = (src_y1 + 1) * in_stride;
+        let row0 = &input.data.data[row0_start..row0_end.min(input.data.data.len())];
+        let row1 = &input.data.data[row1_start..row1_end.min(input.data.data.len())];
         let dst_row_start = y as usize * out_stride;
 
         for x in 0..target_w {
@@ -793,12 +803,17 @@ fn bilinear_resize(
             let frac_x = src_x_f - src_x_f.floor();
 
             let dst_offset = dst_row_start + x as usize * channels;
+            if dst_offset + channels > output.data.data.len() {
+                continue;
+            }
 
             for c in 0..channels {
-                let v00 = row0[src_x0 * channels + c] as f64;
-                let v10 = row0[src_x1 * channels + c] as f64;
-                let v01 = row1[src_x0 * channels + c] as f64;
-                let v11 = row1[src_x1 * channels + c] as f64;
+                let src_idx0 = (src_x0 * channels + c).min(row0.len().saturating_sub(1));
+                let src_idx1 = (src_x1 * channels + c).min(row1.len().saturating_sub(1));
+                let v00 = row0[src_idx0] as f64;
+                let v10 = row0.get(src_idx1).copied().unwrap_or(0) as f64;
+                let v01 = row1.get(src_idx0).copied().unwrap_or(0) as f64;
+                let v11 = row1.get(src_idx1).copied().unwrap_or(0) as f64;
 
                 let top = v00 + (v10 - v00) * frac_x;
                 let bottom = v01 + (v11 - v01) * frac_x;

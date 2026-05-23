@@ -350,11 +350,13 @@ impl FormatProcessor for HeifEncoderPlugin {
     async fn encode(
         &self,
         image: &PixelBuffer,
-        _metadata: &Metadata,
+        metadata: &Metadata,
         options: &EncodeOptions,
     ) -> PluginResult<Vec<u8>> {
         let quality = options.quality.unwrap_or(95.0);
         let lossless = options.lossless;
+
+        let _ = metadata;
 
         let mut cmd_args = Vec::new();
 
@@ -440,6 +442,12 @@ fn detect_heif_encoder() -> String {
 
 fn write_ppm(path: &std::path::Path, image: &PixelBuffer) -> PluginResult<()> {
     use std::io::Write;
+    if image.format.bytes_per_channel() != 1 {
+        return Err(PluginError::Internal {
+            plugin: PluginId::from("heif_encoder"),
+            message: "ppm pipe only supports 8-bit, use direct libheif API for 16-bit".into(),
+        });
+    }
     let mut f = std::fs::File::create(path).map_err(|e| PluginError::Io {
         plugin: PluginId::from("heif_encoder"),
         error: e,

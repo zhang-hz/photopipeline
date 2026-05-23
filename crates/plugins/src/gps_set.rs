@@ -387,6 +387,8 @@ impl MetadataProcessor for GpsSetPlugin {
                     });
                 }
 
+                let max_gap = params.get_i64("max_interpolation_gap").unwrap_or(300) as f64;
+
                 let gpx_content =
                     std::fs::read_to_string(gpx_path).map_err(|e| PluginError::Io {
                         plugin: self.id.clone(),
@@ -405,6 +407,14 @@ impl MetadataProcessor for GpsSetPlugin {
                     let adjusted = ts + chrono::Duration::seconds(time_offset);
 
                     if let Some(point) = track.interpolate_at(&adjusted) {
+                        let gap_ok = check_interpolation_gap(&track, &adjusted, max_gap);
+                        if !gap_ok {
+                            tracing::warn!(
+                                "GPS interpolation gap exceeds max_interpolation_gap of {}s for image at {}",
+                                max_gap,
+                                adjusted
+                            );
+                        }
                         gps.latitude = Some(point.latitude);
                         gps.longitude = Some(point.longitude);
                         gps.altitude = point.elevation;
@@ -493,6 +503,40 @@ impl MetadataProcessor for GpsSetPlugin {
             warnings,
         })
     }
+}
+
+fn check_interpolation_gap(
+    track: &GpxTrack,
+    ts: &chrono::DateTime<chrono::Utc>,
+    max_gap: f64,
+) -> bool {
+    let target_ms = ts.timestamp_millis();
+    let timed_points: Vec<_> = track
+        .points
+        .iter()
+        .filter(|p| p.timestamp.is_some())
+        .collect();
+
+    if timed_points.len() < 2 {
+        return true;
+    }
+
+    let mut prev_ts: Option<i64> = None;
+    for pt in &timed_points {
+        let pt_ms = pt.timestamp.unwrap().timestamp_millis();
+        if pt_ms <= target_ms {
+            prev_ts = Some(pt_ms);
+        }
+        if pt_ms >= target_ms {
+            if let Some(prev) = prev_ts
+                && (pt_ms - prev) as f64 / 1000.0 > max_gap
+            {
+                return false;
+            }
+            break;
+        }
+    }
+    true
 }
 
 fn parse_gpx(content: &str) -> Option<GpxTrack> {

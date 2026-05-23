@@ -485,7 +485,11 @@ impl PixelProcessor for AiDenoisePlugin {
         }
 
         if !*self.model_loaded.read() {
-            tracing::info!("AI Denoise: model not loaded, passing through pixels");
+            return Err(PluginError::Internal {
+                plugin: self.id.clone(),
+                message: "AI denoise model not loaded. Call load_model() first or set strength=0"
+                    .into(),
+            });
         }
 
         progress.set_progress(0.5, "denoising (passthrough - ONNX model pending)");

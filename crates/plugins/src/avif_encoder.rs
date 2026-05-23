@@ -352,7 +352,7 @@ impl FormatProcessor for AvifEncoderPlugin {
     async fn encode(
         &self,
         image: &PixelBuffer,
-        _metadata: &Metadata,
+        metadata: &Metadata,
         options: &EncodeOptions,
     ) -> PluginResult<Vec<u8>> {
         let quality = options.quality.unwrap_or(85.0);
@@ -363,14 +363,21 @@ impl FormatProcessor for AvifEncoderPlugin {
 
         write_ppm_temp(&tmp_input, image)?;
 
-        let result = std::process::Command::new("avifenc")
-            .arg("-q")
+        let mut cmd = std::process::Command::new("avifenc");
+        cmd.arg("-q")
             .arg(format!("{}", quality as u32))
             .arg("-s")
             .arg("6")
             .arg(&tmp_input)
-            .arg(&tmp_output)
-            .output();
+            .arg(&tmp_output);
+
+        if let Some(ref exif) = metadata.exif
+            && let Some(ref make) = exif.make
+        {
+            let _ = make;
+        }
+
+        let result = cmd.output();
 
         let _ = std::fs::remove_file(&tmp_input);
 
@@ -383,14 +390,23 @@ impl FormatProcessor for AvifEncoderPlugin {
                 let _ = std::fs::remove_file(&tmp_output);
                 Ok(data)
             }
-            _ => {
+            Ok(output) => {
                 let _ = std::fs::remove_file(&tmp_output);
-                let mut buf = Vec::with_capacity(14 + image.data.data.len());
-                buf.extend_from_slice(&[
-                    0x00, 0x00, 0x00, 0x1C, b'f', b't', b'y', b'p', b'a', b'v', b'i', b'f',
-                ]);
-                buf.extend_from_slice(&image.data.data);
-                Ok(buf)
+                Err(PluginError::MissingTool {
+                    plugin: self.id.clone(),
+                    tool: "avifenc".into(),
+                    required: format!(
+                        "libavif encoder ({})",
+                        String::from_utf8_lossy(&output.stderr)
+                    ),
+                })
+            }
+            Err(e) => {
+                let _ = std::fs::remove_file(&tmp_output);
+                Err(PluginError::Io {
+                    plugin: self.id.clone(),
+                    error: e,
+                })
             }
         }
     }
@@ -398,6 +414,12 @@ impl FormatProcessor for AvifEncoderPlugin {
 
 fn write_ppm_temp(path: &std::path::Path, image: &PixelBuffer) -> PluginResult<()> {
     use std::io::Write;
+    if image.format.bytes_per_channel() != 1 {
+        return Err(PluginError::Internal {
+            plugin: PluginId::from("avif_encoder"),
+            message: "ppm pipe only supports 8-bit, use direct libavif API for 16-bit".into(),
+        });
+    }
     let mut f = std::fs::File::create(path).map_err(|e| PluginError::Io {
         plugin: PluginId::from("avif_encoder"),
         error: e,

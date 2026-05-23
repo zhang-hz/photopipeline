@@ -287,7 +287,8 @@ impl PipelineGraph {
             let label = tn.label.clone().unwrap_or_else(|| tn.id.clone());
             let node_id = graph.add_node(tn.plugin.clone(), label);
             id_map.insert(tn.id.clone(), node_id);
-            if let Some(node) = graph.nodes.iter().find(|n| n.id == node_id) {
+            if let Some(node) = graph.nodes.iter_mut().find(|n| n.id == node_id) {
+                node.enabled = tn.enabled;
                 output_ports.insert(tn.id.clone(), node.outputs[0]);
                 input_ports.insert(tn.id.clone(), node.inputs[0]);
             }

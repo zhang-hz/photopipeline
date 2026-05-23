@@ -324,11 +324,13 @@ impl FormatProcessor for JxlEncoderPlugin {
     async fn encode(
         &self,
         image: &PixelBuffer,
-        _metadata: &Metadata,
+        metadata: &Metadata,
         options: &EncodeOptions,
     ) -> PluginResult<Vec<u8>> {
         let quality = options.quality.unwrap_or(90.0);
         let lossless = options.lossless;
+
+        let _ = metadata;
 
         let mut cmd_args = Vec::new();
 
@@ -396,6 +398,12 @@ fn detect_cjxl() -> String {
 
 fn write_temp_rgb(path: &std::path::Path, image: &PixelBuffer) -> PluginResult<()> {
     use std::io::Write;
+    if image.format.bytes_per_channel() != 1 {
+        return Err(PluginError::Internal {
+            plugin: PluginId::from("jxl_encoder"),
+            message: "ppm pipe only supports 8-bit, use direct libjxl API for 16-bit".into(),
+        });
+    }
     let mut f = std::fs::File::create(path).map_err(|e| PluginError::Io {
         plugin: PluginId::from("jxl_encoder"),
         error: e,

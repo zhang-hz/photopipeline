@@ -226,7 +226,14 @@ impl GpxTrack {
                 let t0 = b.timestamp.unwrap().timestamp_millis() as f64;
                 let t1 = a.timestamp.unwrap().timestamp_millis() as f64;
                 let t = target_ts as f64;
-                let frac = ((t - t0) / (t1 - t0)).clamp(0.0, 1.0);
+                let denom = t1 - t0;
+                if denom.abs() < f64::EPSILON {
+                    return Some(GpxPoint {
+                        timestamp: Some(*timestamp),
+                        ..*b
+                    });
+                }
+                let frac = ((t - t0) / denom).clamp(0.0, 1.0);
                 Some(GpxPoint {
                     latitude: b.latitude + (a.latitude - b.latitude) * frac,
                     longitude: b.longitude + (a.longitude - b.longitude) * frac,

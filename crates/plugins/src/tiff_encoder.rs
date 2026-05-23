@@ -287,7 +287,7 @@ impl FormatProcessor for TiffEncoderPlugin {
     async fn encode(
         &self,
         image: &PixelBuffer,
-        _metadata: &Metadata,
+        metadata: &Metadata,
         _options: &EncodeOptions,
     ) -> PluginResult<Vec<u8>> {
         let width = image.width;
@@ -310,15 +310,24 @@ impl FormatProcessor for TiffEncoderPlugin {
 
         let bytes_per_sample = bps as u32 / 8;
         let samples_per_pixel = channels;
+
+        let has_extra_ifd = metadata.exif.is_some();
+        let extra_tags = if has_extra_ifd { 4u16 } else { 0u16 };
+
         let _rows_per_strip = 1u32;
         let strip_count = height;
-        let strip_byte_count = (width * samples_per_pixel as u32 * bytes_per_sample);
+        let strip_byte_count = width * samples_per_pixel as u32 * bytes_per_sample;
 
-        let ifd_entry_count: u16 = 12;
+        let ifd_entry_count: u16 = 12 + extra_tags;
         let ifd_offset: u32 = 8;
         let ifd_size: u32 = 2 + ifd_entry_count as u32 * 12 + 4;
         let strip_offsets_start: u32 = ifd_offset + ifd_size;
-        let strip_data_start: u32 = strip_offsets_start + strip_count * 4;
+        let exif_ifd_offset: u32 = strip_offsets_start + strip_count * 4;
+        let strip_data_start: u32 = if has_extra_ifd {
+            exif_ifd_offset + 4
+        } else {
+            strip_offsets_start + strip_count * 4
+        };
 
         let total_size = strip_data_start + (strip_byte_count * strip_count);
         let mut buf = Vec::with_capacity(total_size as usize);
@@ -342,11 +351,19 @@ impl FormatProcessor for TiffEncoderPlugin {
         write_ifd_long(&mut buf, 283, &[300, 1]);
         write_ifd_short(&mut buf, 296, 2);
 
+        if has_extra_ifd {
+            write_ifd_long(&mut buf, 34665, &[exif_ifd_offset]);
+        }
+
         buf.extend_from_slice(&[0u8, 0u8, 0u8, 0u8]);
 
         for i in 0..strip_count {
             let offset = strip_data_start + i * strip_byte_count;
             buf.extend_from_slice(&offset.to_le_bytes());
+        }
+
+        if has_extra_ifd {
+            write_exif_ifd(&mut buf, metadata, exif_ifd_offset, strip_data_start);
         }
 
         let pixel_data = &image.data.data;
@@ -386,16 +403,53 @@ fn write_ifd_long(buf: &mut Vec<u8>, tag: u16, values: &[u32]) {
     }
     if bytes.len() <= 4 {
         buf.extend_from_slice(&bytes);
-        while !buf.len().is_multiple_of(4) {
-            buf.push(0);
-        }
-        let extra = 4 - bytes.len();
-        for _ in 0..extra {
-            buf.push(0);
-        }
+        let padding = 4 - bytes.len();
+        buf.resize(buf.len() + padding, 0);
     } else {
         buf.extend_from_slice(&[0; 4]);
     }
+}
+
+fn write_exif_ifd(
+    buf: &mut Vec<u8>,
+    metadata: &Metadata,
+    exif_offset: u32,
+    _strip_data_start: u32,
+) {
+    let pos = exif_offset as usize;
+    if buf.len() <= pos + 6 {
+        buf.resize(pos + 6, 0);
+    }
+    if let Some(ref _exif) = metadata.exif {
+        buf[pos] = 1;
+        buf[pos + 1] = 0;
+        write_ifd_long_at(buf, pos + 2, 0x8827, &[0]);
+        buf[pos + 14] = 0;
+        buf[pos + 15] = 0;
+        buf[pos + 16] = 0;
+        buf[pos + 17] = 0;
+    } else {
+        buf[pos] = 0;
+        buf[pos + 1] = 0;
+        buf[pos + 2] = 0;
+        buf[pos + 3] = 0;
+        buf[pos + 4] = 0;
+        buf[pos + 5] = 0;
+    }
+}
+
+fn write_ifd_long_at(buf: &mut Vec<u8>, offset: usize, tag: u16, values: &[u32]) {
+    let count = values.len() as u32;
+    let pos = offset;
+    buf[pos..pos + 2].copy_from_slice(&tag.to_le_bytes());
+    buf[pos + 2..pos + 4].copy_from_slice(&4u16.to_le_bytes());
+    buf[pos + 4..pos + 8].copy_from_slice(&count.to_le_bytes());
+    let mut bytes = Vec::with_capacity(values.len() * 4);
+    for v in values {
+        bytes.extend_from_slice(&v.to_le_bytes());
+    }
+    let write_len = bytes.len().min(4);
+    buf[pos + 8..pos + 8 + write_len].copy_from_slice(&bytes[..write_len]);
 }
 
 static TAGS: LazyLock<Vec<String>> = LazyLock::new(|| {

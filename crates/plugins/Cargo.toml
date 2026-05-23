@@ -13,6 +13,7 @@ chrono.workspace = true
 parking_lot.workspace = true
 tracing.workspace = true
 regex.workspace = true
+miniz_oxide = { version = "0.8", features = ["with-alloc"] }
 
 [dev-dependencies]
 tokio.workspace = true

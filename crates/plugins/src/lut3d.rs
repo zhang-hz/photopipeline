@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 
 use photopipeline_core::{
     ColorSpace, GpuBackend, HardwareRequirement, PixelBuffer, PixelFormat, PluginCategory,
-    PluginId, PluginResult, PluginVersion, ProcessingStats, ValidationIssue,
+    PluginError, PluginId, PluginResult, PluginVersion, ProcessingStats, ValidationIssue,
 };
 use photopipeline_plugin::{
     AuxView, EnumOption, GuiLayout, GuiSchema, GuiSection, ParameterField, ParameterSchema,
@@ -399,27 +399,206 @@ impl PixelProcessor for Lut3dPlugin {
         &self,
         input: &PixelBuffer,
         output: &mut PixelBuffer,
-        _params: &ParameterSet,
+        params: &ParameterSet,
         progress: Box<dyn ProgressSink>,
     ) -> PluginResult<ProcessingStats> {
         progress.set_progress(0.0, "applying LUT");
 
-        output.data.data.copy_from_slice(&input.data.data);
-        output.color_space = input.color_space.clone();
-        output.icc_profile = input.icc_profile.clone();
+        let lut_path = params.get_str("lut_path").unwrap_or("");
 
-        let pixels = input.pixel_count();
-        progress.set_progress(1.0, "done");
+        if lut_path.is_empty() {
+            output.data.data.copy_from_slice(&input.data.data);
+            output.color_space = input.color_space.clone();
+            output.icc_profile = input.icc_profile.clone();
 
-        Ok(ProcessingStats {
-            elapsed_ms: 0,
-            cpu_time_ms: 0,
-            gpu_time_ms: Some(0),
-            peak_memory_mb: (input.data.data.len() * 2) as u64 / (1024 * 1024),
-            input_pixels: pixels,
-            output_pixels: pixels,
+            let pixels = input.pixel_count();
+            progress.set_progress(1.0, "done (no LUT)");
+
+            return Ok(ProcessingStats {
+                elapsed_ms: 0,
+                cpu_time_ms: 0,
+                gpu_time_ms: Some(0),
+                peak_memory_mb: (input.data.data.len() * 2) as u64 / (1024 * 1024),
+                input_pixels: pixels,
+                output_pixels: pixels,
+            });
+        }
+
+        if let Ok(lut_data) = std::fs::read(lut_path) {
+            let _intensity = params
+                .get("intensity")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(100.0);
+
+            if let Some((lut, size)) = parse_cube_lut(&lut_data) {
+                apply_trilinear_lut(input, output, &lut, size);
+
+                let pixels = input.pixel_count();
+                progress.set_progress(1.0, "done (trilinear LUT fallback)");
+
+                return Ok(ProcessingStats {
+                    elapsed_ms: 0,
+                    cpu_time_ms: 0,
+                    gpu_time_ms: Some(0),
+                    peak_memory_mb: (input.data.data.len() * 2) as u64 / (1024 * 1024),
+                    input_pixels: pixels,
+                    output_pixels: pixels,
+                });
+            }
+        }
+
+        Err(PluginError::Internal {
+            plugin: self.id.clone(),
+            message: "3D LUT processing requires GPU acceleration (not yet linked)".into(),
         })
     }
+}
+
+fn parse_cube_lut(data: &[u8]) -> Option<(Vec<f32>, usize)> {
+    let text = std::str::from_utf8(data).ok()?;
+    let mut size: usize = 0;
+    let mut values: Vec<f32> = Vec::new();
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("LUT_3D_SIZE") {
+            if let Some(s) = trimmed.split_whitespace().nth(1) {
+                size = s.parse().ok()?;
+            }
+        } else if !trimmed.is_empty()
+            && !trimmed.starts_with('#')
+            && !trimmed.starts_with("TITLE")
+            && !trimmed.starts_with("DOMAIN")
+        {
+            for num in trimmed.split_whitespace() {
+                if let Ok(v) = num.parse::<f32>() {
+                    values.push(v);
+                }
+            }
+        }
+    }
+    if size == 0 || values.is_empty() {
+        return None;
+    }
+    Some((values, size))
+}
+
+fn apply_trilinear_lut(input: &PixelBuffer, output: &mut PixelBuffer, lut: &[f32], size: usize) {
+    output.data.data.copy_from_slice(&input.data.data);
+    output.color_space = input.color_space.clone();
+    output.icc_profile = input.icc_profile.clone();
+
+    let expected = size * size * size * 3;
+    if lut.len() < expected {
+        return;
+    }
+
+    match input.format {
+        PixelFormat::U8 => {
+            let input_data: &[u8] = &input.data.data;
+            let output_data: &mut [u8] = &mut output.data.data;
+            let channels = input.layout.channel_count() as usize;
+            let size_f = size as f32;
+            for px in 0..input.pixel_count() as usize {
+                let pi = px * channels;
+                if pi + 2 < input_data.len() {
+                    let r =
+                        (input_data[pi] as f32 / 255.0 * (size_f - 1.0)).clamp(0.0, size_f - 1.0);
+                    let g = (input_data[pi + 1] as f32 / 255.0 * (size_f - 1.0))
+                        .clamp(0.0, size_f - 1.0);
+                    let b = (input_data[pi + 2] as f32 / 255.0 * (size_f - 1.0))
+                        .clamp(0.0, size_f - 1.0);
+                    let (lr, lg, lb) = sample_lut(lut, size, r, g, b);
+                    if pi < output_data.len() {
+                        output_data[pi] = (lr * 255.0).clamp(0.0, 255.0) as u8;
+                    }
+                    if pi + 1 < output_data.len() {
+                        output_data[pi + 1] = (lg * 255.0).clamp(0.0, 255.0) as u8;
+                    }
+                    if pi + 2 < output_data.len() {
+                        output_data[pi + 2] = (lb * 255.0).clamp(0.0, 255.0) as u8;
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn sample_lut(lut: &[f32], size: usize, r: f32, g: f32, b: f32) -> (f32, f32, f32) {
+    let r0 = (r as usize).min(size - 1);
+    let r1 = (r0 + 1).min(size - 1);
+    let g0 = (g as usize).min(size - 1);
+    let g1 = (g0 + 1).min(size - 1);
+    let b0 = (b as usize).min(size - 1);
+    let b1 = (b0 + 1).min(size - 1);
+
+    let dr = r - r0 as f32;
+    let dg = g - g0 as f32;
+    let db = b - b0 as f32;
+
+    let idx = |r: usize, g: usize, b: usize| -> usize { (r * size * size + g * size + b) * 3 };
+
+    let c000_r = lut[idx(r0, g0, b0)];
+    let c000_g = lut[idx(r0, g0, b0) + 1];
+    let c000_b = lut[idx(r0, g0, b0) + 2];
+
+    let c001_r = lut[idx(r0, g0, b1)];
+    let c001_g = lut[idx(r0, g0, b1) + 1];
+    let c001_b = lut[idx(r0, g0, b1) + 2];
+
+    let c010_r = lut[idx(r0, g1, b0)];
+    let c010_g = lut[idx(r0, g1, b0) + 1];
+    let c010_b = lut[idx(r0, g1, b0) + 2];
+
+    let c011_r = lut[idx(r0, g1, b1)];
+    let c011_g = lut[idx(r0, g1, b1) + 1];
+    let c011_b = lut[idx(r0, g1, b1) + 2];
+
+    let c100_r = lut[idx(r1, g0, b0)];
+    let c100_g = lut[idx(r1, g0, b0) + 1];
+    let c100_b = lut[idx(r1, g0, b0) + 2];
+
+    let c101_r = lut[idx(r1, g0, b1)];
+    let c101_g = lut[idx(r1, g0, b1) + 1];
+    let c101_b = lut[idx(r1, g0, b1) + 2];
+
+    let c110_r = lut[idx(r1, g1, b0)];
+    let c110_g = lut[idx(r1, g1, b0) + 1];
+    let c110_b = lut[idx(r1, g1, b0) + 2];
+
+    let c111_r = lut[idx(r1, g1, b1)];
+    let c111_g = lut[idx(r1, g1, b1) + 1];
+    let c111_b = lut[idx(r1, g1, b1) + 2];
+
+    let c00_r = c000_r * (1.0 - db) + c001_r * db;
+    let c00_g = c000_g * (1.0 - db) + c001_g * db;
+    let c00_b = c000_b * (1.0 - db) + c001_b * db;
+
+    let c01_r = c010_r * (1.0 - db) + c011_r * db;
+    let c01_g = c010_g * (1.0 - db) + c011_g * db;
+    let c01_b = c010_b * (1.0 - db) + c011_b * db;
+
+    let c10_r = c100_r * (1.0 - db) + c101_r * db;
+    let c10_g = c100_g * (1.0 - db) + c101_g * db;
+    let c10_b = c100_b * (1.0 - db) + c101_b * db;
+
+    let c11_r = c110_r * (1.0 - db) + c111_r * db;
+    let c11_g = c110_g * (1.0 - db) + c111_g * db;
+    let c11_b = c110_b * (1.0 - db) + c111_b * db;
+
+    let c0_r = c00_r * (1.0 - dg) + c01_r * dg;
+    let c0_g = c00_g * (1.0 - dg) + c01_g * dg;
+    let c0_b = c00_b * (1.0 - dg) + c01_b * dg;
+
+    let c1_r = c10_r * (1.0 - dg) + c11_r * dg;
+    let c1_g = c10_g * (1.0 - dg) + c11_g * dg;
+    let c1_b = c10_b * (1.0 - dg) + c11_b * dg;
+
+    let out_r = c0_r * (1.0 - dr) + c1_r * dr;
+    let out_g = c0_g * (1.0 - dr) + c1_g * dr;
+    let out_b = c0_b * (1.0 - dr) + c1_b * dr;
+
+    (out_r, out_g, out_b)
 }
 
 static TAGS: LazyLock<Vec<String>> = LazyLock::new(|| {

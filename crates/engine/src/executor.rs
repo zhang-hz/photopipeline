@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use photopipeline_core::{
     ImageInfo, Metadata, NodeId, PixelBuffer, PluginError, PluginResult, ProcessingStats,
@@ -177,7 +178,8 @@ impl NodeExecutor {
                 self.process_pixel_node(&mut ctx, node, &final_params)
                     .await?
             } else {
-                self.process_metadata_node(node, &final_params).await?
+                self.process_metadata_node(&mut ctx, node, &final_params)
+                    .await?
             };
 
             ctx.node_states.insert(
@@ -221,16 +223,25 @@ impl NodeExecutor {
             .get_pixel_processor(&node.plugin_id)
             .ok_or_else(|| PluginError::NotFound(node.plugin_id.clone()))?;
 
-        struct InlineProgress;
+        struct InlineProgress {
+            canceled: Arc<AtomicBool>,
+        }
         impl photopipeline_plugin::ProgressSink for InlineProgress {
             fn set_progress(&self, _fraction: f32, _message: &str) {}
             fn is_canceled(&self) -> bool {
-                false
+                self.canceled.load(Ordering::Relaxed)
             }
         }
 
         let stats = processor
-            .process_pixels(input, &mut output, params, Box::new(InlineProgress))
+            .process_pixels(
+                input,
+                &mut output,
+                params,
+                Box::new(InlineProgress {
+                    canceled: Arc::new(AtomicBool::new(false)),
+                }),
+            )
             .await?;
 
         ctx.buffer = Some(output);
@@ -240,11 +251,70 @@ impl NodeExecutor {
 
     async fn process_metadata_node(
         &self,
+        ctx: &mut ExecutionContext,
         node: &crate::graph::PipelineNode,
-        _params: &photopipeline_plugin::ParameterSet,
+        params: &photopipeline_plugin::ParameterSet,
     ) -> PluginResult<ProcessingStats> {
-        if let Some(_processor) = self.registry.get_metadata_processor(&node.plugin_id) {
-            tracing::debug!("metadata processor '{}' invoked", node.plugin_id);
+        let processor = self
+            .registry
+            .get_metadata_processor(&node.plugin_id)
+            .ok_or_else(|| PluginError::NotFound(node.plugin_id.clone()))?;
+
+        let target = photopipeline_core::MetadataTarget {
+            path: ctx.image_info.path.clone(),
+            format: ctx.image_info.format.clone(),
+        };
+
+        match processor.read_metadata(&target, params).await {
+            Ok(read_meta) => {
+                if read_meta.exif.is_some()
+                    || read_meta.xmp.is_some()
+                    || read_meta.iptc.is_some()
+                    || read_meta.gps.is_some()
+                {
+                    if read_meta.exif.is_some() {
+                        ctx.metadata.exif = read_meta.exif;
+                    }
+                    if read_meta.xmp.is_some() {
+                        ctx.metadata.xmp = read_meta.xmp;
+                    }
+                    if read_meta.iptc.is_some() {
+                        ctx.metadata.iptc = read_meta.iptc;
+                    }
+                    if read_meta.gps.is_some() {
+                        ctx.metadata.gps = read_meta.gps;
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::debug!("metadata processor '{}' read failed: {}", node.plugin_id, e);
+            }
+        }
+
+        let mut write_target = photopipeline_core::MetadataTarget {
+            path: ctx.image_info.path.clone(),
+            format: ctx.image_info.format.clone(),
+        };
+
+        match processor
+            .write_metadata(&mut write_target, &ctx.metadata, params)
+            .await
+        {
+            Ok(report) => {
+                tracing::debug!(
+                    "metadata processor '{}' wrote {} tags ({} skipped)",
+                    node.plugin_id,
+                    report.tags_written,
+                    report.tags_skipped
+                );
+            }
+            Err(e) => {
+                tracing::debug!(
+                    "metadata processor '{}' write failed: {}",
+                    node.plugin_id,
+                    e
+                );
+            }
         }
 
         Ok(ProcessingStats {

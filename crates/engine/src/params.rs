@@ -265,6 +265,13 @@ impl ParameterResolver {
             result.merge(template_params);
         }
 
+        let template_snapshot: std::collections::HashMap<String, serde_json::Value> = schema
+            .all_fields()
+            .into_iter()
+            .filter(|f| !f.allow_override)
+            .filter_map(|f| result.values.get(&f.id).map(|v| (f.id.clone(), v.clone())))
+            .collect();
+
         for (condition, node_params) in &self.group_overrides {
             if self.evaluate_condition(condition, metadata, image_info)
                 && let Some(group_params) = node_params.get(&node_id)
@@ -275,6 +282,10 @@ impl ParameterResolver {
 
         if let Some(image_params) = self.image_overrides.get(&(image_id, node_id)) {
             result.merge(image_params);
+        }
+
+        for (key, value) in template_snapshot {
+            result.values.insert(key, value);
         }
 
         self.resolve_expressions(&mut result, metadata, image_info);

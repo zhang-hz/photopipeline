@@ -3,8 +3,8 @@
 use photopipeline_core::{ColorSpace, ImageFormat, Metadata, PixelFormat};
 use photopipeline_engine::{ParameterResolver, PipelineGraph, PipelineTemplate, TemplateNode};
 use photopipeline_plugin::{
-    ParameterField, ParameterSchema, ParameterSection, ParameterSet, ParameterType,
-    PluginQuery, registry::Registry,
+    ParameterField, ParameterSchema, ParameterSection, ParameterSet, ParameterType, PluginQuery,
+    registry::Registry,
 };
 use std::sync::Arc;
 use std::thread;

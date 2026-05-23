@@ -16,7 +16,9 @@ photopipeline-core = { path = "../crates/core" }
 photopipeline-plugin = { path = "../crates/plugin" }
 photopipeline-engine = { path = "../crates/engine" }
 photopipeline-plugins = { path = "../crates/plugins" }
+test-harness = { path = "test_harness" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 uuid = { version = "1", features = ["v4", "serde"] }
+tempfile = "3"

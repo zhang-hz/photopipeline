@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 
 use photopipeline_core::{
     ColorSpace, GpuBackend, HardwareRequirement, PixelBuffer, PixelFormat, PluginCategory,
-    PluginId, PluginResult, PluginVersion, ProcessingStats, ValidationIssue,
+    PluginError, PluginId, PluginResult, PluginVersion, ProcessingStats, ValidationIssue,
 };
 use photopipeline_plugin::{
     AuxView, EnumOption, GuiLayout, GuiSchema, GuiSection, ParameterField, ParameterSchema,
@@ -522,26 +522,34 @@ impl PixelProcessor for ColorSpacePlugin {
             resolve_color_space(source_str)
         };
 
-        output.data.data.copy_from_slice(&input.data.data);
-        output.color_space = target_cs.clone();
-        output.width = input.width;
-        output.height = input.height;
+        if source_cs.primaries == target_cs.primaries && source_cs.transfer == target_cs.transfer {
+            let copy_len = input.data.data.len().min(output.data.data.len());
+            output.data.data[..copy_len].copy_from_slice(&input.data.data[..copy_len]);
+            output.color_space = target_cs.clone();
+            output.width = input.width;
+            output.height = input.height;
 
-        if embed_icc {
-            output.icc_profile = Some(generate_icc_profile(&source_cs, &target_cs));
+            if embed_icc {
+                output.icc_profile = Some(generate_icc_profile(&source_cs, &target_cs));
+            }
+
+            let pixels = input.pixel_count();
+            progress.set_progress(1.0, "done (passthrough - same color space)");
+
+            return Ok(ProcessingStats {
+                elapsed_ms: 0,
+                cpu_time_ms: 0,
+                gpu_time_ms: Some(0),
+                peak_memory_mb: (input.data.data.len() * 2) as u64 / (1024 * 1024),
+                input_pixels: pixels,
+                output_pixels: pixels,
+            });
         }
 
-        let pixels = input.pixel_count();
-        progress.set_progress(1.0, "done");
-
-        Ok(ProcessingStats {
-            elapsed_ms: 0,
-            cpu_time_ms: 0,
-            gpu_time_ms: Some(0),
-            peak_memory_mb: (input.data.data.len() * 2) as u64 / (1024 * 1024),
-            input_pixels: pixels,
-            output_pixels: pixels,
-        })
+        return Err(PluginError::Internal {
+            plugin: self.id.clone(),
+            message: "color space conversion requires Halide runtime (not yet linked)".into(),
+        });
     }
 }
 
