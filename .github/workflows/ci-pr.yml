@@ -76,18 +76,27 @@ jobs:
           shared-key: "windows-${{ hashFiles('Cargo.lock') }}"
       - name: Setup vcpkg
         run: |
-          if (-not (Test-Path C:/vcpkg)) {
-            git clone https://github.com/microsoft/vcpkg C:/vcpkg
-            C:/vcpkg/bootstrap-vcpkg.bat
+          $vcpkgPath = "$env:VCPKG_INSTALLATION_ROOT"
+          if (-not $vcpkgPath) {
+            $vcpkgPath = "C:/vcpkg"
+            if (-not (Test-Path $vcpkgPath)) {
+              git clone https://github.com/microsoft/vcpkg $vcpkgPath
+              & $vcpkgPath/bootstrap-vcpkg.bat
+            }
           }
-          echo "VCPKG_ROOT=C:/vcpkg" >> $env:GITHUB_ENV
+          echo "VCPKG_ROOT=$vcpkgPath" >> $env:GITHUB_ENV
+          echo "VCPKG_DEFAULT_TRIPLET=x64-windows" >> $env:GITHUB_ENV
+      - name: Cache vcpkg
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_ROOT }}/installed
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: vcpkg-${{ runner.os }}-
       - name: Install C libraries via vcpkg
         run: |
-          C:/vcpkg/vcpkg.exe install `
-            x265:x64-windows libheif[x265]:x64-windows `
-            libjxl:x64-windows lcms2:x64-windows libraw:x64-windows `
-            libpng:x64-windows tiff:x64-windows libjpeg-turbo:x64-windows `
-            aom:x64-windows protobuf:x64-windows
+          & "$env:VCPKG_ROOT/vcpkg.exe" install --clean-after-build `
+            x265 libheif[x265] libjxl lcms2 libraw `
+            libpng tiff libjpeg-turbo aom protobuf
       - name: Build
         run: cargo build --workspace
       - name: Test
@@ -116,25 +125,9 @@ jobs:
         shell: bash
         run: dotnet build gui/windows/Photopipeline.UIAutomationTests/Photopipeline.UIAutomationTests.csproj -c Release || true
 
-  gui-auto:
-    name: GUI Automation (Self-Hosted Windows)
-    runs-on: [self-hosted, windows, gui]
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "8.0.x"
-      - name: Build solution
-        run: dotnet build gui/windows/Photopipeline.sln -c Release
-      - name: Run UI automation tests
-        run: dotnet test gui/windows/Photopipeline.UIAutomationTests/Photopipeline.UIAutomationTests.csproj -c Release
-      - name: Upload results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: gui-auto-test-results
-          path: '**/TestResults/*.trx'
+  # gui-auto: Self-hosted Windows runner with WinAppDriver
+  # Requires: Windows machine with WinAppDriver installed, registered as GitHub Actions runner
+  # See docs/GUI_TESTING.md for setup instructions
 
   bench-compile:
     name: Bench Compile Check
