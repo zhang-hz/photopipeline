@@ -1,10 +1,18 @@
-name: Build Rust
+name: Build & Test Rust
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 jobs:
-  build:
-    name: Build (${{ matrix.os }})
+  test:
+    name: Test (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -21,42 +29,89 @@ jobs:
         with:
           components: clippy, rustfmt
 
-      - name: Cache Rust build artifacts
+      - name: Cache Rust artifacts
         uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ runner.os }}-cargo
 
-      - name: Install Linux dependencies
+      - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake pkg-config \
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential cmake pkg-config \
             protobuf-compiler libprotobuf-dev libheif-dev libjxl-dev \
             liblcms2-dev libexif-dev libtiff-dev libpng-dev libopenexr-dev \
             ninja-build
 
-      - name: Install macOS dependencies
+      - name: Install macOS build dependencies
         if: runner.os == 'macOS'
-        run: brew install cmake pkg-config protobuf libheif jpeg-xl little-cms2 libexif libtiff libpng openexr ninja
+        run: |
+          brew install cmake pkg-config protobuf libheif jpeg-xl \
+            little-cms2 libexif libtiff libpng openexr ninja
 
-      - name: Install Windows dependencies
+      - name: Install Windows build dependencies
         if: runner.os == 'Windows'
-        run: choco install -y cmake protoc
+        run: choco install -y cmake protoc --no-progress
 
-      - name: Build workspace
+      - name: Verify Rust toolchain
+        run: |
+          rustc --version
+          cargo --version
+          rustup component list --installed
+
+      - name: Build all crates
         run: cargo build --workspace
 
-      - name: Run tests
-        run: cargo test --workspace 2>&1 | tee test-output.txt
+      - name: Run unit tests
+        id: unit_tests
+        run: |
+          cargo test --workspace --no-fail-fast 2>&1 | tee test-results-${{ runner.os }}.txt
+          echo "EXIT_CODE=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
 
-      - name: Run clippy (warnings, non-fatal)
-        continue-on-error: true
-        run: cargo clippy --workspace 2>&1 | tee clippy-output.txt
+      - name: Show test summary
+        if: always()
+        run: |
+          echo "=== TEST RESULTS ==="
+          grep "test result:" test-results-${{ runner.os }}.txt || echo "No test result lines found"
+          echo ""
+          echo "=== FAILURES (if any) ==="
+          grep -A 20 "FAILED" test-results-${{ runner.os }}.txt || echo "No failures"
 
       - name: Check formatting
         run: cargo fmt --all -- --check
 
-      - name: Upload test output
+      - name: Run clippy lints
+        continue-on-error: true
+        run: cargo clippy --workspace
+
+      - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-output-${{ matrix.os }}
-          path: test-output.txt
+          name: test-results-${{ runner.os }}
+          path: test-results-${{ runner.os }}.txt
+          retention-days: 30
+
+  test-summary:
+    name: Test Summary
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all test results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: test-results-*
+          merge-multiple: true
+
+      - name: Print all test results
+        run: |
+          echo "# Test Results for All Platforms"
+          echo ""
+          for f in test-results-*.txt; do
+            echo "## ${f}"
+            echo '```'
+            cat "$f" | tail -30
+            echo '```'
+            echo ""
+          done

@@ -1,12 +1,9 @@
 #![allow(clippy::result_large_err)]
-use photopipeline_core::{
-    ColorSpace, ImageFormat, Metadata, PixelFormat, PluginCategory, PluginVersion,
-};
-use photopipeline_engine::{
-    ParameterResolver, PipelineGraph, PipelineTemplate, TemplateEdge, TemplateNode,
-};
+#![allow(unused_imports)]
+use photopipeline_core::{ColorSpace, ImageFormat, Metadata, PixelFormat};
+use photopipeline_engine::{ParameterResolver, PipelineGraph, PipelineTemplate, TemplateNode};
 use photopipeline_plugin::{
-    ParameterField, ParameterSchema, ParameterSection, ParameterSet, ParameterType, Plugin,
+    ParameterField, ParameterSchema, ParameterSection, ParameterSet, ParameterType,
     PluginQuery, registry::Registry,
 };
 use std::sync::Arc;
