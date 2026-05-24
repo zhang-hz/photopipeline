@@ -3,102 +3,58 @@
     x:Class="Photopipeline.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:views="using:Photopipeline.Views"
-    xmlns:controls="using:Photopipeline.Controls"
-    mc:Ignorable="d"
-    Title="Photopipeline">
+    xmlns:views="clr-namespace:Photopipeline.Views"
+    Title="Photopipeline" Height="720" Width="1280"
+    WindowStartupLocation="CenterScreen"
+    Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}">
 
-    <Grid x:Name="RootGrid">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="32" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="280" MinWidth="200" />
+            <ColumnDefinition Width="5" />
+            <ColumnDefinition Width="*" MinWidth="400" />
+        </Grid.ColumnDefinitions>
 
-        <Grid x:Name="AppTitleBar" Grid.Row="0" Height="32"
-              Canvas.ZIndex="1" VerticalAlignment="Top">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="Photopipeline"
-                       VerticalAlignment="Center" Margin="12,0,0,0"
-                       FontSize="12" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,188,0">
-                <Button x:Name="FileMenuButton" Content="File" Style="{StaticResource NavigationViewItemButtonStyle}" />
-                <Button x:Name="EditMenuButton" Content="Edit" Style="{StaticResource NavigationViewItemButtonStyle}" />
-                <Button x:Name="ViewMenuButton" Content="View" Style="{StaticResource NavigationViewItemButtonStyle}" />
-                <Button x:Name="HelpMenuButton" Content="Help" Style="{StaticResource NavigationViewItemButtonStyle}" />
-            </StackPanel>
+        <!-- Left Panel: TabControl for sub-panels -->
+        <TabControl Grid.Column="0" Margin="4" TabStripPlacement="Top">
+            <TabItem Header="Images">
+                <views:FilmstripView DataContext="{Binding}" />
+            </TabItem>
+            <TabItem Header="Plugins">
+                <views:PluginPanelView DataContext="{Binding PluginPanel}" />
+            </TabItem>
+            <TabItem Header="Batch">
+                <views:BatchPanelView DataContext="{Binding Batch}" />
+            </TabItem>
+        </TabControl>
+
+        <GridSplitter Grid.Column="1" Width="5"
+                      HorizontalAlignment="Stretch"
+                      Background="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" />
+
+        <!-- Right Panel -->
+        <Grid Grid.Column="2" Margin="4">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" MinHeight="200" />
+                <RowDefinition Height="5" />
+                <RowDefinition Height="*" MinHeight="150" />
+            </Grid.RowDefinitions>
+
+            <!-- Image Preview -->
+            <Border Grid.Row="0" BorderBrush="Gray" BorderThickness="1"
+                    CornerRadius="4" Background="#F0F0F0">
+                <views:PreviewView DataContext="{Binding}" />
+            </Border>
+
+            <GridSplitter Grid.Row="1" Height="5"
+                          HorizontalAlignment="Stretch"
+                          Background="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" />
+
+            <!-- Pipeline Editor -->
+            <Border Grid.Row="2" BorderBrush="Gray" BorderThickness="1"
+                    CornerRadius="4" Background="#F0F0F0">
+                <views:PipelineEditorView DataContext="{Binding PipelineEditor}" />
+            </Border>
         </Grid>
-
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="280" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="340" />
-            </Grid.ColumnDefinitions>
-
-            <!-- Left Panel: Filmstrip + Batch -->
-            <Grid Grid.Column="0" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="*" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-                <ScrollViewer Grid.Row="0">
-                    <views:FilmstripView x:Name="FilmstripControl" />
-                </ScrollViewer>
-                <views:BatchPanelView Grid.Row="1" x:Name="BatchPanelControl" />
-            </Grid>
-
-            <!-- Left Splitter -->
-            <Border Grid.Column="1" Width="4" Background="Transparent" />
-
-            <!-- Center Panel: Preview + Mini DAG -->
-            <Grid Grid.Column="2">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="3*" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="2*" />
-                </Grid.RowDefinitions>
-
-                <views:PreviewView Grid.Row="0" x:Name="PreviewControl" />
-                <Border Grid.Row="1" Height="4" Background="Transparent" />
-                <views:PipelineEditorView Grid.Row="2" x:Name="PipelineEditorControl" />
-            </Grid>
-
-            <!-- Right Splitter -->
-            <Border Grid.Column="3" Width="4" Background="Transparent" />
-
-            <!-- Right Panel: Plugin Controls -->
-            <ScrollViewer Grid.Column="4"
-                          Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                <views:PluginPanelView x:Name="PluginPanelControl" />
-            </ScrollViewer>
-        </Grid>
-
-        <!-- Status Bar -->
-        <Border Grid.Row="2" Height="24"
-                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                BorderThickness="0,1,0,0"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" x:Name="StatusText" Text="Ready"
-                           VerticalAlignment="Center" Margin="8,0,0,0" FontSize="11"
-                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                <TextBlock Grid.Column="2" x:Name="ZoomText" Text="100%"
-                           VerticalAlignment="Center" Margin="0,0,8,0" FontSize="11"
-                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-            </Grid>
-        </Border>
     </Grid>
 </Window>

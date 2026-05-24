@@ -69,6 +69,59 @@ public abstract class UIAutomationTestBase : IDisposable
         }
     }
 
+    protected void StartDriverOrThrow()
+    {
+        if (!TryStartDriver())
+            throw new SkipTestException("UI automation environment not available");
+    }
+
+    protected AppiumElement WaitForElement(By by, int timeoutMs = 10000)
+    {
+        Assert.NotNull(Driver);
+        var wait = new OpenQA.Selenium.Support.UI.WebDriverWait(
+            Driver, TimeSpan.FromMilliseconds(timeoutMs));
+        wait.PollingInterval = TimeSpan.FromMilliseconds(200);
+        return (AppiumElement)wait.Until(d => d.FindElement(by));
+    }
+
+    protected AppiumElement? WaitForElementOrNull(By by, int timeoutMs = 5000)
+    {
+        try
+        {
+            return WaitForElement(by, timeoutMs);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    protected void WaitForText(string automationId, string expected, int timeoutMs = 10000)
+    {
+        var element = WaitForElement(MobileBy.AccessibilityId(automationId), timeoutMs);
+        var end = DateTime.Now.AddMilliseconds(timeoutMs);
+        while (DateTime.Now < end)
+        {
+            if (element.Text.Contains(expected, StringComparison.OrdinalIgnoreCase)) return;
+            Thread.Sleep(200);
+        }
+        throw new TimeoutException(
+            $"Text '{expected}' not found in element '{automationId}'. Actual: '{element.Text}'");
+    }
+
+    protected int WaitForElementCount(By by, int minCount, int timeoutMs = 10000)
+    {
+        Assert.NotNull(Driver);
+        var end = DateTime.Now.AddMilliseconds(timeoutMs);
+        while (DateTime.Now < end)
+        {
+            var count = Driver!.FindElements(by).Count;
+            if (count >= minCount) return count;
+            Thread.Sleep(200);
+        }
+        return 0;
+    }
+
     protected virtual string GetAppId()
     {
         var envAppId = Environment.GetEnvironmentVariable("PHOTOPIPELINE_APP_ID");
@@ -77,15 +130,14 @@ public abstract class UIAutomationTestBase : IDisposable
 
         var candidates = new[]
         {
-            "Photopipeline_fqn!App",
-            @"C:\Program Files\Photopipeline\Photopipeline.exe",
-            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Photopipeline", "bin", "x64", "Debug", "net8.0-windows10.0.19041.0", "Photopipeline.exe")
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Photopipeline", "bin", "x64", "Debug", "net8.0-windows", "Photopipeline.exe"),
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Photopipeline", "bin", "x64", "Release", "net8.0-windows", "Photopipeline.exe"),
+            Path.Combine(Directory.GetCurrentDirectory(), "publish", "Photopipeline.exe"),
+            Path.Combine(Directory.GetCurrentDirectory(), "Photopipeline.exe")
         };
 
         foreach (var candidate in candidates)
         {
-            if (candidate.Contains('!'))
-                return candidate;
             if (File.Exists(candidate))
                 return candidate;
         }
@@ -122,8 +174,9 @@ public abstract class UIAutomationTestBase : IDisposable
 
         var candidates = new[]
         {
-            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Photopipeline", "bin", "x64", "Debug", "net8.0-windows10.0.19041.0", "Photopipeline.exe"),
-            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Photopipeline", "bin", "x64", "Release", "net8.0-windows10.0.19041.0", "Photopipeline.exe"),
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Photopipeline", "bin", "x64", "Debug", "net8.0-windows", "Photopipeline.exe"),
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Photopipeline", "bin", "x64", "Release", "net8.0-windows", "Photopipeline.exe"),
+            Path.Combine(Directory.GetCurrentDirectory(), "publish", "Photopipeline.exe"),
             Path.Combine(Directory.GetCurrentDirectory(), "Photopipeline.exe")
         };
 
@@ -241,26 +294,6 @@ public abstract class UIAutomationTestBase : IDisposable
         {
             return null;
         }
-    }
-
-    protected void WaitForElement(By by, int timeoutMs = 10000)
-    {
-        Assert.NotNull(Driver);
-        var endTime = DateTime.Now.AddMilliseconds(timeoutMs);
-        while (DateTime.Now < endTime)
-        {
-            try
-            {
-                var element = Driver!.FindElement(by);
-                if (element.Displayed)
-                    return;
-            }
-            catch
-            {
-            }
-            Thread.Sleep(200);
-        }
-        throw new TimeoutException($"Element {by} not found within {timeoutMs}ms");
     }
 
     protected void WaitForElementToDisappear(By by, int timeoutMs = 10000)

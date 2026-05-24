@@ -1,4 +1,4 @@
-# Builds the WinUI project (used by CI)
+# Builds the WPF project (used by CI)
 param(
     [string]$Configuration = "Release",
     [string]$Architecture = "x64"
@@ -6,13 +6,13 @@ param(
 
 $env:Path = "C:\Program Files\dotnet;$env:Path"
 
-Write-Host "=== Photopipeline WinUI 3 Build ===" -ForegroundColor Cyan
+Write-Host "=== Photopipeline WPF Build ===" -ForegroundColor Cyan
 Write-Host "Configuration: $Configuration"
 Write-Host "Architecture: $Architecture"
 Write-Host ""
 
 Write-Host "[1/3] Restoring packages..." -ForegroundColor Yellow
-& dotnet restore Photopipeline/Photopipeline.csproj
+& dotnet restore Photopipeline/Photopipeline.csproj -a $Architecture
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Package restore failed!" -ForegroundColor Red
     exit $LASTEXITCODE
@@ -26,7 +26,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "[3/3] Publishing..." -ForegroundColor Yellow
-& dotnet publish Photopipeline/Photopipeline.csproj -c $Configuration -a $Architecture -o ./publish/
+& dotnet publish Photopipeline/Photopipeline.csproj -c $Configuration -a $Architecture -r win-x64 -o ./publish/ --self-contained
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Publish failed!" -ForegroundColor Red
     exit $LASTEXITCODE

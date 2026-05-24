@@ -1,5 +1,6 @@
 using Photopipeline.Models;
 using System.Collections.ObjectModel;
+using System.IO;
 
 namespace Photopipeline.Services;
 

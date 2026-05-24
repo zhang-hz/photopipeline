@@ -1,11 +1,26 @@
-using Microsoft.UI.Xaml.Controls;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using Photopipeline.Models;
+using Photopipeline.ViewModels;
 
 namespace Photopipeline.Views;
 
-public sealed partial class PluginPanelView : UserControl
+public partial class PluginPanelView : UserControl
 {
     public PluginPanelView()
     {
-        this.InitializeComponent();
+        InitializeComponent();
+    }
+
+    private void OnPluginClicked(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement fe && fe.DataContext is PluginInfo plugin)
+        {
+            if (DataContext is PluginPanelViewModel vm)
+            {
+                vm.SelectPluginCommand.Execute(plugin);
+            }
+        }
     }
 }

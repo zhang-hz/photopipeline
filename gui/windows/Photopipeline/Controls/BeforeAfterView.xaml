@@ -2,10 +2,7 @@
 <UserControl
     x:Class="Photopipeline.Controls.BeforeAfterView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    mc:Ignorable="d">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <Grid x:Name="RootLayout">
         <Grid.ColumnDefinitions>
@@ -14,9 +11,8 @@
             <ColumnDefinition x:Name="AfterColumn" Width="*" />
         </Grid.ColumnDefinitions>
 
-        <!-- Before Image -->
         <Grid Grid.Column="0" x:Name="BeforePanel">
-            <Border Background="{ThemeResource LayerFillColorDefaultBrush}">
+            <Border Background="#F0F0F0">
                 <Image x:Name="BeforeImage"
                        Source="{x:Null}"
                        Stretch="Uniform"
@@ -32,37 +28,34 @@
             </Border>
         </Grid>
 
-        <!-- Split Handle -->
         <Grid Grid.Column="1" x:Name="SplitHandle" Width="4"
-              ManipulationMode="TranslateX"
-              ManipulationDelta="OnSplitHandleDrag"
-              HorizontalAlignment="Center">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
+              HorizontalAlignment="Center"
+              MouseLeftButtonDown="OnSplitHandleMouseDown"
+              MouseMove="OnSplitHandleMouseMove"
+              MouseLeftButtonUp="OnSplitHandleMouseUp"
+              Cursor="SizeWE">
+            <Border Background="#33000000" />
 
-            <Border Grid.ColumnSpan="3" Background="#33000000" />
-
-            <Border Grid.Column="1"
-                    Width="4" Height="40"
+            <Border Width="4" Height="40"
                     Background="White"
                     CornerRadius="2"
                     VerticalAlignment="Center"
-                    HorizontalAlignment="Center"
-                    Shadow="{ThemeResource SharedShadow}" />
+                    HorizontalAlignment="Center">
+                <Border.Effect>
+                    <DropShadowEffect ShadowDepth="2" Opacity="0.3" BlurRadius="6" />
+                </Border.Effect>
+            </Border>
 
-            <StackPanel Grid.Column="1" HorizontalAlignment="Center"
-                        VerticalAlignment="Center" Spacing="4">
-                <SymbolIcon Symbol="Switch" Width="12" Height="12"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-            </StackPanel>
+            <TextBlock Text="&#xE8AB;"
+                       FontFamily="Segoe MDL2 Assets"
+                       FontSize="10"
+                       Foreground="#666"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center" />
         </Grid>
 
-        <!-- After Image -->
         <Grid Grid.Column="2" x:Name="AfterPanel">
-            <Border Background="{ThemeResource LayerFillColorDefaultBrush}">
+            <Border Background="#F0F0F0">
                 <Image x:Name="AfterImage"
                        Source="{x:Null}"
                        Stretch="Uniform"

@@ -1,53 +1,24 @@
-using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.UI;
-using Microsoft.UI.Windowing;
-using Microsoft.UI.Xaml;
-using Photopipeline.Services;
+using System.Diagnostics;
+using System.Windows;
 using Photopipeline.ViewModels;
-using WinRT.Interop;
 
 namespace Photopipeline;
 
-public sealed partial class MainWindow : Window
+public partial class MainWindow : Window
 {
-    private readonly MainViewModel _viewModel;
-
     public MainWindow()
     {
-        this.InitializeComponent();
+        InitializeComponent();
 
-        _viewModel = App.Services.GetRequiredService<MainViewModel>();
-        RootGrid.DataContext = _viewModel;
-
-        // Set title bar extension in code-behind (not supported in XAML for WinUI 3)
-        this.ExtendsContentIntoTitleBar = true;
-        this.Activated += OnWindowActivated;
-
-        var hWnd = WindowNative.GetWindowHandle(this);
-        var windowId = Win32Interop.GetWindowIdFromWindow(hWnd);
-        var appWindow = AppWindow.GetFromWindowId(windowId);
-        appWindow.Title = "Photopipeline";
-
-        this.Closed += (_, _) =>
+        // Set DataContext from DI
+        try
         {
-            var procs = Process.GetProcessesByName("photopipeline-server");
-            foreach (var p in procs)
-            {
-                try { p.Kill(); } catch { }
-            }
-        };
-    }
-
-    private void OnWindowActivated(object sender, WindowActivatedEventArgs args)
-    {
-        if (args.WindowActivationState == WindowActivationState.Deactivated)
-        {
-            AppTitleBar.Opacity = 0.6;
+            DataContext = App.Services.GetRequiredService<MainViewModel>();
         }
-        else
+        catch (Exception ex)
         {
-            AppTitleBar.Opacity = 1.0;
+            Debug.WriteLine($"[MainWindow] DI failed: {ex}");
         }
     }
 }

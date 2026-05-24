@@ -34,10 +34,16 @@ fn find_protobuf_include() -> String {
     // VCPKG_ROOT paths (try both dynamic and static triplets)
     if let Ok(vcpkg_root) = std::env::var("VCPKG_ROOT") {
         candidates.insert(0, format!("{}/installed/x64-windows/include", vcpkg_root));
-        candidates.insert(1, format!("{}/installed/x64-windows-static/include", vcpkg_root));
+        candidates.insert(
+            1,
+            format!("{}/installed/x64-windows-static/include", vcpkg_root),
+        );
     } else {
         candidates.insert(0, "C:/vcpkg/installed/x64-windows/include".to_string());
-        candidates.insert(1, "C:/vcpkg/installed/x64-windows-static/include".to_string());
+        candidates.insert(
+            1,
+            "C:/vcpkg/installed/x64-windows-static/include".to_string(),
+        );
     }
     for c in &candidates {
         let p = std::path::Path::new(c).join("google/protobuf/struct.proto");

@@ -1,5 +1,6 @@
 using Photopipeline.Models;
 using System.Collections.ObjectModel;
+using System.IO;
 
 namespace Photopipeline.Services;
 
@@ -35,7 +36,8 @@ public sealed class LocalImageService : IImageService
     public Task<Stream?> LoadPreviewImageAsync(ImageEntry entry, CancellationToken ct = default)
     {
         if (!File.Exists(entry.FilePath)) return Task.FromResult<Stream?>(null);
-        return Task.FromResult<Stream?>(File.OpenRead(entry.FilePath));
+        try { return Task.FromResult<Stream?>(File.OpenRead(entry.FilePath)); }
+        catch { return Task.FromResult<Stream?>(null); }
     }
 
     public Task<Stream?> ProcessPreviewImageAsync(ImageEntry entry, PipelineModel pipeline, CancellationToken ct = default)

@@ -1,5 +1,6 @@
 using Grpc.Net.Client;
 using System;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -66,8 +67,10 @@ public sealed class GrpcClientService : IDisposable
         _isConnected = false;
         _reconnectAttempts++;
         var delay = Math.Min(_reconnectAttempts * 1000, 15000);
-        await Task.Delay(delay, ct);
-        await ConnectAsync(ct);
+        try { await Task.Delay(delay, ct); }
+        catch (OperationCanceledException) { return; }
+        try { await ConnectAsync(ct); }
+        catch { /* reconnection best-effort */ }
     }
 
     public async Task<TResponse> CallAsync<TResponse>(

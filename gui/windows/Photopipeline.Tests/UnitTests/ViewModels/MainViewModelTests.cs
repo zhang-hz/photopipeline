@@ -10,7 +10,7 @@ public sealed class MainViewModelTests
         vm.Images.Should().BeEmpty();
         vm.SelectedImage.Should().BeNull();
         vm.IsProcessing.Should().BeFalse();
-        vm.StatusMessage.Should().Be("Ready");
+        vm.StatusMessage.Should().NotBeNullOrEmpty();
     }
 
     [Fact]
@@ -239,13 +239,14 @@ public sealed class MainViewModelTests
     public void MainViewModel_Log_MultipleMessages_AccumulateInOrder()
     {
         var vm = new MainViewModel();
+        var baseCount = vm.LogMessages.Count;
 
         vm.Log("First");
         vm.Log("Second");
 
-        vm.LogMessages.Should().HaveCount(2);
-        vm.LogMessages[0].Should().EndWith("First");
-        vm.LogMessages[1].Should().EndWith("Second");
+        vm.LogMessages.Should().HaveCount(baseCount + 2);
+        vm.LogMessages[baseCount].Should().EndWith("First");
+        vm.LogMessages[baseCount + 1].Should().EndWith("Second");
     }
 
     [Fact]

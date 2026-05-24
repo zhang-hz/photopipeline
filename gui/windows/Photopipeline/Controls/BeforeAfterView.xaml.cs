@@ -1,30 +1,48 @@
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
 
 namespace Photopipeline.Controls;
 
-public sealed partial class BeforeAfterView : UserControl
+public partial class BeforeAfterView : UserControl
 {
+    private bool _isDragging;
+    private double _startMouseX;
+    private double _startBeforeWidth;
+
     public BeforeAfterView()
     {
-        this.InitializeComponent();
+        InitializeComponent();
     }
 
-    private void OnSplitHandleDrag(object sender, ManipulationDeltaRoutedEventArgs e)
+    private void OnSplitHandleMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (BeforeColumn == null || AfterColumn == null)
+        _isDragging = true;
+        _startMouseX = e.GetPosition(RootLayout).X;
+        _startBeforeWidth = BeforeColumn.ActualWidth;
+        SplitHandle.CaptureMouse();
+    }
+
+    private void OnSplitHandleMouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_isDragging || BeforeColumn is null || AfterColumn is null)
             return;
 
-        var delta = e.Delta.Translation.X;
-        var beforeWidth = BeforeColumn.ActualWidth + delta;
-        var afterWidth = AfterColumn.ActualWidth - delta;
-        var totalWidth = beforeWidth + afterWidth;
+        var currentX = e.GetPosition(RootLayout).X;
+        var delta = currentX - _startMouseX;
+        var beforeWidth = _startBeforeWidth + delta;
+        var totalWidth = RootLayout.ActualWidth;
 
-        if (totalWidth > 0)
+        if (totalWidth > 0 && beforeWidth > 50 && beforeWidth < totalWidth - 50)
         {
             BeforeColumn.Width = new GridLength(beforeWidth / totalWidth, GridUnitType.Star);
-            AfterColumn.Width = new GridLength(afterWidth / totalWidth, GridUnitType.Star);
+            AfterColumn.Width = new GridLength(1.0 - beforeWidth / totalWidth, GridUnitType.Star);
         }
+    }
+
+    private void OnSplitHandleMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        _isDragging = false;
+        SplitHandle.ReleaseMouseCapture();
     }
 }

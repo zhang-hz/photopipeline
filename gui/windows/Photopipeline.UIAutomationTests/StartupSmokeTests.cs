@@ -247,7 +247,7 @@ public sealed class StartupSmokeTests : UIAutomationTestBase
         size.Height.Should().BeGreaterThan(700);
     }
 
-    [Fact]
+    [Fact(Skip = "Mica backdrop is a WinUI 3 feature, not available in WPF")]
     public void Mica_Backdrop_Is_Applied()
     {
         var started = TryStartDriver();

@@ -36,8 +36,7 @@ fn main() {
     {
         // Vendor self-built static libs (vendor/install/lib)
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default();
-        let vendor_lib = std::path::Path::new(&manifest_dir)
-            .join("../../vendor/install/lib");
+        let vendor_lib = std::path::Path::new(&manifest_dir).join("../../vendor/install/lib");
         if vendor_lib.exists() {
             println!("cargo:rustc-link-search=native={}", vendor_lib.display());
         }

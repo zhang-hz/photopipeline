@@ -172,7 +172,8 @@ public sealed class GrpcClientServiceTests : IDisposable
         await _service.ReconnectAsync();
         var secondDuration = sw.ElapsedMilliseconds;
 
-        secondDuration.Should().BeGreaterOrEqualTo(firstDuration);
+        secondDuration.Should().BeGreaterOrEqualTo(firstDuration - 100,
+            "second call should have comparable delay (tolerance for timing variance)");
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 using System.Diagnostics;
+using System.IO;
+using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.UI.Xaml;
 using Photopipeline.Services;
 using Photopipeline.ViewModels;
 
@@ -8,17 +9,70 @@ namespace Photopipeline;
 
 public partial class App : Application
 {
-    private Window? _mainWindow;
     private Process? _serverProcess;
     private const string ServerExe = "photopipeline-server.exe";
-    private const string ServerUrl = "http://localhost:50051";
 
     public static IServiceProvider Services { get; private set; } = null!;
 
+    private static readonly string TraceLogDir = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "Photopipeline", "logs");
+
+    private static void WriteTrace(string msg)
+    {
+        try
+        {
+            Directory.CreateDirectory(TraceLogDir);
+            File.AppendAllText(Path.Combine(TraceLogDir, "trace.log"),
+                $"{DateTime.Now:HH:mm:ss.fff} [{Environment.CurrentManagedThreadId}] {msg}\n");
+        }
+        catch { }
+    }
+
+    static App()
+    {
+        WriteTrace("App static constructor");
+    }
+
     public App()
     {
-        this.InitializeComponent();
+        WriteTrace("App instance constructor");
         Services = ConfigureServices();
+        WriteTrace("App: DI configured");
+
+        DispatcherUnhandledException += (_, e) =>
+        {
+            WriteTrace($"DUE: {e.Exception.GetType().Name}: {e.Exception.Message}\n{e.Exception.StackTrace}");
+            LogException(e.Exception);
+            e.Handled = true;
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            if (e.ExceptionObject is Exception ex)
+                LogException(ex);
+        };
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            LogException(e.Exception);
+            e.SetObserved();
+        };
+        WriteTrace("App instance constructor: handlers registered - DONE");
+    }
+
+    private static void LogException(Exception ex)
+    {
+        try
+        {
+            Directory.CreateDirectory(TraceLogDir);
+            var logFile = Path.Combine(TraceLogDir,
+                $"crash_{DateTime.Now:yyyyMMdd_HHmmss}.log");
+            File.WriteAllText(logFile, ex.ToString());
+            Debug.WriteLine($"Unhandled exception logged to {logFile}: {ex}");
+        }
+        catch
+        {
+            Debug.WriteLine($"Unhandled exception (could not log): {ex}");
+        }
     }
 
     private static IServiceProvider ConfigureServices()
@@ -36,6 +90,41 @@ public partial class App : Application
         return services.BuildServiceProvider();
     }
 
+    protected override void OnStartup(StartupEventArgs e)
+    {
+        WriteTrace("OnStartup: begin");
+        base.OnStartup(e);
+        WriteTrace("OnStartup: base.OnStartup done, window should be loaded");
+        _ = InitializeServerAsync();
+        WriteTrace("OnStartup: end");
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        WriteTrace("OnExit: shutting down");
+        try { _serverProcess?.Kill(); } catch { }
+        base.OnExit(e);
+    }
+
+    private async Task InitializeServerAsync()
+    {
+        try
+        {
+            StartServer();
+            await WaitForServerAsync();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Server initialization failed: {ex}");
+            try
+            {
+                var vm = Services.GetRequiredService<MainViewModel>();
+                vm.StatusMessage = "Server unavailable - offline mode";
+            }
+            catch { }
+        }
+    }
+
     private void StartServer()
     {
         var baseDir = AppContext.BaseDirectory;
@@ -51,22 +140,29 @@ public partial class App : Application
             return;
         }
 
-        _serverProcess = new Process
+        try
         {
-            StartInfo = new ProcessStartInfo
+            _serverProcess = new Process
             {
-                FileName = exePath,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-                WorkingDirectory = baseDir,
-            },
-            EnableRaisingEvents = true,
-        };
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = exePath,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true,
+                    WorkingDirectory = baseDir,
+                },
+                EnableRaisingEvents = true,
+            };
 
-        _serverProcess.Exited += (_, _) => Debug.WriteLine("Server process exited");
-        _serverProcess.Start();
+            _serverProcess.Exited += (_, _) => Debug.WriteLine("Server process exited");
+            _serverProcess.Start();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to start server: {ex}");
+        }
     }
 
     private async Task WaitForServerAsync(int timeoutMs = 10000)
@@ -86,14 +182,5 @@ public partial class App : Application
                 await Task.Delay(200);
             }
         }
-    }
-
-    protected override async void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
-    {
-        StartServer();
-        await WaitForServerAsync();
-
-        _mainWindow = new MainWindow();
-        _mainWindow.Activate();
     }
 }

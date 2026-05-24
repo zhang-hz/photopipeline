@@ -1,11 +1,11 @@
-using Microsoft.UI.Xaml.Controls;
+using System.Windows.Controls;
 
 namespace Photopipeline.Views;
 
-public sealed partial class BatchPanelView : UserControl
+public partial class BatchPanelView : UserControl
 {
     public BatchPanelView()
     {
-        this.InitializeComponent();
+        InitializeComponent();
     }
 }

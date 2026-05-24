@@ -3,10 +3,7 @@
     x:Class="Photopipeline.Views.PreviewView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:controls="using:Photopipeline.Controls"
-    mc:Ignorable="d">
+    xmlns:controls="clr-namespace:Photopipeline.Controls">
 
     <Grid>
         <Grid.RowDefinitions>
@@ -15,75 +12,81 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <CommandBar Grid.Row="0" DefaultLabelPosition="Right"
-                    Background="Transparent" OverflowButtonVisibility="Collapsed">
-            <AppBarButton Icon="ZoomIn" Label="Zoom In" />
-            <AppBarButton Icon="ZoomOut" Label="Zoom Out" />
-            <AppBarSeparator />
-            <AppBarToggleButton Icon="View" Label="Split View" IsChecked="True" />
-            <AppBarToggleButton Icon="View" Label="Side by Side" />
-            <AppBarSeparator />
-            <AppBarButton Icon="Refresh" Label="Fit" />
-            <AppBarButton Icon="Zoom" Label="1:1" />
-            <AppBarSeparator />
-            <AppBarButton Icon="Save" Label="Export" />
-            <AppBarButton Icon="Send" Label="Send to PS" />
-        </CommandBar>
+        <!-- ToolBar -->
+        <ToolBar Grid.Row="0" Background="Transparent">
+            <Button ToolTip="Zoom In"
+                    Command="{Binding ZoomInCommand}">
+                <TextBlock Text="&#xE8A3;" FontFamily="Segoe MDL2 Assets" FontSize="16" />
+            </Button>
+            <Button ToolTip="Zoom Out"
+                    Command="{Binding ZoomOutCommand}">
+                <TextBlock Text="&#xE71F;" FontFamily="Segoe MDL2 Assets" FontSize="16" />
+            </Button>
+            <Separator />
+            <ToggleButton x:Name="SplitViewBtn" ToolTip="Split View"
+                          IsChecked="{Binding IsSplitView}">
+                <TextBlock Text="&#xE890;" FontFamily="Segoe MDL2 Assets" FontSize="16" />
+            </ToggleButton>
+            <ToggleButton x:Name="SideBySideBtn" ToolTip="Side by Side"
+                          IsChecked="{Binding IsSideBySide}">
+                <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="16" />
+            </ToggleButton>
+            <Separator />
+            <Button ToolTip="Fit"
+                    Command="{Binding FitToWindowCommand}">
+                <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="16" />
+            </Button>
+            <Button ToolTip="1:1"
+                    Command="{Binding ResetZoomCommand}">
+                <TextBlock Text="&#xE8A3;" FontFamily="Segoe MDL2 Assets" FontSize="16" />
+            </Button>
+            <Separator />
+            <Button ToolTip="Export"
+                    Command="{Binding ExportImageCommand}">
+                <TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" FontSize="16" />
+            </Button>
+        </ToolBar>
 
         <Border Grid.Row="1" Margin="4"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                Background="{ThemeResource LayerFillColorDefaultBrush}"
-                CornerRadius="8">
+                BorderBrush="Gray" BorderThickness="1" CornerRadius="8"
+                Background="#F8F8F8">
             <Grid x:Name="PreviewContainer">
                 <controls:BeforeAfterView x:Name="BeforeAfterControl"
                                           HorizontalAlignment="Stretch"
                                           VerticalAlignment="Stretch" />
 
                 <StackPanel x:Name="NoPreviewPanel"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            Visibility="Visible">
-                    <SymbolIcon Symbol="Pictures" Width="48" Height="48"
-                                Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                            HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock Text="&#xE8B9;" FontFamily="Segoe MDL2 Assets"
+                               FontSize="48" Foreground="#888"
+                               HorizontalAlignment="Center" />
                     <TextBlock Text="No image selected"
                                Style="{StaticResource SubtitleTextBlockStyle}"
-                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                               Margin="0,8,0,0" HorizontalAlignment="Center" />
+                               Foreground="#888" Margin="0,8,0,0"
+                               HorizontalAlignment="Center" />
                     <TextBlock Text="Select an image from the filmstrip to preview"
                                Style="{StaticResource CaptionTextBlockStyle}"
-                               Foreground="{ThemeResource TextFillColorDisabledBrush}"
+                               Foreground="#AAA"
                                HorizontalAlignment="Center" />
                 </StackPanel>
             </Grid>
         </Border>
 
+        <!-- Status Bar -->
         <Grid Grid.Row="2" Margin="8,2" Height="20">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
             <TextBlock Grid.Column="0" Text="Before"
                        FontSize="11" VerticalAlignment="Center"
-                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                       Foreground="Gray" />
             <TextBlock Grid.Column="2" Text="After"
                        FontSize="11" VerticalAlignment="Center"
-                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-
-            <TextBlock Grid.Column="3" x:Name="PixelInfoText"
-                       Text="6000×4000 · TIFF 16-bit · sRGB"
-                       FontSize="11" VerticalAlignment="Center"
-                       Margin="16,0,0,0"
-                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-            <TextBlock Grid.Column="4" x:Name="MouseInfoText"
-                       Text="X: 1234 Y: 567 R:128 G:64 B:32"
-                       FontSize="11" VerticalAlignment="Center"
-                       Margin="16,0,0,0"
-                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                       Foreground="Gray" Margin="16,0,0,0" />
         </Grid>
     </Grid>
 </UserControl>

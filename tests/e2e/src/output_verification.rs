@@ -419,13 +419,13 @@ fn tiff_encode_verify_samples_per_pixel() {
 }
 
 #[test]
-fn tiff_encode_verify_compression_none() {
+fn tiff_encode_verify_compression_deflate() {
     let reg = make_registry();
     let rt = rt();
     let original = known_value_solid_u8(64, 64, 128, 128, 128);
     let tiff_data = encode_tiff(&reg, &original, &rt);
 
-    assert_tiff_tag(&tiff_data, 259, &[1, 0]);
+    assert_tiff_tag(&tiff_data, 259, &[8, 0]);
 }
 
 #[test]

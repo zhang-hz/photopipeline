@@ -18,6 +18,11 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private ImageEntry? _selectedImage;
 
+    partial void OnSelectedImageChanged(ImageEntry? value)
+    {
+        BeforeImage = value;
+    }
+
     [ObservableProperty]
     private PipelineModel _currentPipeline = new() { Name = "Default Pipeline" };
 
@@ -48,6 +53,12 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private ObservableCollection<string> _logMessages = new();
 
+    [ObservableProperty]
+    private bool _isSplitView = true;
+
+    [ObservableProperty]
+    private bool _isSideBySide;
+
     public PipelineEditorViewModel PipelineEditor { get; }
     public PluginPanelViewModel PluginPanel { get; }
     public BatchViewModel Batch { get; }
@@ -64,6 +75,8 @@ public sealed partial class MainViewModel : ObservableObject
         PipelineEditor = pipelineEditor;
         PluginPanel = pluginPanel;
         Batch = batch;
+
+        _ = LoadPluginsAsync();
     }
 
     public MainViewModel() : this(
@@ -78,11 +91,6 @@ public sealed partial class MainViewModel : ObservableObject
     private async Task AddImage()
     {
         StatusMessage = "Opening file picker...";
-        _ = _pipelineService.GetAvailablePluginsAsync().ContinueWith(t =>
-        {
-            if (t.Status == TaskStatus.RanToCompletion)
-                PluginPanel.LoadPlugins(t.Result);
-        });
     }
 
     [RelayCommand]
@@ -195,5 +203,19 @@ public sealed partial class MainViewModel : ObservableObject
     {
         LogMessages.Add($"[{DateTime.Now:HH:mm:ss}] {message}");
         StatusMessage = message;
+    }
+
+    private async Task LoadPluginsAsync()
+    {
+        try
+        {
+            var plugins = await _pipelineService.GetAvailablePluginsAsync();
+            PluginPanel.LoadPlugins(new ObservableCollection<PluginInfo>(plugins));
+            Log("Plugins loaded");
+        }
+        catch (Exception ex)
+        {
+            Log($"Plugin load failed: {ex.Message}");
+        }
     }
 }

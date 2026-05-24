@@ -268,6 +268,7 @@ public sealed partial class PipelineEditorViewModel : ObservableObject
         OnPropertyChanged(nameof(ValidationResult));
     }
 
+    [RelayCommand]
     public void FitAll()
     {
         if (Nodes.Count == 0) return;
@@ -279,6 +280,7 @@ public sealed partial class PipelineEditorViewModel : ObservableObject
         OffsetY = -minY + 40;
     }
 
+    [RelayCommand]
     public void DuplicateSelected()
     {
         if (SelectedNode is null) return;
@@ -292,4 +294,13 @@ public sealed partial class PipelineEditorViewModel : ObservableObject
         };
         Nodes.Add(clone);
     }
+
+    [RelayCommand]
+    private void ZoomIn() => Scale = Math.Min(Scale * 1.25, 5.0);
+
+    [RelayCommand]
+    private void ZoomOut() => Scale = Math.Max(Scale / 1.25, 0.1);
+
+    [RelayCommand]
+    private void ResetZoom() { Scale = 1.0; OffsetX = 0; OffsetY = 0; }
 }

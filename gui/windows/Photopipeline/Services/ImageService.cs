@@ -1,21 +1,34 @@
 using Photopipeline.Image;
 using Photopipeline.Models;
 using System.Collections.ObjectModel;
+using System.IO;
 
 namespace Photopipeline.Services;
 
 public sealed class ImageService : IImageService
 {
     private readonly GrpcClientService _grpc;
-    private readonly string _thumbnailCachePath;
+    private string? _thumbnailCachePath;
+
+    private string ThumbnailCachePath
+    {
+        get
+        {
+            if (_thumbnailCachePath is null)
+            {
+                _thumbnailCachePath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Photopipeline", "thumbnails");
+                try { Directory.CreateDirectory(_thumbnailCachePath); }
+                catch { /* non-critical; fall back to temp */ }
+            }
+            return _thumbnailCachePath;
+        }
+    }
 
     public ImageService(GrpcClientService grpc)
     {
         _grpc = grpc;
-        _thumbnailCachePath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Photopipeline", "thumbnails");
-        Directory.CreateDirectory(_thumbnailCachePath);
     }
 
     public async Task<ObservableCollection<ImageEntry>> LoadImagesAsync(string[] filePaths, CancellationToken ct = default)
@@ -66,7 +79,7 @@ public sealed class ImageService : IImageService
     public async Task GenerateThumbnailAsync(ImageEntry entry, CancellationToken ct = default)
     {
         var thumbnailName = $"thumb_{entry.Id}_{Path.GetFileNameWithoutExtension(entry.FileName)}.jpg";
-        var thumbnailPath = Path.Combine(_thumbnailCachePath, thumbnailName);
+        var thumbnailPath = Path.Combine(ThumbnailCachePath, thumbnailName);
 
         if (!File.Exists(thumbnailPath))
         {
