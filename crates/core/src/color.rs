@@ -558,8 +558,7 @@ fn pq_eotf_normalized(v: f64) -> f64 {
     let v_pow = v.powf(1.0 / m2);
     let num = (v_pow - c1).max(0.0);
     let den = c2 - c3 * v_pow;
-    let linear = (num / den.max(1e-10)).powf(1.0 / m1);
-    linear / 10000.0
+    (num / den.max(1e-10)).powf(1.0 / m1)
 }
 
 fn pq_inverse_eotf_normalized(v: f64) -> f64 {

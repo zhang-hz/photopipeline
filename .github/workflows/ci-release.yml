@@ -6,106 +6,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  release-linux:
-    name: Release (Linux)
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Cache vendor builds
-        uses: actions/cache@v4
-        with:
-          path: vendor/install/
-          key: vendor-linux-${{ hashFiles('vendor/build-all.sh') }}
-          restore-keys: vendor-linux-
-      - name: Install build tools
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq build-essential cmake pkg-config \
-            curl nasm ninja-build protobuf-compiler
-      - name: Build vendor libraries
-        run: |
-          chmod +x vendor/build-all.sh
-          ./vendor/build-all.sh
-      - name: Build release
-        run: |
-          export PKG_CONFIG_PATH="$PWD/vendor/install/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
-          export RUSTFLAGS="-L $PWD/vendor/install/lib ${RUSTFLAGS:-}"
-          cargo build --profile ci --workspace
-      - name: Collect libraries
-        run: |
-          chmod +x scripts/collect-libs.sh
-          mkdir -p release/bin release/lib
-          cp target/ci/photopipeline-cli release/bin/
-          ./scripts/collect-libs.sh target/ci/photopipeline-cli release/lib/
-      - name: Smoke test
-        run: |
-          export LD_LIBRARY_PATH="$PWD/release/lib:${LD_LIBRARY_PATH:-}"
-          ./release/bin/photopipeline-cli --version
-          ./release/bin/photopipeline-cli --help
-          cat > /tmp/test_pipeline.toml << 'EOF'
-          [metadata]
-          name = "Smoke Test"
-          version = "1.0"
-          [[nodes]]
-          id = "transform"
-          plugin = "photopipeline.plugins.transform"
-          enabled = true
-          EOF
-          LD_LIBRARY_PATH="$PWD/release/lib" ./release/bin/photopipeline-cli pipeline validate -c /tmp/test_pipeline.toml
-      - name: Package
-        run: tar -czf "photopipeline-${{ github.ref_name }}-linux-x86_64.tar.gz" -C release .
-      - uses: actions/upload-artifact@v4
-        with:
-          name: photopipeline-linux
-          path: photopipeline-${{ github.ref_name }}-linux-x86_64.tar.gz
-
-  release-macos:
-    name: Release (macOS)
-    runs-on: macos-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Cache vendor builds
-        uses: actions/cache@v4
-        with:
-          path: vendor/install/
-          key: vendor-macos-${{ hashFiles('vendor/build-all.sh') }}
-          restore-keys: vendor-macos-
-      - name: Install build tools
-        run: brew install cmake pkg-config curl nasm ninja protobuf
-      - name: Build vendor libraries
-        run: |
-          chmod +x vendor/build-all.sh
-          ./vendor/build-all.sh
-      - name: Build release
-        run: |
-          export PKG_CONFIG_PATH="$PWD/vendor/install/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
-          export RUSTFLAGS="-L $PWD/vendor/install/lib ${RUSTFLAGS:-}"
-          cargo build --profile ci --workspace
-      - name: Create app bundle
-        run: |
-          mkdir -p "Photopipeline.app/Contents/MacOS"
-          mkdir -p "Photopipeline.app/Contents/Frameworks"
-          cp target/ci/photopipeline-cli "Photopipeline.app/Contents/MacOS/"
-          ./scripts/collect-libs.sh "Photopipeline.app/Contents/MacOS/photopipeline-cli" "Photopipeline.app/Contents/Frameworks"
-      - name: Smoke test
-        run: |
-          DYLD_LIBRARY_PATH="Photopipeline.app/Contents/Frameworks" \
-          ./Photopipeline.app/Contents/MacOS/photopipeline-cli --version
-      - name: Package DMG
-        run: |
-          hdiutil create -volname Photopipeline \
-            -srcfolder Photopipeline.app \
-            -ov -format UDZO \
-            "photopipeline-${{ github.ref_name }}-macos.dmg"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: photopipeline-macos
-          path: photopipeline-${{ github.ref_name }}-macos.dmg
-
   release-windows:
     name: Release (Windows x64)
     runs-on: windows-latest
@@ -193,7 +93,7 @@ jobs:
 
   publish:
     name: Publish Release
-    needs: [release-linux, release-macos, release-windows]
+    needs: [release-windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
