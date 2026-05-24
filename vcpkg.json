@@ -5,7 +5,7 @@
     "libheif",
     "libjxl",
     "libraw",
-    "lcms2",
+    "lcms",
     "libpng",
     "tiff",
     "libjpeg-turbo",

@@ -2,18 +2,27 @@ use std::env;
 use std::path::PathBuf;
 
 fn main() {
-    let vcpkg_root = env::var("VCPKG_ROOT").unwrap_or_else(|_| "C:/vcpkg".to_string());
-    let vcpkg_lib = format!("{}/installed/x64-windows/lib", vcpkg_root);
-    let vcpkg_include = format!("{}/installed/x64-windows/include", vcpkg_root);
-
     println!("cargo:rerun-if-env-changed=VCPKG_ROOT");
 
-    // Link against vcpkg's x64-windows DLL import library for libraw_r
-    println!("cargo:rustc-link-search=native={}", vcpkg_lib);
-    println!("cargo:rustc-link-lib=raw_r");
+    #[cfg(target_os = "windows")]
+    {
+        let vcpkg_root = env::var("VCPKG_ROOT").unwrap_or_else(|_| "C:/vcpkg".to_string());
+        let vcpkg_lib = format!("{}/installed/x64-windows/lib", vcpkg_root);
+        println!("cargo:rustc-link-search=native={}", vcpkg_lib);
+        println!("cargo:rustc-link-lib=raw_r");
+        println!("cargo:rustc-link-lib=static=lcms2");
+    }
 
-    // libraw_r depends on lcms2 — keep static (pure C, no CRT init issues)
-    println!("cargo:rustc-link-lib=static=lcms2");
+    #[cfg(not(target_os = "windows"))]
+    {
+        let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap_or_default();
+        let vendor_lib = std::path::Path::new(&manifest_dir).join("../../install/lib");
+        if vendor_lib.exists() {
+            println!("cargo:rustc-link-search=native={}", vendor_lib.display());
+        }
+        println!("cargo:rustc-link-lib=raw");
+        println!("cargo:rustc-link-lib=lcms2");
+    }
 
     // All cfg flags: vcpkg's libraw 0.22.1 is full-featured
     println!("cargo:rustc-cfg=have_iparams_software");

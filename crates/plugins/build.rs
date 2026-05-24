@@ -1,33 +1,64 @@
 fn main() {
-    let vcpkg_root = std::env::var("VCPKG_ROOT").unwrap_or_else(|_| "C:/vcpkg".to_string());
-    let lib_dir = format!("{}/installed/x64-windows/lib", vcpkg_root);
-
     println!("cargo:rerun-if-env-changed=VCPKG_ROOT");
     println!("cargo:rerun-if-env-changed=PHOTOPIPELINE_EXIFTOOL");
-    println!("cargo:rustc-link-search=native={}", lib_dir);
 
-    // libheif + deps (x64-windows DLL)
-    println!("cargo:rustc-link-lib=heif");
-    println!("cargo:rustc-link-lib=libx265");
-    println!("cargo:rustc-link-lib=de265");
+    #[cfg(target_os = "windows")]
+    {
+        let vcpkg_root = std::env::var("VCPKG_ROOT").unwrap_or_else(|_| "C:/vcpkg".to_string());
+        let lib_dir = format!("{}/installed/x64-windows/lib", vcpkg_root);
+        println!("cargo:rustc-link-search=native={}", lib_dir);
 
-    // libjxl + deps (x64-windows DLL)
-    println!("cargo:rustc-link-lib=jxl");
-    println!("cargo:rustc-link-lib=jxl_threads");
-    println!("cargo:rustc-link-lib=jxl_cms");
-    println!("cargo:rustc-link-lib=brotlicommon");
-    println!("cargo:rustc-link-lib=brotlidec");
-    println!("cargo:rustc-link-lib=brotlienc");
-    println!("cargo:rustc-link-lib=hwy");
+        // libheif + deps (vcpkg)
+        println!("cargo:rustc-link-lib=heif");
+        println!("cargo:rustc-link-lib=libx265");
+        println!("cargo:rustc-link-lib=de265");
 
-    // libraw + deps (x64-windows DLL)
-    println!("cargo:rustc-link-lib=raw_r");
+        // libjxl + deps (vcpkg)
+        println!("cargo:rustc-link-lib=jxl");
+        println!("cargo:rustc-link-lib=jxl_threads");
+        println!("cargo:rustc-link-lib=jxl_cms");
+        println!("cargo:rustc-link-lib=brotlicommon");
+        println!("cargo:rustc-link-lib=brotlidec");
+        println!("cargo:rustc-link-lib=brotlienc");
+        println!("cargo:rustc-link-lib=hwy");
 
-    // lcms2 — keep static (pure C, no CRT init issues; lcms2-sys compiles from source)
-    println!("cargo:rustc-link-lib=static=lcms2");
+        // libraw (vcpkg)
+        println!("cargo:rustc-link-lib=raw_r");
 
-    // zlib (x64-windows DLL)
-    println!("cargo:rustc-link-lib=z");
+        // lcms2 — static from vcpkg (pure C, no CRT init issues)
+        println!("cargo:rustc-link-lib=static=lcms2");
+
+        // zlib (vcpkg)
+        println!("cargo:rustc-link-lib=z");
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        // Vendor self-built static libs (vendor/install/lib)
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default();
+        let vendor_lib = std::path::Path::new(&manifest_dir)
+            .join("../../vendor/install/lib");
+        if vendor_lib.exists() {
+            println!("cargo:rustc-link-search=native={}", vendor_lib.display());
+        }
+
+        // System packages (apt/brew) are in standard linker search paths.
+        // Library names use unix conventions (no 'lib' prefix in link directives).
+        println!("cargo:rustc-link-lib=heif");
+        println!("cargo:rustc-link-lib=x265");
+        println!("cargo:rustc-link-lib=de265");
+        println!("cargo:rustc-link-lib=jxl");
+        println!("cargo:rustc-link-lib=jxl_threads");
+        println!("cargo:rustc-link-lib=jxl_cms");
+        println!("cargo:rustc-link-lib=brotlicommon");
+        println!("cargo:rustc-link-lib=brotlidec");
+        println!("cargo:rustc-link-lib=brotlienc");
+        println!("cargo:rustc-link-lib=hwy");
+        println!("cargo:rustc-link-lib=raw");
+        println!("cargo:rustc-link-lib=raw_r");
+        println!("cargo:rustc-link-lib=lcms2");
+        println!("cargo:rustc-link-lib=z");
+    }
 
     // ExifTool embed path
     let exiftool_path = find_exiftool();
@@ -67,7 +98,12 @@ fn find_exiftool() -> String {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                let exe = path.join("exiftool.exe");
+                #[cfg(target_os = "windows")]
+                let exe_name = "exiftool.exe";
+                #[cfg(not(target_os = "windows"))]
+                let exe_name = "exiftool";
+
+                let exe = path.join(exe_name);
                 if exe.exists() {
                     return exe.to_string_lossy().to_string();
                 }
@@ -75,6 +111,5 @@ fn find_exiftool() -> String {
         }
     }
 
-    // fallback: system PATH
     "exiftool".to_string()
 }

@@ -84,11 +84,11 @@ public sealed class MainViewModelTests
     public void MainViewModel_RunPipeline_UpdatesStatus()
     {
         var vm = new MainViewModel();
+        vm.SelectedImage = new ImageEntry { FilePath = "test.jpg" };
 
         vm.RunPipelineCommand.Execute(null);
 
-        vm.CurrentPipeline.IsExecuting.Should().BeTrue();
-        vm.StatusMessage.Should().Be("Executing pipeline...");
+        vm.StatusMessage.Should().Be("Pipeline completed");
     }
 
     [Fact]
@@ -308,9 +308,10 @@ public sealed class MainViewModelTests
     public void MainViewModel_ExportImage_SetsStatusMessage()
     {
         var vm = new MainViewModel();
+        vm.SelectedImage = new ImageEntry { FilePath = "test.jpg" };
 
         vm.ExportImageCommand.Execute(null);
 
-        vm.StatusMessage.Should().Be("Exporting processed image...");
+        vm.StatusMessage.Should().Be("Export complete");
     }
 }

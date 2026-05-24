@@ -1,2 +1,2 @@
-[env]
-VCPKG_ROOT = { value = "C:/vcpkg", force = false }
+# VCPKG_ROOT is set per-platform in each build.rs that uses it.
+# Do not set a global default — it breaks non-Windows builds.

@@ -43,7 +43,9 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq build-essential cmake pkg-config \
-            libheif-dev libjxl-dev liblcms2-dev libtiff-dev libpng-dev ninja-build
+            protobuf-compiler libprotobuf-dev libheif-dev libjxl-dev \
+            liblcms2-dev libtiff-dev libpng-dev libraw-dev libde265-dev \
+            ninja-build
       - name: Build
         run: cargo build --workspace
       - name: Stress test (5 iterations)

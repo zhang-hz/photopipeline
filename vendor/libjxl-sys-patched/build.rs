@@ -15,7 +15,10 @@ fn main() {
     println!("cargo:include={}", include_dir);
 
     let vcpkg_root = env::var("VCPKG_ROOT").unwrap_or_else(|_| "C:/vcpkg".to_string());
+    #[cfg(target_os = "windows")]
     let vcpkg_include = format!("{}/installed/x64-windows/include", vcpkg_root);
+    #[cfg(not(target_os = "windows"))]
+    let vcpkg_include = format!("{}/installed/include", vcpkg_root);
 
     let bindings = bindgen::Builder::default()
         .header("wrapper.h")

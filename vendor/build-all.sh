@@ -34,6 +34,7 @@ build_x265() {
     cmake ../source \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DHIGH_BIT_DEPTH=ON \
         -DMAIN12=OFF \
         -DENABLE_SHARED=OFF \
@@ -60,6 +61,7 @@ build_libde265() {
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DBUILD_SHARED_LIBS=OFF \
         -DENABLE_DECODER=ON \
         -DENABLE_ENCODER=OFF
@@ -84,6 +86,7 @@ build_libheif() {
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DCMAKE_PREFIX_PATH="${INSTALL_DIR}" \
         -DWITH_X265=ON \
         -DWITH_LIBDE265=ON \
@@ -104,8 +107,8 @@ build_libaom() {
     local SRC="${VENDOR_DIR}/libaom-3.9"
     if [ ! -d "${SRC}" ]; then
         echo "Downloading libaom v3.9..."
-        curl -fsSL "https://github.com/AOMediaCodec/libaom/archive/refs/tags/v3.9.0.tar.gz" | tar xz -C "${VENDOR_DIR}"
-        mv "${VENDOR_DIR}/libaom-3.9.0" "${SRC}" 2>/dev/null || true
+        mkdir -p "${SRC}"
+        curl -fsSL "https://aomedia.googlesource.com/aom/+archive/v3.9.0.tar.gz" | tar xz -C "${SRC}"
     fi
     if [ -f "${INSTALL_DIR}/lib/libaom.a" ]; then
         echo "libaom already built, skipping"
@@ -116,6 +119,7 @@ build_libaom() {
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DBUILD_SHARED_LIBS=OFF \
         -DENABLE_DOCS=OFF \
         -DENABLE_TESTS=OFF \
@@ -142,6 +146,7 @@ build_libjxl() {
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DBUILD_SHARED_LIBS=OFF \
         -DJPEGXL_ENABLE_TOOLS=OFF \
         -DJPEGXL_ENABLE_DOXYGEN=OFF \
@@ -157,7 +162,9 @@ build_libjxl() {
         cp lib/libjxl*.a "${INSTALL_DIR}/lib/" 2>/dev/null || true
         cp lib/libjxl_threads*.a "${INSTALL_DIR}/lib/" 2>/dev/null || true
         cp lib/libjxl_cms*.a "${INSTALL_DIR}/lib/" 2>/dev/null || true
-        
+        cp third_party/brotli/libbrotli*.a "${INSTALL_DIR}/lib/" 2>/dev/null || true
+        cp third_party/highway/libhwy*.a "${INSTALL_DIR}/lib/" 2>/dev/null || true
+
     mkdir -p "${INSTALL_DIR}/include/jxl"
     cp ../lib/include/jxl/*.h "${INSTALL_DIR}/include/jxl/"
     echo "libjxl v0.11.0 built"
@@ -165,7 +172,7 @@ build_libjxl() {
 
 build_lcms2() {
     echo "--- Building lcms2 v2.16 ---"
-    local SRC="${VENDOR_DIR}/lcms2-2.16"
+    local SRC="${VENDOR_DIR}/Little-CMS-lcms2.16"
     if [ ! -d "${SRC}" ]; then
         echo "Downloading lcms2 v2.16..."
         curl -fsSL "https://github.com/mm2/Little-CMS/archive/refs/tags/lcms2.16.tar.gz" | tar xz -C "${VENDOR_DIR}"
@@ -179,6 +186,7 @@ build_lcms2() {
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DBUILD_SHARED_LIBS=OFF \
         -DBUILD_TESTS=OFF \
         -DBUILD_UTILS=OFF
@@ -203,6 +211,7 @@ build_libraw() {
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DBUILD_SHARED_LIBS=OFF \
         -DBUILD_TOOLS=OFF \
         -DENABLE_JASPER=OFF \
@@ -229,6 +238,7 @@ build_libpng() {
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DBUILD_SHARED_LIBS=OFF \
         -DPNG_TESTS=OFF \
         -DPNG_TOOLS=OFF
@@ -239,7 +249,7 @@ build_libpng() {
 
 build_libtiff() {
     echo "--- Building libtiff v4.6.0 ---"
-    local SRC="${VENDOR_DIR}/libtiff-4.6.0"
+    local SRC="${VENDOR_DIR}/tiff-4.6.0"
     if [ ! -d "${SRC}" ]; then
         echo "Downloading libtiff v4.6.0..."
         curl -fsSL "https://download.osgeo.org/libtiff/tiff-4.6.0.tar.gz" | tar xz -C "${VENDOR_DIR}"
@@ -253,6 +263,7 @@ build_libtiff() {
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DBUILD_SHARED_LIBS=OFF \
         -Dtiff-tools=OFF \
         -Dtiff-tests=OFF \
@@ -279,6 +290,7 @@ build_libjpeg_turbo() {
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DBUILD_SHARED_LIBS=OFF \
         -DENABLE_STATIC=OFF
     cmake --build . --parallel "${NPROC}"

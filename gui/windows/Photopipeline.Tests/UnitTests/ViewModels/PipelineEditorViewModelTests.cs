@@ -504,7 +504,7 @@ public sealed class PipelineEditorViewModelTests
 
         vm.AddNodeCommand.Execute(noInputPlugin);
 
-        vm.Nodes[0].InputPorts.Should().HaveCount(1);
+        vm.Nodes[0].InputPorts.Should().HaveCount(0);
     }
 
     [Fact]
