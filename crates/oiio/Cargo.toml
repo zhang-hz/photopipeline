@@ -3,10 +3,6 @@ name = "photopipeline-oiio"
 version.workspace = true
 edition.workspace = true
 
-[features]
-default = []
-oiio = []
-
 [dependencies]
 photopipeline-core = { path = "../core" }
 thiserror.workspace = true

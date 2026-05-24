@@ -149,10 +149,26 @@ impl PipelineService for PipelineServiceImpl {
         &self,
         request: Request<PipelineSpec>,
     ) -> Result<Response<PipelineId>, Status> {
-        let _spec = request.into_inner();
-        let id = uuid::Uuid::new_v4().to_string();
-        tracing::info!(pipeline_id = %id, "create_pipeline RPC called, created {}", id);
-        Ok(Response::new(PipelineId { id }))
+        let spec = request.into_inner();
+        let template = build_template(&spec);
+
+        template
+            .validate()
+            .map_err(|e| Status::invalid_argument(format!("invalid pipeline: {}", e)))?;
+
+        let graph = template.into_graph();
+        let id = uuid::Uuid::new_v4();
+
+        tracing::info!(
+            pipeline_id = %id,
+            node_count = spec.nodes.len(),
+            "create_pipeline: stored pipeline with {} nodes",
+            spec.nodes.len()
+        );
+
+        self.state.graphs.write().insert(id, graph);
+
+        Ok(Response::new(PipelineId { id: id.to_string() }))
     }
 
     type ExecuteStream = ReceiverStream<Result<ExecuteProgress, Status>>;

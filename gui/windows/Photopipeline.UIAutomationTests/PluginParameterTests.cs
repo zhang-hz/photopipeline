@@ -1,3 +1,5 @@
+using OpenQA.Selenium.Interactions;
+
 namespace Photopipeline.UIAutomationTests;
 
 public sealed class PluginParameterTests : UIAutomationTestBase

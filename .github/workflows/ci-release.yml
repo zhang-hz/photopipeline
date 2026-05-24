@@ -31,18 +31,18 @@ jobs:
       - name: Build release
         run: |
           export PKG_CONFIG_PATH="$PWD/vendor/install/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
-          cargo build --release --workspace
+          cargo build --profile ci --workspace
       - name: Collect libraries
         run: |
           chmod +x scripts/collect-libs.sh
           mkdir -p release/bin release/lib
-          cp target/release/photopipeline release/bin/
-          ./scripts/collect-libs.sh target/release/photopipeline release/lib/
+          cp target/ci/photopipeline-cli release/bin/
+          ./scripts/collect-libs.sh target/ci/photopipeline-cli release/lib/
       - name: Smoke test
         run: |
           export LD_LIBRARY_PATH="$PWD/release/lib:${LD_LIBRARY_PATH:-}"
-          ./release/bin/photopipeline --version
-          ./release/bin/photopipeline --help
+          ./release/bin/photopipeline-cli --version
+          ./release/bin/photopipeline-cli --help
           cat > /tmp/test_pipeline.toml << 'EOF'
           [metadata]
           name = "Smoke Test"
@@ -52,7 +52,7 @@ jobs:
           plugin = "photopipeline.plugins.transform"
           enabled = true
           EOF
-          LD_LIBRARY_PATH="$PWD/release/lib" ./release/bin/photopipeline pipeline validate -c /tmp/test_pipeline.toml
+          LD_LIBRARY_PATH="$PWD/release/lib" ./release/bin/photopipeline-cli pipeline validate -c /tmp/test_pipeline.toml
       - name: Package
         run: tar -czf "photopipeline-${{ github.ref_name }}-linux-x86_64.tar.gz" -C release .
       - uses: actions/upload-artifact@v4
@@ -82,17 +82,17 @@ jobs:
       - name: Build release
         run: |
           export PKG_CONFIG_PATH="$PWD/vendor/install/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
-          cargo build --release --workspace
+          cargo build --profile ci --workspace
       - name: Create app bundle
         run: |
           mkdir -p "Photopipeline.app/Contents/MacOS"
           mkdir -p "Photopipeline.app/Contents/Frameworks"
-          cp target/release/photopipeline "Photopipeline.app/Contents/MacOS/"
-          ./scripts/collect-libs.sh "Photopipeline.app/Contents/MacOS/photopipeline" "Photopipeline.app/Contents/Frameworks"
+          cp target/ci/photopipeline-cli "Photopipeline.app/Contents/MacOS/"
+          ./scripts/collect-libs.sh "Photopipeline.app/Contents/MacOS/photopipeline-cli" "Photopipeline.app/Contents/Frameworks"
       - name: Smoke test
         run: |
           DYLD_LIBRARY_PATH="Photopipeline.app/Contents/Frameworks" \
-          ./Photopipeline.app/Contents/MacOS/photopipeline --version
+          ./Photopipeline.app/Contents/MacOS/photopipeline-cli --version
       - name: Package DMG
         run: |
           hdiutil create -volname Photopipeline \
@@ -105,12 +105,15 @@ jobs:
           path: photopipeline-${{ github.ref_name }}-macos.dmg
 
   release-windows:
-    name: Release (Windows)
+    name: Release (Windows x64)
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
       - name: Setup vcpkg
         run: |
           $vcpkgPath = "$env:VCPKG_INSTALLATION_ROOT"
@@ -127,31 +130,64 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.VCPKG_ROOT }}/installed
-          key: vcpkg-release-${{ hashFiles('.github/workflows/ci-release.yml') }}
+          key: vcpkg-release-${{ hashFiles('vcpkg.json') }}
           restore-keys: vcpkg-release-
       - name: Install C libraries via vcpkg
+        run: '& "$env:VCPKG_ROOT/vcpkg.exe" install --clean-after-build'
+      - name: Cargo registry cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: cargo-registry-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-registry-
+      - name: Build Rust binaries
+        run: cargo build --profile ci --workspace
+      - name: Publish GUI
         run: |
-          & "$env:VCPKG_ROOT/vcpkg.exe" install --clean-after-build `
-            x265 libheif[hevc] libjxl lcms libraw `
-            libpng tiff libjpeg-turbo aom protobuf
-      - name: Build release
-        run: cargo build --release --workspace
-      - name: Package
+          dotnet publish gui/windows/Photopipeline/Photopipeline.csproj `
+            -c Release -p:Platform=x64 -r win-x64 `
+            -o publish/win-x64 --self-contained `
+            -p:WindowsAppSDKSelfContained=true
+      - name: Stage package
+        run: powershell -File scripts/stage.ps1
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+      - name: Build installer
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" scripts/installer/photopipeline.iss'
+      - name: Sign
+        if: env.SIGNING_CERTIFICATE_B64 != ''
+        env:
+          SIGNING_CERTIFICATE_B64: ${{ secrets.SIGNING_CERTIFICATE_B64 }}
+          SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
         run: |
-          mkdir release
-          copy target\release\photopipeline.exe release\
-          if (Test-Path "$env:VCPKG_ROOT/installed/x64-windows/bin") {
-            Copy-Item "$env:VCPKG_ROOT/installed/x64-windows/bin/*.dll" release\ -ErrorAction SilentlyContinue
+          $pfxBytes = [Convert]::FromBase64String($env:SIGNING_CERTIFICATE_B64)
+          [IO.File]::WriteAllBytes("codesign.pfx", $pfxBytes)
+          Get-ChildItem -Recurse -Include "*.exe","*.dll" -Path "staging" | ForEach-Object {
+            signtool sign /fd SHA256 /f codesign.pfx /p $env:SIGNING_CERTIFICATE_PASSWORD /tr http://timestamp.digicert.com /td SHA256 /v $_.FullName
           }
-          Compress-Archive -Path release\* -DestinationPath "photopipeline-${{ github.ref_name }}-windows-x86_64.zip"
-      - name: Smoke test
+          Get-ChildItem "dist/*.exe" | ForEach-Object {
+            signtool sign /fd SHA256 /f codesign.pfx /p $env:SIGNING_CERTIFICATE_PASSWORD /tr http://timestamp.digicert.com /td SHA256 /v $_.FullName
+          }
+          Remove-Item codesign.pfx
+      - name: Create portable zip
         run: |
-          $env:PATH = "$pwd\release;$env:PATH"
-          .\release\photopipeline.exe --version
+          Compress-Archive -Path staging\* `
+            -DestinationPath "dist/photopipeline-${{ github.ref_name }}-windows-x64-portable.zip"
+      - name: Smoke test (CLI)
+        run: |
+          $env:PATH = "$pwd\staging;$env:PATH"
+          .\staging\photopipeline-cli.exe --version
       - uses: actions/upload-artifact@v4
         with:
-          name: photopipeline-windows
-          path: photopipeline-${{ github.ref_name }}-windows-x86_64.zip
+          name: photopipeline-windows-x64-portable
+          path: dist/photopipeline-*-windows-x64-portable.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: photopipeline-windows-x64-installer
+          path: dist/*-setup.exe
 
   publish:
     name: Publish Release

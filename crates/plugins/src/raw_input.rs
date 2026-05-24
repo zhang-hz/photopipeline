@@ -14,13 +14,13 @@ use photopipeline_plugin::{
 
 #[cfg(feature = "libraw-native")]
 mod libraw_ffi {
-    use std::ffi::{c_char, c_int, c_uint, c_void};
+    use std::ffi::{c_int, c_uint, c_void};
 
     #[repr(C)]
     pub struct LibRawData;
 
-    #[link(name = "raw")]
-    extern "C" {
+    // Link directives provided by libraw-sys build.rs
+    unsafe extern "C" {
         pub fn libraw_init(flags: c_uint) -> *mut LibRawData;
         pub fn libraw_close(lr: *mut LibRawData);
         pub fn libraw_open_buffer(lr: *mut LibRawData, buffer: *const c_void, size: usize)
@@ -349,6 +349,7 @@ fn decode_via_libraw(_data: &[u8], _options: &DecodeOptions) -> PluginResult<Dec
     #[cfg(feature = "libraw-native")]
     unsafe {
         use libraw_ffi::*;
+        use std::ffi::{c_uint, c_void};
 
         let lr = libraw_init(LIBRAW_IMAGE_FORMAT_TIFF_LIKE as c_uint);
         if lr.is_null() {
@@ -534,55 +535,9 @@ impl FormatProcessor for RawInputPlugin {
         match decode_via_libraw(data, options) {
             Ok(image) => return Ok(image),
             Err(e) => {
-                tracing::debug!(
-                    error = %e,
-                    "raw_input: LibRaw decode failed, falling back to stub"
-                );
+                return Err(e);
             }
         }
-
-        let pixel_format = options.pixel_format.unwrap_or(PixelFormat::U16);
-        let half = options.max_width.is_some() || options.max_height.is_some();
-
-        let mut width: u32;
-        let mut height: u32;
-
-        if data.len() >= 4 && (&data[0..4] == b"II\x2A\x00" || &data[0..4] == b"MM\x00\x2A") {
-            width = 6000;
-            height = 4000;
-            tracing::info!("RAW: TIFF-based RAW format detected, assuming ~24MP sensor dimensions");
-        } else {
-            width = 6000;
-            height = 4000;
-            tracing::info!("RAW: Unknown RAW container, assuming ~24MP sensor dimensions");
-        }
-
-        if half {
-            width /= 2;
-            height /= 2;
-        }
-
-        let channels = 3;
-        let bpc = pixel_format.bytes_per_channel();
-        let buf_size = width as usize * height as usize * channels * bpc;
-        let mut raw_buf = AlignedBuffer::new(buf_size, 64);
-
-        let copy_len = data.len().min(buf_size);
-        raw_buf.data[..copy_len].copy_from_slice(&data[..copy_len]);
-
-        Ok(DecodedImage {
-            buffer: PixelBuffer {
-                width,
-                height,
-                layout: ChannelLayout::RGB,
-                format: pixel_format,
-                color_space: ColorSpace::SRGB,
-                icc_profile: None,
-                data: raw_buf,
-            },
-            metadata: Metadata::default(),
-            format: ImageFormat::RAW,
-        })
     }
 
     fn can_encode(&self, _format: &ImageFormat) -> bool {

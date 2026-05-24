@@ -1,3 +1,4 @@
+# Static library build (BUILD_SHARED_LIBS=OFF). Produces .a files in vendor/install/lib/.
 #!/bin/bash
 set -euo pipefail
 
@@ -24,7 +25,7 @@ build_x265() {
         curl -fsSL "https://bitbucket.org/multicoreware/x265_git/downloads/x265_3.6.tar.gz" | tar xz -C "${VENDOR_DIR}"
         mv "${VENDOR_DIR}/x265_3.6" "${SRC}" 2>/dev/null || true
     fi
-    if [ -f "${INSTALL_DIR}/lib/libx265.so" ] || [ -f "${INSTALL_DIR}/lib/libx265.dylib" ]; then
+    if [ -f "${INSTALL_DIR}/lib/libx265.a" ]; then
         echo "x265 already built, skipping"
         return
     fi
@@ -35,7 +36,7 @@ build_x265() {
         -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
         -DHIGH_BIT_DEPTH=ON \
         -DMAIN12=OFF \
-        -DENABLE_SHARED=ON \
+        -DENABLE_SHARED=OFF \
         -DENABLE_CLI=OFF \
         -DEXPORT_C_API=ON
     cmake --build . --parallel "${NPROC}"
@@ -50,7 +51,7 @@ build_libde265() {
         echo "Downloading libde265 v1.0.15..."
         curl -fsSL "https://github.com/strukturag/libde265/releases/download/v1.0.15/libde265-1.0.15.tar.gz" | tar xz -C "${VENDOR_DIR}"
     fi
-    if [ -f "${INSTALL_DIR}/lib/libde265.so" ] || [ -f "${INSTALL_DIR}/lib/libde265.dylib" ]; then
+    if [ -f "${INSTALL_DIR}/lib/libde265.a" ]; then
         echo "libde265 already built, skipping"
         return
     fi
@@ -59,7 +60,7 @@ build_libde265() {
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
-        -DBUILD_SHARED_LIBS=ON \
+        -DBUILD_SHARED_LIBS=OFF \
         -DENABLE_DECODER=ON \
         -DENABLE_ENCODER=OFF
     cmake --build . --parallel "${NPROC}"
@@ -74,7 +75,7 @@ build_libheif() {
         echo "Downloading libheif v1.18.2..."
         curl -fsSL "https://github.com/strukturag/libheif/archive/refs/tags/v1.18.2.tar.gz" | tar xz -C "${VENDOR_DIR}"
     fi
-    if [ -f "${INSTALL_DIR}/lib/libheif.so" ] || [ -f "${INSTALL_DIR}/lib/libheif.dylib" ]; then
+    if [ -f "${INSTALL_DIR}/lib/libheif.a" ]; then
         echo "libheif already built, skipping"
         return
     fi
@@ -91,7 +92,7 @@ build_libheif() {
         -DWITH_RAV1E=OFF \
         -DWITH_SvtEnc=OFF \
         -DENABLE_PLUGIN_LOADING=OFF \
-        -DBUILD_SHARED_LIBS=ON \
+        -DBUILD_SHARED_LIBS=OFF \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON
     cmake --build . --parallel "${NPROC}"
     cmake --install .
@@ -106,7 +107,7 @@ build_libaom() {
         curl -fsSL "https://github.com/AOMediaCodec/libaom/archive/refs/tags/v3.9.0.tar.gz" | tar xz -C "${VENDOR_DIR}"
         mv "${VENDOR_DIR}/libaom-3.9.0" "${SRC}" 2>/dev/null || true
     fi
-    if [ -f "${INSTALL_DIR}/lib/libaom.so" ] || [ -f "${INSTALL_DIR}/lib/libaom.dylib" ]; then
+    if [ -f "${INSTALL_DIR}/lib/libaom.a" ]; then
         echo "libaom already built, skipping"
         return
     fi
@@ -115,7 +116,7 @@ build_libaom() {
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
-        -DBUILD_SHARED_LIBS=ON \
+        -DBUILD_SHARED_LIBS=OFF \
         -DENABLE_DOCS=OFF \
         -DENABLE_TESTS=OFF \
         -DENABLE_TOOLS=OFF \
@@ -132,7 +133,7 @@ build_libjxl() {
         echo "Downloading libjxl v0.11.0..."
         curl -fsSL "https://github.com/libjxl/libjxl/archive/refs/tags/v0.11.0.tar.gz" | tar xz -C "${VENDOR_DIR}"
     fi
-    if [ -f "${INSTALL_DIR}/lib/libjxl.so" ] || [ -f "${INSTALL_DIR}/lib/libjxl.dylib" ]; then
+    if [ -f "${INSTALL_DIR}/lib/libjxl.a" ]; then
         echo "libjxl already built, skipping"
         return
     fi
@@ -141,7 +142,7 @@ build_libjxl() {
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
-        -DBUILD_SHARED_LIBS=ON \
+        -DBUILD_SHARED_LIBS=OFF \
         -DJPEGXL_ENABLE_TOOLS=OFF \
         -DJPEGXL_ENABLE_DOXYGEN=OFF \
         -DJPEGXL_ENABLE_MANPAGES=OFF \
@@ -153,10 +154,10 @@ build_libjxl() {
         -DJPEGXL_FORCE_SYSTEM_BROTLI=OFF
     cmake --build . --parallel "${NPROC}" --target jxl jxl_threads
     # Manual install of libjxl (cmake --install may not work for sub-targets)
-        cp lib/libjxl*.so* "${INSTALL_DIR}/lib/" 2>/dev/null || true
-        cp lib/libjxl*.dylib* "${INSTALL_DIR}/lib/" 2>/dev/null || true
-        cp lib/libjxl_threads*.so* "${INSTALL_DIR}/lib/" 2>/dev/null || true
-        cp lib/libjxl_threads*.dylib* "${INSTALL_DIR}/lib/" 2>/dev/null || true
+        cp lib/libjxl*.a "${INSTALL_DIR}/lib/" 2>/dev/null || true
+        cp lib/libjxl_threads*.a "${INSTALL_DIR}/lib/" 2>/dev/null || true
+        cp lib/libjxl_cms*.a "${INSTALL_DIR}/lib/" 2>/dev/null || true
+        
     mkdir -p "${INSTALL_DIR}/include/jxl"
     cp ../lib/include/jxl/*.h "${INSTALL_DIR}/include/jxl/"
     echo "libjxl v0.11.0 built"
@@ -169,7 +170,7 @@ build_lcms2() {
         echo "Downloading lcms2 v2.16..."
         curl -fsSL "https://github.com/mm2/Little-CMS/archive/refs/tags/lcms2.16.tar.gz" | tar xz -C "${VENDOR_DIR}"
     fi
-    if [ -f "${INSTALL_DIR}/lib/liblcms2.so" ] || [ -f "${INSTALL_DIR}/lib/liblcms2.dylib" ]; then
+    if [ -f "${INSTALL_DIR}/lib/liblcms2.a" ]; then
         echo "lcms2 already built, skipping"
         return
     fi
@@ -178,7 +179,7 @@ build_lcms2() {
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
-        -DBUILD_SHARED_LIBS=ON \
+        -DBUILD_SHARED_LIBS=OFF \
         -DBUILD_TESTS=OFF \
         -DBUILD_UTILS=OFF
     cmake --build . --parallel "${NPROC}"
@@ -193,7 +194,7 @@ build_libraw() {
         echo "Downloading LibRaw v0.21.3..."
         curl -fsSL "https://github.com/LibRaw/LibRaw/archive/refs/tags/0.21.3.tar.gz" | tar xz -C "${VENDOR_DIR}"
     fi
-    if [ -f "${INSTALL_DIR}/lib/libraw.so" ] || [ -f "${INSTALL_DIR}/lib/libraw.dylib" ]; then
+    if [ -f "${INSTALL_DIR}/lib/libraw.a" ]; then
         echo "LibRaw already built, skipping"
         return
     fi
@@ -202,7 +203,7 @@ build_libraw() {
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
-        -DBUILD_SHARED_LIBS=ON \
+        -DBUILD_SHARED_LIBS=OFF \
         -DBUILD_TOOLS=OFF \
         -DENABLE_JASPER=OFF \
         -DENABLE_LCMS=OFF \
@@ -219,7 +220,7 @@ build_libpng() {
         echo "Downloading libpng v1.6.43..."
         curl -fsSL "https://download.sourceforge.net/libpng/libpng-1.6.43.tar.xz" | tar xJ -C "${VENDOR_DIR}"
     fi
-    if [ -f "${INSTALL_DIR}/lib/libpng16.so" ] || [ -f "${INSTALL_DIR}/lib/libpng16.dylib" ]; then
+    if [ -f "${INSTALL_DIR}/lib/libpng16.a" ]; then
         echo "libpng already built, skipping"
         return
     fi
@@ -228,7 +229,7 @@ build_libpng() {
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
-        -DBUILD_SHARED_LIBS=ON \
+        -DBUILD_SHARED_LIBS=OFF \
         -DPNG_TESTS=OFF \
         -DPNG_TOOLS=OFF
     cmake --build . --parallel "${NPROC}"
@@ -243,7 +244,7 @@ build_libtiff() {
         echo "Downloading libtiff v4.6.0..."
         curl -fsSL "https://download.osgeo.org/libtiff/tiff-4.6.0.tar.gz" | tar xz -C "${VENDOR_DIR}"
     fi
-    if [ -f "${INSTALL_DIR}/lib/libtiff.so" ] || [ -f "${INSTALL_DIR}/lib/libtiff.dylib" ]; then
+    if [ -f "${INSTALL_DIR}/lib/libtiff.a" ]; then
         echo "libtiff already built, skipping"
         return
     fi
@@ -252,7 +253,7 @@ build_libtiff() {
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
-        -DBUILD_SHARED_LIBS=ON \
+        -DBUILD_SHARED_LIBS=OFF \
         -Dtiff-tools=OFF \
         -Dtiff-tests=OFF \
         -Dtiff-docs=OFF
@@ -269,7 +270,7 @@ build_libjpeg_turbo() {
         curl -fsSL "https://github.com/libjpeg-turbo/libjpeg-turbo/archive/refs/tags/3.0.0.tar.gz" | tar xz -C "${VENDOR_DIR}"
         mv "${VENDOR_DIR}/libjpeg-turbo-3.0.0" "${SRC}" 2>/dev/null || true
     fi
-    if [ -f "${INSTALL_DIR}/lib/libjpeg.so" ] || [ -f "${INSTALL_DIR}/lib/libjpeg.dylib" ]; then
+    if [ -f "${INSTALL_DIR}/lib/libjpeg.a" ]; then
         echo "libjpeg-turbo already built, skipping"
         return
     fi
@@ -278,7 +279,7 @@ build_libjpeg_turbo() {
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
-        -DBUILD_SHARED_LIBS=ON \
+        -DBUILD_SHARED_LIBS=OFF \
         -DENABLE_STATIC=OFF
     cmake --build . --parallel "${NPROC}"
     cmake --install .
@@ -304,6 +305,6 @@ echo ""
 echo "=== All vendor libraries built ==="
 echo "Install prefix: ${INSTALL_DIR}"
 echo "Libraries:"
-ls -la "${INSTALL_DIR}/lib/"*.{so,dylib}* 2>/dev/null || echo "  (no library files found)"
+ls -la "${INSTALL_DIR}/lib/"*.a 2>/dev/null || echo "  (no static library files found)"
 echo ""
 echo "Done at $(date)"

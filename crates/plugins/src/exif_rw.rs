@@ -340,12 +340,107 @@ impl Plugin for ExifRwPlugin {
     }
 }
 
-fn use_exiftool_cli() -> bool {
-    std::process::Command::new("exiftool")
+fn find_exiftool_path() -> Option<String> {
+    let exe_name: &str = if cfg!(windows) {
+        "exiftool.exe"
+    } else {
+        "exiftool"
+    };
+
+    // 1. Check PHOTOPIPELINE_EXIFTOOL env var (set by build.rs at compile time)
+    if let Some(path) = option_env!("PHOTOPIPELINE_EXIFTOOL") {
+        let p = std::path::Path::new(path);
+        if p.exists() {
+            tracing::debug!(path = %path, "exiftool found via compile-time PHOTOPIPELINE_EXIFTOOL");
+            return Some(path.to_string());
+        }
+    }
+
+    // 2. Check PHOTOPIPELINE_EXIFTOOL env var at runtime (overrides compile-time)
+    if let Ok(path) = std::env::var("PHOTOPIPELINE_EXIFTOOL") {
+        let p = std::path::Path::new(&path);
+        if p.exists() {
+            tracing::debug!(path = %path, "exiftool found via runtime PHOTOPIPELINE_EXIFTOOL");
+            return Some(path);
+        }
+    }
+
+    // 3. Check next to the current executable (embedded)
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let embedded = exe_dir.join(exe_name);
+            if embedded.exists() {
+                let path_str = embedded.to_string_lossy().to_string();
+                tracing::debug!(path = %path_str, "exiftool found embedded next to binary");
+                return Some(path_str);
+            }
+        }
+    }
+
+    // 4. Check vendor directory (development, including versioned subdirs)
+    let vendor_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|p| p.parent())
+        .map(|p| p.join("vendor").join("exiftool"));
+
+    if let Some(ref vd) = vendor_dir {
+        // Direct file first
+        let direct = vd.join(exe_name);
+        if direct.exists() {
+            let path_str = direct.to_string_lossy().to_string();
+            tracing::debug!(path = %path_str, "exiftool found in vendor directory");
+            return Some(path_str);
+        }
+        // Scan versioned subdirectories
+        if let Ok(entries) = std::fs::read_dir(vd) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    let exe = path.join(exe_name);
+                    if exe.exists() {
+                        let path_str = exe.to_string_lossy().to_string();
+                        tracing::debug!(path = %path_str, "exiftool found in vendor subdirectory");
+                        return Some(path_str);
+                    }
+                }
+            }
+        }
+    }
+
+    // 5. Fall back to $PATH
+    let path_in_path = if cfg!(windows) {
+        "exiftool.exe"
+    } else {
+        "exiftool"
+    };
+    if std::process::Command::new(path_in_path)
         .arg("--version")
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false)
+    {
+        tracing::debug!("exiftool found in PATH");
+        return Some(path_in_path.to_string());
+    }
+
+    None
+}
+
+fn resolve_exiftool(params: &ParameterSet) -> Option<String> {
+    // Custom path from parameters takes priority
+    if let Some(custom) = params.get_str("exiftool_path")
+        && !custom.is_empty()
+        && custom != "exiftool"
+    {
+        let p = std::path::Path::new(custom);
+        if p.exists() {
+            tracing::debug!(path = %custom, "exiftool via custom exiftool_path parameter");
+            return Some(custom.to_string());
+        }
+        tracing::warn!(path = %custom, "exiftool_path specified but binary not found");
+    }
+
+    find_exiftool_path()
 }
 
 async fn read_metadata_via_kamadak(
@@ -712,16 +807,20 @@ async fn read_metadata_via_exiftool(
     params: &ParameterSet,
 ) -> PluginResult<Metadata> {
     let _timer = PerfTimer::with_target("exif_rw_read_metadata", "plugin.exif_rw");
-    let exiftool = params.get_str("exiftool_path").unwrap_or("exiftool");
+    let exiftool = resolve_exiftool(params).ok_or_else(|| PluginError::MissingTool {
+        plugin: id.clone(),
+        tool: "exiftool".into(),
+        required: "exiftool 12.00+".into(),
+    })?;
 
-    tracing::info!(target_path = %target.path, exiftool = exiftool, "exif_rw: reading metadata from {}", target.path);
+    tracing::info!(target_path = %target.path, exiftool = %exiftool, "exif_rw: reading metadata from {}", target.path);
     tracing::debug!(
         exiftool_cmd = %exiftool,
         args = "-json -G",
         "exif_rw: running exiftool to read metadata",
     );
 
-    let mut cmd = Command::new(exiftool);
+    let mut cmd = Command::new(&exiftool);
     cmd.arg("-json").arg("-G").arg(&target.path);
 
     let output = cmd.output().map_err(|e| PluginError::Io {
@@ -963,7 +1062,11 @@ async fn write_metadata_via_exiftool(
     params: &ParameterSet,
 ) -> PluginResult<MetadataWriteReport> {
     let _timer = PerfTimer::with_target("exif_rw_write_metadata", "plugin.exif_rw");
-    let exiftool = params.get_str("exiftool_path").unwrap_or("exiftool");
+    let exiftool = resolve_exiftool(params).ok_or_else(|| PluginError::MissingTool {
+        plugin: id.clone(),
+        tool: "exiftool".into(),
+        required: "exiftool 12.00+".into(),
+    })?;
     let overwrite = params
         .get("overwrite_original")
         .map(|v| v.as_bool().unwrap_or(false))
@@ -977,7 +1080,7 @@ async fn write_metadata_via_exiftool(
 
     if which_exif != "none" {
         if let Some(ref exif) = metadata.exif {
-            let mut cmd = Command::new(exiftool);
+            let mut cmd = Command::new(&exiftool);
             if overwrite {
                 cmd.arg("-overwrite_original");
             }
@@ -1034,7 +1137,7 @@ async fn write_metadata_via_exiftool(
     if let Some(ref xmp) = metadata.xmp
         && let Some(ref creator) = xmp.creator
     {
-        let mut cmd = Command::new(exiftool);
+        let mut cmd = Command::new(&exiftool);
         if overwrite {
             cmd.arg("-overwrite_original");
         }
@@ -1055,7 +1158,7 @@ async fn write_metadata_via_exiftool(
     if let Some(ref iptc) = metadata.iptc
         && !iptc.keywords.is_empty()
     {
-        let mut cmd = Command::new(exiftool);
+        let mut cmd = Command::new(&exiftool);
         if overwrite {
             cmd.arg("-overwrite_original");
         }
@@ -1113,7 +1216,7 @@ impl MetadataProcessor for ExifRwPlugin {
                     error = %e,
                     "kamadak-exif read failed, falling back to exiftool",
                 );
-                if use_exiftool_cli() {
+                if resolve_exiftool(params).is_some() {
                     read_metadata_via_exiftool(&self.id, target, params).await
                 } else {
                     Err(e)
@@ -1128,7 +1231,7 @@ impl MetadataProcessor for ExifRwPlugin {
         metadata: &Metadata,
         params: &ParameterSet,
     ) -> PluginResult<MetadataWriteReport> {
-        if use_exiftool_cli() {
+        if let Some(_exiftool) = resolve_exiftool(params) {
             write_metadata_via_exiftool(&self.id, target, metadata, params).await
         } else {
             tracing::warn!(

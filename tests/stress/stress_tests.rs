@@ -1,17 +1,20 @@
 #![allow(clippy::result_large_err)]
 #![allow(unused_imports)]
 use photopipeline_core::{ColorSpace, ImageFormat, Metadata, PixelFormat};
-use photopipeline_engine::{ParameterResolver, PipelineGraph, PipelineTemplate, TemplateNode};
+use photopipeline_engine::{
+    NodeExecutor, ParameterResolver, PipelineGraph, PipelineTemplate, TemplateNode,
+};
 use photopipeline_plugin::{
-    ParameterField, ParameterSchema, ParameterSection, ParameterSet, ParameterType, PluginQuery,
+    ParameterField, ParameterSchema, ParameterSection, ParameterType, PluginQuery,
     registry::Registry,
 };
 use std::sync::Arc;
 use std::thread;
+use test_harness::mocks::progress::NoopProgress;
 use uuid::Uuid;
 
 #[test]
-fn stress_pipeline_1000_metadata_nodes() {
+fn test_scale_pipeline_1000_metadata_nodes() {
     let mut graph = PipelineGraph::new();
     for i in 0..1000 {
         graph.add_node("photopipeline.plugins.exif_rw".into(), format!("node_{i}"));
@@ -21,7 +24,7 @@ fn stress_pipeline_1000_metadata_nodes() {
 }
 
 #[test]
-fn stress_pipeline_execution_100_times_on_same_data() {
+fn test_stress_pipeline_execution_100x() {
     let reg = Arc::new(Registry::new());
     photopipeline_plugins::register_all(&reg);
     let resolver = Arc::new(ParameterResolver::new());
@@ -44,7 +47,7 @@ fn stress_pipeline_execution_100_times_on_same_data() {
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     for _ in 0..100 {
-        let exec = photopipeline_engine::NodeExecutor::new(reg.clone(), resolver.clone());
+        let exec = NodeExecutor::new(reg.clone(), resolver.clone());
         let info = photopipeline_core::ImageInfo {
             id: Uuid::new_v4(),
             path: "/tmp/test.jpg".into(),
@@ -57,13 +60,6 @@ fn stress_pipeline_execution_100_times_on_same_data() {
             color_space: ColorSpace::default(),
         };
         let metadata = Metadata::default();
-        struct NoopProgress;
-        impl photopipeline_plugin::ProgressSink for NoopProgress {
-            fn set_progress(&self, _: f32, _: &str) {}
-            fn is_canceled(&self) -> bool {
-                false
-            }
-        }
 
         let result = rt.block_on(async {
             exec.execute(&graph, &info, None, &metadata, Box::new(NoopProgress))
@@ -74,7 +70,7 @@ fn stress_pipeline_execution_100_times_on_same_data() {
 }
 
 #[test]
-fn stress_random_parameter_values_on_plugins() {
+fn test_stress_random_parameter_values_on_plugins() {
     let reg = Arc::new(Registry::new());
     photopipeline_plugins::register_all(&reg);
 
@@ -91,7 +87,7 @@ fn stress_random_parameter_values_on_plugins() {
 }
 
 #[test]
-fn stress_concurrent_registry_access_16_threads() {
+fn test_stress_concurrent_registry_access_16_threads() {
     let reg = Arc::new(Registry::new());
     let reg2 = reg.clone();
 
@@ -125,7 +121,41 @@ fn stress_concurrent_registry_access_16_threads() {
 }
 
 #[test]
-fn stress_rapid_register_unregister_cycle() {
+fn test_stress_concurrent_registry_write_16_threads() {
+    for _round in 0..10 {
+        let reg = Arc::new(Registry::new());
+        let mut handles = vec![];
+
+        for _t in 0..16 {
+            let r = reg.clone();
+            handles.push(thread::spawn(move || {
+                // Each thread registers plugins and queries
+                photopipeline_plugins::register_all(&r);
+                let all = r.all();
+                for _i in 0..5 {
+                    let _ = r.categories();
+                    let _ = r.manifests();
+                    let _ = r.query(&PluginQuery::default());
+                    if let Some(p) = r.get(&"photopipeline.plugins.exif_rw".into()) {
+                        let _ = p.name();
+                        let _ = p.version();
+                    }
+                }
+                all.len()
+            }));
+        }
+
+        let mut total = 0;
+        for h in handles {
+            total += h.join().unwrap();
+        }
+        // All threads should see the same plugins
+        assert!(total > 0);
+    }
+}
+
+#[test]
+fn test_scale_rapid_query_cycle() {
     let reg = Registry::new();
     photopipeline_plugins::register_all(&reg);
 
@@ -136,7 +166,7 @@ fn stress_rapid_register_unregister_cycle() {
 }
 
 #[test]
-fn stress_deep_merge_chain_100_levels() {
+fn test_scale_deep_merge_chain_100_levels() {
     let mut resolver = ParameterResolver::new();
     let node_id = Uuid::new_v4();
     let image_id = Uuid::new_v4();
@@ -171,12 +201,12 @@ fn stress_deep_merge_chain_100_levels() {
         }],
     };
 
-    let mut template = ParameterSet::new();
+    let mut template = photopipeline_plugin::ParameterSet::new();
     template.insert("v".into(), serde_json::json!(1));
     resolver.set_template_params(node_id, template);
 
     for i in 0..100 {
-        let mut img = ParameterSet::new();
+        let mut img = photopipeline_plugin::ParameterSet::new();
         img.insert("v".into(), serde_json::json!(i));
         resolver.set_image_override(image_id, node_id, img);
     }
@@ -198,7 +228,7 @@ fn stress_deep_merge_chain_100_levels() {
 }
 
 #[test]
-fn stress_large_pipeline_graph_1000_nodes() {
+fn test_scale_large_pipeline_graph_1000_nodes() {
     let mut graph = PipelineGraph::new();
     let mut prev_id: Option<uuid::Uuid> = None;
     for i in 0..1000 {
@@ -218,7 +248,7 @@ fn stress_large_pipeline_graph_1000_nodes() {
 }
 
 #[test]
-fn stress_serialize_deserialize_large_graph() {
+fn test_scale_serialize_deserialize_large_graph() {
     let mut graph = PipelineGraph::new();
     for i in 0..100 {
         graph.add_node(format!("photopipeline.plugins.p{i}"), format!("n{i}"));
@@ -236,7 +266,7 @@ fn stress_serialize_deserialize_large_graph() {
 }
 
 #[test]
-fn stress_many_tiles_no_panic() {
+fn test_scale_many_tiles_no_panic() {
     use photopipeline_core::TileLayout;
     let w = 30000u32;
     let h = 20000u32;
@@ -255,7 +285,30 @@ fn stress_many_tiles_no_panic() {
 }
 
 #[test]
-fn stress_many_conditions() {
+fn test_stress_large_image_tile_layout() {
+    // Verify tile layout for 10000x10000 with 512px tiles
+    use photopipeline_core::TileLayout;
+    let w = 10000u32;
+    let h = 10000u32;
+    let tile_size = 512u32;
+    let overlap = 16u32;
+    let layout = TileLayout::new(w, h, tile_size, overlap);
+    let tiles: Vec<_> = layout.iter_tiles().collect();
+    assert!(tiles.len() > 1, "large image should produce multiple tiles");
+
+    // Verify coverage: every pixel in [0,w) x [0,h) is covered by at least one tile
+    for spec in &tiles {
+        assert!(spec.x_offset + spec.width <= w, "tile x exceeds width");
+        assert!(spec.y_offset + spec.height <= h, "tile y exceeds height");
+    }
+
+    // Check edges are covered
+    let covers_top_left = tiles.iter().any(|t| t.x_offset == 0 && t.y_offset == 0);
+    assert!(covers_top_left, "top-left pixel not covered");
+}
+
+#[test]
+fn test_scale_many_conditions() {
     let metadata = Metadata {
         exif: Some(photopipeline_core::ExifData {
             iso: Some(800),
@@ -277,8 +330,7 @@ fn stress_many_conditions() {
         color_space: ColorSpace::default(),
     };
 
-    let _resolver = ParameterResolver::new();
-    let mut resolver = ParameterResolver::new();
+    let resolver = ParameterResolver::new();
     let schema = ParameterSchema {
         version: 1,
         sections: vec![ParameterSection {

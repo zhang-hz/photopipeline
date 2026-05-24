@@ -7,131 +7,28 @@ on:
 
 jobs:
   test-linux:
-    name: Test (Linux)
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: "linux-${{ hashFiles('Cargo.lock') }}"
-      - name: Install deps
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq build-essential cmake pkg-config \
-            protobuf-compiler libprotobuf-dev libheif-dev libjxl-dev \
-            liblcms2-dev libexif-dev libtiff-dev libpng-dev libopenexr-dev \
-            ninja-build libraw-dev libde265-dev libaom-dev
-      - name: Build
-        run: cargo build --workspace
-      - name: Test
-        run: cargo test --workspace --no-fail-fast
-      - name: Fmt
-        run: cargo fmt --all -- --check
-      - name: Clippy
-        run: cargo clippy --workspace
+    uses: ./.github/workflows/_test-rust.yml
+    with:
+      os: ubuntu-latest
+      cache-prefix: main-linux
 
   test-macos:
-    name: Test (macOS)
-    runs-on: macos-latest
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: "macos-${{ hashFiles('Cargo.lock') }}"
-      - name: Install deps
-        run: |
-          brew install cmake pkg-config protobuf libheif jpeg-xl \
-            little-cms2 libexif libtiff libpng openexr ninja \
-            libraw libde265 aom
-      - name: Build
-        run: cargo build --workspace
-      - name: Test
-        run: cargo test --workspace --no-fail-fast
-      - name: Fmt
-        run: cargo fmt --all -- --check
-      - name: Clippy
-        run: cargo clippy --workspace
+    uses: ./.github/workflows/_test-rust.yml
+    with:
+      os: macos-latest
+      cache-prefix: main-macos
 
   test-windows:
-    name: Test (Windows)
-    runs-on: windows-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: "windows-${{ hashFiles('Cargo.lock') }}"
-      - name: Setup vcpkg
-        run: |
-          $vcpkgPath = "$env:VCPKG_INSTALLATION_ROOT"
-          if (-not $vcpkgPath) {
-            $vcpkgPath = "C:/vcpkg"
-            if (-not (Test-Path $vcpkgPath)) {
-              git clone https://github.com/microsoft/vcpkg $vcpkgPath
-              & $vcpkgPath/bootstrap-vcpkg.bat
-            }
-          }
-          echo "VCPKG_ROOT=$vcpkgPath" >> $env:GITHUB_ENV
-          echo "VCPKG_DEFAULT_TRIPLET=x64-windows" >> $env:GITHUB_ENV
-      - name: Cache vcpkg
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.VCPKG_ROOT }}/installed
-          key: vcpkg-${{ runner.os }}-${{ hashFiles('.github/workflows/ci-main.yml') }}
-          restore-keys: vcpkg-${{ runner.os }}-
-      - name: Install C libraries via vcpkg
-        run: |
-          & "$env:VCPKG_ROOT/vcpkg.exe" install --clean-after-build `
-            x265 libheif[hevc] libjxl lcms libraw `
-            libpng tiff libjpeg-turbo aom protobuf
-      - name: Build
-        run: cargo build --workspace
-      - name: Test
-        run: cargo test --workspace --no-fail-fast
-      - name: Fmt
-        run: cargo fmt --all -- --check
-      - name: Clippy
-        run: cargo clippy --workspace
+    uses: ./.github/workflows/_test-rust.yml
+    with:
+      os: windows-latest
+      cache-prefix: main-windows
+      timeout: 30
 
   gui-test:
-    name: GUI Tests (Windows)
-    runs-on: windows-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "8.0.x"
-      - name: Build solution
-        shell: bash
-        run: dotnet build gui/windows/Photopipeline.sln -c Release || true
-      - name: Run GUI unit tests
-        shell: bash
-        run: dotnet test gui/windows/Photopipeline.Tests/Photopipeline.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~UnitTests" || true
-
-
-  security:
-    name: Security Audit
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Install cargo-audit
-        run: cargo install cargo-audit --locked
-      - name: Run audit
-        run: cargo audit
+    uses: ./.github/workflows/_test-gui.yml
+    with:
+      include-ui-auto: false
 
   stress:
     name: Stress Test
@@ -139,7 +36,6 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: "stress-${{ hashFiles('Cargo.lock') }}"

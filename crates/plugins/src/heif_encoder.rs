@@ -1,7 +1,5 @@
 use async_trait::async_trait;
-use std::process::Command;
 use std::sync::LazyLock;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 #[cfg(feature = "libheif-native")]
 mod libheif_ffi {
@@ -14,8 +12,8 @@ mod libheif_ffi {
     #[repr(C)]
     pub struct HeifImage;
 
-    #[link(name = "heif")]
-    extern "C" {
+    // Link directives provided by libheif-sys build.rs
+    unsafe extern "C" {
         pub fn heif_context_alloc() -> *mut HeifContext;
         pub fn heif_context_free(ctx: *mut HeifContext);
         pub fn heif_context_get_encoder_for_format(
@@ -223,22 +221,6 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     allow_override: true,
                     supports_expression: false,
                 },
-                ParameterField {
-                    id: "heif_enc_path".into(),
-                    label: "heif-enc Path".into(),
-                    description: Some("Custom path to the heif-enc binary".into()),
-                    help_url: None,
-                    field_type: ParameterType::String {
-                        max_length: 1024,
-                        pattern: None,
-                        placeholder: Some("/usr/bin/heif-enc".into()),
-                    },
-                    default: serde_json::json!("heif-enc"),
-                    required: false,
-                    advanced: true,
-                    allow_override: true,
-                    supports_expression: false,
-                },
             ],
         },
     ],
@@ -306,7 +288,7 @@ impl Plugin for HeifEncoderPlugin {
         PluginCategory::Format
     }
     fn description(&self) -> &str {
-        "Encode images in HEIF/HEIC 10-bit format using libheif or heif-enc"
+        "Encode images in HEIF/HEIC 10-bit format using libheif native FFI"
     }
     fn tags(&self) -> &[String] {
         &TAGS
@@ -353,22 +335,6 @@ impl Plugin for HeifEncoderPlugin {
                 param: "quality".into(),
                 message: "Quality must be between 0 and 100".into(),
             });
-        }
-
-        let path = params.get_str("heif_enc_path").unwrap_or("heif-enc");
-        if !path.is_empty() {
-            let check = Command::new(path).arg("--version").output();
-            if check.is_err() || !check.unwrap().status.success() {
-                tracing::warn!(
-                    tool_path = path,
-                    "heif_encoder: heif-enc not found at '{}'",
-                    path
-                );
-                issues.push(ValidationIssue::Warning {
-                    param: "heif_enc_path".into(),
-                    message: format!("heif-enc binary '{}' not found or not functional", path),
-                });
-            }
         }
 
         if !issues.is_empty() {
@@ -477,7 +443,7 @@ impl FormatProcessor for HeifEncoderPlugin {
                 photopipeline_core::ChromaSubsampling::Yuv420 => "420",
             });
         let effort_val = options.effort.unwrap_or(4);
-        match encode_via_libheif(
+        encode_via_libheif(
             image,
             quality,
             lossless,
@@ -485,113 +451,7 @@ impl FormatProcessor for HeifEncoderPlugin {
             chroma_str_for_ffi,
             effort_val,
             &self.id,
-        ) {
-            Ok(data) => return Ok(data),
-            Err(e) => {
-                tracing::debug!(
-                    target: "plugins.heif_encoder",
-                    error = ?e,
-                    "libheif FFI not available, falling back to heif-enc CLI"
-                );
-            }
-        }
-
-        let mut cmd_args = Vec::new();
-
-        if lossless {
-            cmd_args.push("--lossless".to_string());
-        } else {
-            cmd_args.push("-q".to_string());
-            cmd_args.push(format!("{}", quality as u32));
-        }
-
-        if options.bit_depth == 10 {
-            cmd_args.push("-b".to_string());
-            cmd_args.push("10".to_string());
-        }
-
-        if let Some(ref chroma) = options.chroma_subsampling {
-            match chroma {
-                photopipeline_core::ChromaSubsampling::Yuv444 => {
-                    cmd_args.push("--chroma=444".to_string())
-                }
-                photopipeline_core::ChromaSubsampling::Yuv422 => {
-                    cmd_args.push("--chroma=422".to_string())
-                }
-                photopipeline_core::ChromaSubsampling::Yuv420 => {
-                    cmd_args.push("--chroma=420".to_string())
-                }
-            };
-        }
-
-        let counter = TMP_COUNTER.fetch_add(1, Ordering::SeqCst);
-        let tmp_input = std::env::temp_dir().join(format!("pp_input_{}.ppm", counter));
-        let tmp_output = std::env::temp_dir().join(format!("pp_output_{}.heic", counter));
-
-        write_ppm(&tmp_input, image)?;
-
-        let heif_enc = "heif-enc";
-        tracing::debug!(
-            tool = heif_enc,
-            args = ?cmd_args,
-            input = %tmp_input.display(),
-            output = %tmp_output.display(),
-            "heif_encoder: invoking heif-enc to encode",
-        );
-        match Command::new(heif_enc)
-            .args(&cmd_args)
-            .arg("-o")
-            .arg(&tmp_output)
-            .arg(&tmp_input)
-            .output()
-        {
-            Ok(output) if output.status.success() => {
-                let data = std::fs::read(&tmp_output).map_err(|e| PluginError::Io {
-                    plugin: self.id.clone(),
-                    error: e,
-                })?;
-                let output_size = data.len();
-                tracing::info!(
-                    output_bytes = output_size,
-                    "heif_encoder: encoded {} bytes",
-                    output_size,
-                );
-                let _ = std::fs::remove_file(&tmp_input);
-                let _ = std::fs::remove_file(&tmp_output);
-                Ok(data)
-            }
-            Ok(output) => {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                tracing::error!(
-                    tool = "heif-enc",
-                    exit_code = ?output.status.code(),
-                    stderr = %stderr,
-                    "heif_encoder: heif-enc failed with exit code {:?}",
-                    output.status.code(),
-                );
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                let _ = std::fs::remove_file(&tmp_input);
-                let _ = std::fs::remove_file(&tmp_output);
-                Err(PluginError::MissingTool {
-                    plugin: self.id.clone(),
-                    tool: "heif-enc".into(),
-                    required: format!("libheif 1.12+ ({})", stderr),
-                })
-            }
-            Err(e) => {
-                tracing::error!(
-                    tool = "heif-enc",
-                    error = %e,
-                    "heif_encoder: heif-enc invocation failed",
-                );
-                let _ = std::fs::remove_file(&tmp_input);
-                let _ = std::fs::remove_file(&tmp_output);
-                Err(PluginError::Io {
-                    plugin: self.id.clone(),
-                    error: e,
-                })
-            }
-        }
+        )
     }
 }
 
@@ -617,6 +477,7 @@ fn encode_via_libheif(
     #[cfg(feature = "libheif-native")]
     {
         use libheif_ffi::*;
+        use std::ffi::c_int;
         unsafe {
             let ctx = heif_context_alloc();
             if ctx.is_null() {
@@ -665,18 +526,17 @@ fn encode_via_libheif(
             }
 
             if bpc == 2 {
-                let src = image.data.as_u16_slice();
+                let src = image.data.data.as_slice();
                 let dst = std::slice::from_raw_parts_mut(plane, total_pixels * 2);
                 let width_u = width as usize;
                 let stride_u = stride as usize;
                 if stride_u == width_u * 2 {
-                    dst[..std::cmp::min(src.len(), dst.len())]
-                        .copy_from_slice(&src[..std::cmp::min(src.len(), dst.len())]);
+                    let min_len = std::cmp::min(src.len(), dst.len());
+                    dst[..min_len].copy_from_slice(&src[..min_len]);
                 } else {
                     for y in 0..height as usize {
-                        let src_row = &src[y * width_u * 3..(y + 1) * width_u * 3];
+                        let src_row = &src[y * width_u * 3 * 2..(y + 1) * width_u * 3 * 2];
                         let dst_row = &mut dst[y * stride_u..y * stride_u + width_u * 3 * 2];
-                        // copy interleaved RGB row
                         let copy_len = std::cmp::min(src_row.len(), dst_row.len());
                         dst_row[..copy_len].copy_from_slice(&src_row[..copy_len]);
                     }
@@ -757,47 +617,15 @@ fn encode_via_libheif(
 }
 
 fn detect_heif_encoder() -> String {
-    match Command::new("heif-enc").arg("--version").output() {
-        Ok(output) if output.status.success() => {
-            String::from_utf8_lossy(&output.stdout).trim().to_string()
-        }
-        _ => "not found".to_string(),
+    #[cfg(feature = "libheif-native")]
+    {
+        "libheif (native FFI)".to_string()
+    }
+    #[cfg(not(feature = "libheif-native"))]
+    {
+        "libheif-native feature not enabled".to_string()
     }
 }
-
-fn write_ppm(path: &std::path::Path, image: &PixelBuffer) -> PluginResult<()> {
-    use std::io::Write;
-    if image.format.bytes_per_channel() != 1 {
-        return Err(PluginError::Internal {
-            plugin: PluginId::from("heif_encoder"),
-            message: "ppm pipe only supports 8-bit, use direct libheif API for 16-bit".into(),
-        });
-    }
-    let mut f = std::fs::File::create(path).map_err(|e| PluginError::Io {
-        plugin: PluginId::from("heif_encoder"),
-        error: e,
-    })?;
-    writeln!(f, "P6\n{} {}\n255", image.width, image.height).map_err(|e| PluginError::Io {
-        plugin: PluginId::from("heif_encoder"),
-        error: e,
-    })?;
-
-    let stride = image.width as usize * 3;
-    for y in 0..image.height as usize {
-        let row_start = y * stride;
-        let row_end = row_start + stride;
-        if row_end <= image.data.data.len() {
-            f.write_all(&image.data.data[row_start..row_end])
-                .map_err(|e| PluginError::Io {
-                    plugin: PluginId::from("heif_encoder"),
-                    error: e,
-                })?;
-        }
-    }
-    Ok(())
-}
-
-static TMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 static TAGS: LazyLock<Vec<String>> = LazyLock::new(|| {
     vec![

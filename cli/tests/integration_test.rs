@@ -171,8 +171,8 @@ fn test_gpu_and_ai_backend_display() {
     assert_eq!(GpuBackend::CUDA.to_string(), "CUDA");
     assert_eq!(GpuBackend::Metal.to_string(), "Metal");
     assert_eq!(GpuBackend::Vulkan.to_string(), "Vulkan");
-    assert_eq!(GpuBackend::OpenCL.to_string(), "OpenCL");
-    assert_eq!(GpuBackend::ROCm.to_string(), "ROCm");
+    assert_eq!(GpuBackend::None.to_string(), "None");
+    assert_eq!(GpuBackend::Auto.to_string(), "Auto");
     assert_eq!(AiBackend::ONNX.to_string(), "ONNX");
     assert_eq!(AiBackend::TensorRT.to_string(), "TensorRT");
     assert_eq!(AiBackend::CoreML.to_string(), "CoreML");

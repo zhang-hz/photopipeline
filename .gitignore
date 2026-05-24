@@ -1,5 +1,4 @@
 target/
-.cargo/
 **/*.rs.bk
 *.swp
 *.swo
@@ -10,3 +9,23 @@ Thumbs.db
 output/
 test_output/
 *.lock~
+
+# Build artifacts
+dist/
+publish/
+staging/
+gui/windows/**/bin/
+gui/windows/**/obj/
+photopipeline-windows-x64.zip
+
+# Sensitive
+*.pfx
+
+# Dev tooling
+.spec-workflow/
+
+# Vendor archives
+vendor/exiftool/*.zip
+
+# MSBuild logs
+*.binlog

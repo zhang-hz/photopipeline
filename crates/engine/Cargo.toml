@@ -19,3 +19,6 @@ rayon.workspace = true
 regex.workspace = true
 futures.workspace = true
 chrono.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

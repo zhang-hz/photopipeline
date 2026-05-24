@@ -1,11 +1,10 @@
 use async_trait::async_trait;
-use std::process::Command;
 use std::sync::LazyLock;
 
 use photopipeline_core::{
     DecodeOptions, DecodedImage, EncodeOptions, FormatProbe, HardwareRequirement, ImageFormat,
-    Metadata, PixelBuffer, PluginCategory, PluginError, PluginId, PluginResult, PluginVersion,
-    ValidationIssue,
+    Metadata, PixelBuffer, PixelFormat, PluginCategory, PluginError, PluginId, PluginResult,
+    PluginVersion, ValidationIssue,
 };
 use photopipeline_plugin::{
     EnumOption, FormatProcessor, GuiLayout, GuiSchema, GuiSection, ParameterField, ParameterSchema,
@@ -152,22 +151,6 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     allow_override: true,
                     supports_expression: false,
                 },
-                ParameterField {
-                    id: "cjxl_path".into(),
-                    label: "cjxl Path".into(),
-                    description: Some("Custom path to the cjxl binary".into()),
-                    help_url: None,
-                    field_type: ParameterType::String {
-                        max_length: 1024,
-                        pattern: None,
-                        placeholder: Some("/usr/bin/cjxl".into()),
-                    },
-                    default: serde_json::json!("cjxl"),
-                    required: false,
-                    advanced: true,
-                    allow_override: true,
-                    supports_expression: false,
-                },
             ],
         },
     ],
@@ -232,7 +215,7 @@ impl Plugin for JxlEncoderPlugin {
         PluginCategory::Format
     }
     fn description(&self) -> &str {
-        "Encode images in JPEG XL 16-bit format via libjxl/cjxl"
+        "Encode images in JPEG XL 16-bit format via libjxl native FFI"
     }
     fn tags(&self) -> &[String] {
         &TAGS
@@ -268,33 +251,9 @@ impl Plugin for JxlEncoderPlugin {
         Ok(())
     }
 
-    async fn validate(&self, params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>> {
-        let mut issues = Vec::new();
+    async fn validate(&self, _params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>> {
         tracing::debug!("jxl_encoder: validating parameters");
-        let path = params.get_str("cjxl_path").unwrap_or("cjxl");
-        let check = Command::new(path).arg("--version").output();
-        match check {
-            Ok(o) if o.status.success() => {}
-            _ => {
-                tracing::warn!(
-                    tool_path = path,
-                    "jxl_encoder: cjxl not found at '{}'",
-                    path
-                );
-                issues.push(ValidationIssue::Warning {
-                    param: "cjxl_path".into(),
-                    message: format!("cjxl binary '{}' not found", path),
-                });
-            }
-        }
-        if !issues.is_empty() {
-            tracing::debug!(
-                issue_count = issues.len(),
-                "jxl_encoder validation found {} issues",
-                issues.len()
-            );
-        }
-        Ok(issues)
+        Ok(Vec::new())
     }
 }
 
@@ -384,126 +343,22 @@ impl FormatProcessor for JxlEncoderPlugin {
 
         let _ = metadata;
 
-        let mut cmd_args = Vec::new();
-
-        if lossless {
-            cmd_args.push("-d".to_string());
-            cmd_args.push("0".to_string());
-        } else {
-            let d = (100.0 - quality).clamp(0.0, 15.0) as u32;
-            cmd_args.push("-d".to_string());
-            cmd_args.push(format!("{}", d));
-        }
-
-        cmd_args.push("-e".to_string());
-        cmd_args.push("7".to_string());
-
-        let pid = std::process::id();
-        let tmp_input = std::env::temp_dir().join(format!("pp_jxl_in_{}.ppm", pid));
-        let tmp_output = std::env::temp_dir().join(format!("pp_jxl_out_{}.jxl", pid));
-
-        write_temp_rgb(&tmp_input, image)?;
-
-        let cjxl = "cjxl";
-        tracing::debug!(
-            tool = cjxl,
-            args = ?cmd_args,
-            input = %tmp_input.display(),
-            output = %tmp_output.display(),
-            "jxl_encoder: invoking cjxl to encode",
-        );
-        let result = Command::new(cjxl)
-            .args(&cmd_args)
-            .arg(&tmp_input)
-            .arg(&tmp_output)
-            .output();
-
-        let _ = std::fs::remove_file(&tmp_input);
-
-        match result {
-            Ok(output) if output.status.success() => {
-                let data = std::fs::read(&tmp_output).map_err(|e| PluginError::Io {
-                    plugin: self.id.clone(),
-                    error: e,
-                })?;
-                let output_size = data.len();
-                tracing::info!(
-                    output_bytes = output_size,
-                    "jxl_encoder: encoded {} bytes",
-                    output_size,
-                );
-                let _ = std::fs::remove_file(&tmp_output);
-                Ok(data)
-            }
-            Ok(output) => {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                tracing::error!(
-                    tool = "cjxl",
-                    exit_code = ?output.status.code(),
-                    stderr = %stderr,
-                    "jxl_encoder: cjxl failed with exit code {:?}",
-                    output.status.code(),
-                );
-                let _ = std::fs::remove_file(&tmp_output);
-                Err(PluginError::MissingTool {
-                    plugin: self.id.clone(),
-                    tool: "cjxl".into(),
-                    required: format!("libjxl 0.8+ ({})", String::from_utf8_lossy(&output.stderr)),
-                })
-            }
-            Err(e) => {
-                tracing::error!(
-                    tool = "cjxl",
-                    error = %e,
-                    "jxl_encoder: cjxl invocation failed",
-                );
-                let _ = std::fs::remove_file(&tmp_output);
-                Err(PluginError::Io {
-                    plugin: self.id.clone(),
-                    error: e,
-                })
-            }
-        }
+        Err(PluginError::Internal {
+            plugin: self.id.clone(),
+            message: "JPEG XL encoding failed: libjxl native FFI and OIIO both unavailable".into(),
+        })
     }
 }
 
 fn detect_cjxl() -> String {
-    match Command::new("cjxl").arg("--version").output() {
-        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).trim().to_string(),
-        _ => "not found".to_string(),
+    #[cfg(feature = "libjxl-native")]
+    {
+        "libjxl (native FFI)".to_string()
     }
-}
-
-fn write_temp_rgb(path: &std::path::Path, image: &PixelBuffer) -> PluginResult<()> {
-    use std::io::Write;
-    if image.format.bytes_per_channel() != 1 {
-        return Err(PluginError::Internal {
-            plugin: PluginId::from("jxl_encoder"),
-            message: "ppm pipe only supports 8-bit, use direct libjxl API for 16-bit".into(),
-        });
+    #[cfg(not(feature = "libjxl-native"))]
+    {
+        "libjxl-native feature not enabled".to_string()
     }
-    let mut f = std::fs::File::create(path).map_err(|e| PluginError::Io {
-        plugin: PluginId::from("jxl_encoder"),
-        error: e,
-    })?;
-    writeln!(f, "P6\n{} {}\n255", image.width, image.height).map_err(|e| PluginError::Io {
-        plugin: PluginId::from("jxl_encoder"),
-        error: e,
-    })?;
-
-    let stride = image.width as usize * 3;
-    for y in 0..image.height as usize {
-        let row_start = y * stride;
-        let row_end = row_start + stride;
-        if row_end <= image.data.data.len() {
-            f.write_all(&image.data.data[row_start..row_end])
-                .map_err(|e| PluginError::Io {
-                    plugin: PluginId::from("jxl_encoder"),
-                    error: e,
-                })?;
-        }
-    }
-    Ok(())
 }
 
 #[cfg(feature = "libjxl-native")]
@@ -529,19 +384,29 @@ mod libjxl_ffi {
     pub const JXL_ENC_ERROR: c_int = 1;
     pub const JXL_ENC_NEED_MORE_OUTPUT: c_int = 2;
 
-    #[link(name = "jxl")]
-    extern "C" {
+    pub const JXL_ENC_FRAME_SETTING_EFFORT: c_int = 0;
+
+    // Link directives provided by libjxl-sys build.rs
+    unsafe extern "C" {
         pub fn JxlEncoderCreate(memory_manager: *const c_void) -> *mut c_void;
         pub fn JxlEncoderDestroy(enc: *mut c_void);
-        pub fn JxlEncoderSetFrameLossless(enc: *mut c_void, lossless: c_int);
-        pub fn JxlEncoderSetFrameDistance(enc: *mut c_void, distance: c_float);
-        pub fn JxlEncoderSetFrameEffort(enc: *mut c_void, effort: c_int);
-        pub fn JxlEncoderAddImageFrame(
+        pub fn JxlEncoderFrameSettingsCreate(
             enc: *mut c_void,
+            source: *const c_void,
+        ) -> *mut c_void;
+        pub fn JxlEncoderSetFrameLossless(frame_settings: *mut c_void, lossless: c_int) -> c_int;
+        pub fn JxlEncoderSetFrameDistance(frame_settings: *mut c_void, distance: c_float) -> c_int;
+        pub fn JxlEncoderFrameSettingsSetOption(
+            frame_settings: *mut c_void,
+            option: c_int,
+            value: i64,
+        ) -> c_int;
+        pub fn JxlEncoderAddImageFrame(
+            frame_settings: *const c_void,
             pixel_format: *const JxlPixelFormat,
             buffer: *const c_void,
             size: usize,
-        );
+        ) -> c_int;
         pub fn JxlEncoderCloseInput(enc: *mut c_void);
         pub fn JxlEncoderProcessOutput(
             enc: *mut c_void,
@@ -569,6 +434,7 @@ fn encode_via_libjxl(
     #[cfg(feature = "libjxl-native")]
     unsafe {
         use libjxl_ffi::*;
+        use std::ffi::{c_float, c_int, c_void};
 
         let enc = JxlEncoderCreate(std::ptr::null());
         if enc.is_null() {
@@ -579,13 +445,25 @@ fn encode_via_libjxl(
         }
 
         let result = (|| {
+            let frame_settings = JxlEncoderFrameSettingsCreate(enc, std::ptr::null());
+            if frame_settings.is_null() {
+                return Err(PluginError::Internal {
+                    plugin: "jxl".into(),
+                    message: "JxlEncoderFrameSettingsCreate failed".into(),
+                });
+            }
+
             if lossless {
-                JxlEncoderSetFrameLossless(enc, 1);
+                JxlEncoderSetFrameLossless(frame_settings, 1);
             } else {
                 let distance: c_float = ((100.0 - quality) / 100.0 * 15.0).clamp(0.0, 15.0);
-                JxlEncoderSetFrameDistance(enc, distance);
+                JxlEncoderSetFrameDistance(frame_settings, distance);
             }
-            JxlEncoderSetFrameEffort(enc, effort as c_int);
+            JxlEncoderFrameSettingsSetOption(
+                frame_settings,
+                JXL_ENC_FRAME_SETTING_EFFORT,
+                effort as i64,
+            );
 
             let data_type = match image.format {
                 PixelFormat::U8 => JXL_TYPE_UINT8,
@@ -610,7 +488,7 @@ fn encode_via_libjxl(
             };
 
             JxlEncoderAddImageFrame(
-                enc,
+                frame_settings,
                 &pixel_format,
                 image.data.data.as_ptr() as *const c_void,
                 image.data.data.len(),

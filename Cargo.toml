@@ -4,7 +4,6 @@ members = [
     "crates/plugin",
     "crates/engine",
     "crates/plugins",
-    "crates/external",
     "crates/server",
     "crates/halide",
     "crates/oiio",
@@ -47,22 +46,17 @@ rayon = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt", "ansi", "time"] }
 tracing-appender = "0.2"
-color-eyre = "0.6"
 image = { version = "0.25", default-features = false }
 bytemuck = { version = "1", features = ["derive"] }
-enum_dispatch = "0.3"
 strum = { version = "0.27", features = ["derive"] }
-derive_builder = "0.20"
 regex = "1"
 glob = "0.3"
 clap = { version = "4", features = ["derive"] }
 tonic = { version = "0.13", default-features = false }
-prost = "0.14"
-prost-types = "0.14"
+prost = "0.13"
+prost-types = "0.13"
 futures = "0.3"
 indicatif = "0.17"
-assertables = "0.9"
-
 # C FFI bindings (optional, CI only)
 libheif-sys = { version = "5" }
 libjxl-sys = { version = "0.7" }
@@ -78,6 +72,20 @@ panic = "abort"
 
 [profile.dev]
 opt-level = 1
+
+[profile.test]
+# opt-level=2 fixes CRT static-initializer ordering crashes on Windows MSVC
+# when multiple native C/C++ static libraries (heif, jxl, raw, lcms2) are
+# linked together. At opt-level=1, the linker may order .CRT$XCU sections
+# non-deterministically, causing one lib's C++ global constructor to access
+# uninitialized state from another lib → STATUS_ACCESS_VIOLATION at startup.
+# See plan §19 for full root-cause analysis.
+opt-level = 2
+
+[patch.crates-io]
+libjxl-src = { path = "vendor/libjxl-src-patched" }
+libjxl-sys = { path = "vendor/libjxl-sys-patched" }
+libraw-sys = { path = "vendor/libraw-sys-patched" }
 
 [profile.ci]
 inherits = "release"

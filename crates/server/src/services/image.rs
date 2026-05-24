@@ -260,6 +260,8 @@ impl ImageService for ImageServiceImpl {
             }),
             encoder: req.encoder.clone(),
             effort: req.effort.map(|e| e as u8),
+            compression: None,
+            embed_profile: None,
         };
 
         let (tx, rx) = mpsc::channel(256);

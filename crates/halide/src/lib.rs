@@ -1,3 +1,5 @@
+#![allow(dead_code, clippy::needless_return)]
+
 use photopipeline_core::{ColorPrimaries, ColorSpace, TransferFunction};
 
 #[cfg(halide_found)]
@@ -81,7 +83,7 @@ impl HalideContext {
         #[cfg(not(halide_found))]
         {
             let _ = (input, width, height, channels, src, dst);
-            return Err("Halide runtime not available. Install Halide 14.0+ or build with the halide-runtime feature.".into());
+            return Err("Halide runtime not available. Install Halide 14.0+ or place prebuilt libhalide_pipeline.a in halide_generators/prebuilt/{target}/.".into());
         }
         #[cfg(halide_found)]
         {
@@ -134,7 +136,7 @@ impl HalideContext {
         #[cfg(not(halide_found))]
         {
             let _ = (input, in_w, in_h, channels, out_w, out_h, filter);
-            return Err("Halide runtime not available. Install Halide 14.0+ or build with the halide-runtime feature.".into());
+            return Err("Halide runtime not available. Install Halide 14.0+ or place prebuilt libhalide_pipeline.a in halide_generators/prebuilt/{target}/.".into());
         }
         #[cfg(halide_found)]
         {
@@ -185,7 +187,7 @@ impl HalideContext {
         #[cfg(not(halide_found))]
         {
             let _ = (input, width, height, channels, algorithm, max_luminance);
-            return Err("Halide runtime not available. Install Halide 14.0+ or build with the halide-runtime feature.".into());
+            return Err("Halide runtime not available. Install Halide 14.0+ or place prebuilt libhalide_pipeline.a in halide_generators/prebuilt/{target}/.".into());
         }
         #[cfg(halide_found)]
         {

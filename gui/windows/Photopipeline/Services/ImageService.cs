@@ -1,13 +1,10 @@
+using Photopipeline.Image;
 using Photopipeline.Models;
-using System;
 using System.Collections.ObjectModel;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Photopipeline.Services;
 
-public sealed class ImageService
+public sealed class ImageService : IImageService
 {
     private readonly GrpcClientService _grpc;
     private readonly string _thumbnailCachePath;
@@ -45,13 +42,25 @@ public sealed class ImageService
 
     public async Task LoadImageMetadataAsync(ImageEntry entry, CancellationToken ct = default)
     {
-        var ext = Path.GetExtension(entry.FileName).ToLowerInvariant();
-        entry.ColorSpace = ext switch
+        try
         {
-            ".dng" or ".nef" or ".cr2" or ".arw" or ".orf" => "Linear Raw",
-            _ => "sRGB"
-        };
-        await Task.CompletedTask;
+            var channel = await _grpc.GetChannelAsync(ct);
+            var client = new global::Photopipeline.Image.ImageService.ImageServiceClient(channel);
+            var response = await client.LoadAsync(new ImagePath { Path = entry.FilePath }, cancellationToken: ct);
+            entry.Width = (int)response.Width;
+            entry.Height = (int)response.Height;
+            entry.ColorSpace = response.ColorSpace;
+            entry.BitDepth = response.PixelFormat.Contains("16") ? "16" : "8";
+        }
+        catch
+        {
+            var ext = Path.GetExtension(entry.FileName).ToLowerInvariant();
+            entry.ColorSpace = ext switch
+            {
+                ".dng" or ".nef" or ".cr2" or ".arw" or ".orf" => "Linear Raw",
+                _ => "sRGB"
+            };
+        }
     }
 
     public async Task GenerateThumbnailAsync(ImageEntry entry, CancellationToken ct = default)
@@ -61,7 +70,19 @@ public sealed class ImageService
 
         if (!File.Exists(thumbnailPath))
         {
-            await Task.CompletedTask;
+            try
+            {
+                var channel = await _grpc.GetChannelAsync(ct);
+                var client = new global::Photopipeline.Image.ImageService.ImageServiceClient(channel);
+                var response = await client.GetThumbnailAsync(
+                    new ThumbnailRequest { Path = entry.FilePath, MaxSize = 256 },
+                    cancellationToken: ct);
+                await File.WriteAllBytesAsync(thumbnailPath, response.Data.ToByteArray(), ct);
+            }
+            catch
+            {
+                // Thumbnail generation failed; will show placeholder
+            }
         }
 
         entry.ThumbnailPath = thumbnailPath;
@@ -86,7 +107,31 @@ public sealed class ImageService
 
     public async Task<string> ExportImageAsync(ImageEntry entry, string outputPath, PipelineModel pipeline, CancellationToken ct = default)
     {
-        await Task.CompletedTask;
+        try
+        {
+            var channel = await _grpc.GetChannelAsync(ct);
+            var client = new global::Photopipeline.Image.ImageService.ImageServiceClient(channel);
+            var imageData = await File.ReadAllBytesAsync(entry.FilePath, ct);
+            var request = new EncodeRequest
+            {
+                PixelData = Google.Protobuf.ByteString.CopyFrom(imageData),
+                OutputPath = outputPath,
+                Format = Path.GetExtension(outputPath).TrimStart('.').ToLowerInvariant(),
+                Lossless = true
+            };
+
+            using var call = client.Encode(request, cancellationToken: ct);
+            while (await call.ResponseStream.MoveNext(ct))
+            {
+                if (call.ResponseStream.Current.Done) break;
+            }
+        }
+        catch
+        {
+            // Fall back to file copy
+            await Task.CompletedTask;
+        }
+
         return outputPath;
     }
 

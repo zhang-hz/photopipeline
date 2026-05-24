@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use test_harness::fixtures::image::ImageFixture;
 use test_harness::fixtures::metadata::{exif_sony_a7r5, gps_beijing};
-use test_harness::mocks::progress::MockProgressSink;
+use test_harness::mocks::progress::{MockProgressSink, NoopProgress};
 use uuid::Uuid;
 
 fn make_image_info() -> ImageInfo {
@@ -132,14 +132,6 @@ fn e2e_metadata_pipeline_gps_and_time_shift() {
         .solid(128, 128, 128)
         .build();
 
-    struct NoopProgress;
-    impl ProgressSink for NoopProgress {
-        fn set_progress(&self, _: f32, _: &str) {}
-        fn is_canceled(&self) -> bool {
-            false
-        }
-    }
-
     let rt = tokio::runtime::Runtime::new().unwrap();
     let result = rt.block_on(async {
         executor
@@ -221,14 +213,6 @@ fn e2e_pixel_pipeline_transform_and_colorspace() {
         .height(256)
         .solid(128, 128, 128)
         .build();
-
-    struct NoopProgress;
-    impl ProgressSink for NoopProgress {
-        fn set_progress(&self, _: f32, _: &str) {}
-        fn is_canceled(&self) -> bool {
-            false
-        }
-    }
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let result = rt.block_on(async {
@@ -336,14 +320,6 @@ fn e2e_hdr_pipeline_raw_to_heif() {
         .gradient()
         .build();
 
-    struct NoopProgress;
-    impl ProgressSink for NoopProgress {
-        fn set_progress(&self, _: f32, _: &str) {}
-        fn is_canceled(&self) -> bool {
-            false
-        }
-    }
-
     let rt = tokio::runtime::Runtime::new().unwrap();
     let result = rt.block_on(async {
         executor
@@ -401,14 +377,6 @@ fn e2e_single_node_pipeline_transform() {
         .height(256)
         .solid(128, 128, 128)
         .build();
-
-    struct NoopProgress;
-    impl ProgressSink for NoopProgress {
-        fn set_progress(&self, _: f32, _: &str) {}
-        fn is_canceled(&self) -> bool {
-            false
-        }
-    }
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let result = rt.block_on(async {
@@ -508,14 +476,6 @@ fn e2e_pipeline_with_disabled_node() {
         .solid(128, 128, 128)
         .build();
 
-    struct NoopProgress;
-    impl ProgressSink for NoopProgress {
-        fn set_progress(&self, _: f32, _: &str) {}
-        fn is_canceled(&self) -> bool {
-            false
-        }
-    }
-
     let rt = tokio::runtime::Runtime::new().unwrap();
     let result = rt.block_on(async {
         executor
@@ -610,14 +570,6 @@ fn e2e_pipeline_node_validation_failure() {
             .solid(128, 128, 128)
             .build();
 
-        struct NoopProgress;
-        impl ProgressSink for NoopProgress {
-            fn set_progress(&self, _: f32, _: &str) {}
-            fn is_canceled(&self) -> bool {
-                false
-            }
-        }
-
         let rt = tokio::runtime::Runtime::new().unwrap();
         let result = rt.block_on(async {
             executor
@@ -663,14 +615,6 @@ fn e2e_pipeline_node_validation_failure() {
 
         let image_info = make_image_info();
         let metadata = Metadata::default();
-
-        struct NoopProgress;
-        impl ProgressSink for NoopProgress {
-            fn set_progress(&self, _: f32, _: &str) {}
-            fn is_canceled(&self) -> bool {
-                false
-            }
-        }
 
         let rt = tokio::runtime::Runtime::new().unwrap();
         let result = rt.block_on(async {
@@ -736,14 +680,6 @@ fn e2e_single_node_no_edges_should_pass() {
     let image_info = make_image_info();
     let metadata = Metadata::default();
 
-    struct NoopProgress;
-    impl ProgressSink for NoopProgress {
-        fn set_progress(&self, _: f32, _: &str) {}
-        fn is_canceled(&self) -> bool {
-            false
-        }
-    }
-
     let rt = tokio::runtime::Runtime::new().unwrap();
     let result = rt.block_on(async {
         executor
@@ -795,14 +731,6 @@ fn e2e_large_linear_pipeline_100_nodes() {
 
     let image_info = make_image_info();
     let metadata = Metadata::default();
-
-    struct NoopProgress;
-    impl ProgressSink for NoopProgress {
-        fn set_progress(&self, _: f32, _: &str) {}
-        fn is_canceled(&self) -> bool {
-            false
-        }
-    }
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let result = rt.block_on(async {
@@ -935,14 +863,6 @@ fn e2e_diamond_pipeline_topology() {
         .height(256)
         .solid(128, 128, 128)
         .build();
-
-    struct NoopProgress;
-    impl ProgressSink for NoopProgress {
-        fn set_progress(&self, _: f32, _: &str) {}
-        fn is_canceled(&self) -> bool {
-            false
-        }
-    }
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let result = rt.block_on(async {

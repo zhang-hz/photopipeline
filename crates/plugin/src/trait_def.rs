@@ -59,7 +59,11 @@ pub trait Plugin: Send + Sync + std::fmt::Debug {
     fn description(&self) -> &str;
     fn tags(&self) -> &[String];
     fn requires_pixel_access(&self) -> bool;
-    fn produces_pixel_output(&self) -> bool;
+    /// Whether this plugin produces new or modified pixel output.
+    /// Default: false (most format/metadata plugins do not produce pixel output).
+    fn produces_pixel_output(&self) -> bool {
+        false
+    }
     fn supported_hardware(&self) -> HardwareRequirement;
 
     fn parameter_schema(&self) -> &ParameterSchema;
@@ -125,6 +129,7 @@ pub trait FormatProcessor: Plugin {
 }
 
 // ---- GPU Processor Trait ----
+// Reserved for v2.0 GPU acceleration
 #[async_trait]
 pub trait GpuProcessor: Plugin {
     fn supported_backends(&self) -> Vec<GpuBackend>;
@@ -171,6 +176,7 @@ pub enum ModelSource {
 }
 
 // ---- External Tool Processor Trait ----
+// Reserved for v2.0 external tool integration
 #[async_trait]
 pub trait ExternalToolProcessor: Plugin {
     fn tool_id(&self) -> &str;
@@ -181,7 +187,7 @@ pub trait ExternalToolProcessor: Plugin {
     async fn execute(
         &self,
         input_paths: &[std::path::PathBuf],
-        output_path: &std::path::PathBuf,
+        output_path: &std::path::Path,
         params: &ParameterSet,
     ) -> PluginResult<()>;
 }

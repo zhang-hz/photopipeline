@@ -52,6 +52,14 @@ path = "src/cli_system.rs"
 name = "output_verification"
 path = "src/output_verification.rs"
 
+[[test]]
+name = "golden_files"
+path = "src/golden_files.rs"
+
+[[test]]
+name = "metadata_roundtrip"
+path = "src/metadata_roundtrip.rs"
+
 [dependencies]
 photopipeline-core = { path = "../../crates/core" }
 photopipeline-plugin = { path = "../../crates/plugin" }

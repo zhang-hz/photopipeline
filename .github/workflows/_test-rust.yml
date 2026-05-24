@@ -1,0 +1,90 @@
+name: Test Rust (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        required: true
+        type: string
+        description: 'ubuntu-latest | macos-latest | windows-latest'
+      cache-prefix:
+        required: true
+        type: string
+        description: 'Cache key prefix (e.g. main, pr)'
+      timeout:
+        required: false
+        type: number
+        default: 25
+
+jobs:
+  test:
+    name: Test (${{ inputs.os }})
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: ${{ inputs.timeout }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure clippy and rustfmt
+        run: rustup component add clippy rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "${{ inputs.cache-prefix }}-${{ hashFiles('Cargo.lock') }}"
+
+      # --- Linux ---
+      - name: Install deps (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential cmake pkg-config \
+            protobuf-compiler libprotobuf-dev libheif-dev libjxl-dev \
+            liblcms2-dev libexif-dev libtiff-dev libpng-dev libopenexr-dev \
+            ninja-build libraw-dev libde265-dev libaom-dev
+
+      # --- macOS ---
+      - name: Install deps (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install cmake pkg-config protobuf libheif jpeg-xl \
+            little-cms2 libexif libtiff libpng openexr ninja \
+            libraw libde265 aom
+
+      # --- Windows ---
+      - name: Setup vcpkg (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $vcpkgPath = "$env:VCPKG_INSTALLATION_ROOT"
+          if (-not $vcpkgPath) {
+            $vcpkgPath = "C:/vcpkg"
+            if (-not (Test-Path $vcpkgPath)) {
+              git clone https://github.com/microsoft/vcpkg $vcpkgPath
+              & $vcpkgPath/bootstrap-vcpkg.bat
+            }
+          }
+          echo "VCPKG_ROOT=$vcpkgPath" >> $env:GITHUB_ENV
+          echo "VCPKG_DEFAULT_TRIPLET=x64-windows" >> $env:GITHUB_ENV
+
+      - name: Cache vcpkg (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_ROOT }}/installed
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-${{ runner.os }}-
+
+      - name: Install C libs via vcpkg (Windows)
+        if: runner.os == 'Windows'
+        run: '& "$env:VCPKG_ROOT/vcpkg.exe" install --clean-after-build'
+
+      # --- Build + Test (cross-platform) ---
+      - name: Build
+        run: cargo build --profile ci --workspace
+
+      - name: Test
+        run: cargo test --workspace --no-fail-fast
+
+      - name: Fmt
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace

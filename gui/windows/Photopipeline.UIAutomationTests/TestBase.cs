@@ -1,11 +1,12 @@
 using OpenQA.Selenium.Appium.Service;
+using OpenQA.Selenium.Appium.Windows;
 using System.Diagnostics;
 
 namespace Photopipeline.UIAutomationTests;
 
 public abstract class UIAutomationTestBase : IDisposable
 {
-    protected WindowsDriver<WindowsElement>? Driver;
+    protected WindowsDriver? Driver;
     protected Process? ServerProcess;
     protected Process? GuiProcess;
     protected AppiumLocalService? AppiumService;
@@ -50,7 +51,7 @@ public abstract class UIAutomationTestBase : IDisposable
             appiumOptions.AddAdditionalAppiumOption("deviceName", "WindowsPC");
             appiumOptions.AddAdditionalAppiumOption("app", GetAppId());
 
-            Driver = new WindowsDriver<WindowsElement>(
+            Driver = new WindowsDriver(
                 new Uri("http://127.0.0.1:4723"),
                 appiumOptions);
 
@@ -204,19 +205,19 @@ public abstract class UIAutomationTestBase : IDisposable
         }
     }
 
-    protected WindowsElement FindByAccessibilityId(string id)
+    protected AppiumElement FindByAccessibilityId(string id)
     {
         Assert.NotNull(Driver);
         return Driver!.FindElement(MobileBy.AccessibilityId(id));
     }
 
-    protected WindowsElement FindByName(string name)
+    protected AppiumElement FindByName(string name)
     {
         Assert.NotNull(Driver);
         return Driver!.FindElement(MobileBy.Name(name));
     }
 
-    protected WindowsElement? FindByAccessibilityIdOrNull(string id)
+    protected AppiumElement? FindByAccessibilityIdOrNull(string id)
     {
         Assert.NotNull(Driver);
         try
@@ -229,7 +230,7 @@ public abstract class UIAutomationTestBase : IDisposable
         }
     }
 
-    protected WindowsElement? FindByNameOrNull(string name)
+    protected AppiumElement? FindByNameOrNull(string name)
     {
         Assert.NotNull(Driver);
         try

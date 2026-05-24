@@ -1,5 +1,11 @@
-use photopipeline_core::perf::PerfTimer;
+use photopipeline_core::{
+    DecodeOptions, EncodeOptions, FormatProbe, ImageInfo, PerfTimer, PluginError,
+};
+use photopipeline_engine::executor::NodeExecutor;
+use photopipeline_engine::graph::PipelineTemplate;
+use photopipeline_plugin::{FormatProcessor, ProgressSink};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
@@ -19,6 +25,235 @@ impl BatchServiceImpl {
     pub fn new(state: Arc<SharedState>) -> Self {
         Self { state }
     }
+}
+
+struct NoopProgress {
+    canceled: Arc<AtomicBool>,
+}
+
+impl ProgressSink for NoopProgress {
+    fn set_progress(&self, _fraction: f32, _message: &str) {}
+    fn is_canceled(&self) -> bool {
+        self.canceled.load(Ordering::Relaxed)
+    }
+}
+
+fn find_decoder<'a>(
+    registry: &'a photopipeline_plugin::Registry,
+    probe: &FormatProbe,
+) -> Option<Arc<dyn FormatProcessor>> {
+    for plugin in registry.iter_format_processors() {
+        if plugin.can_decode(probe) {
+            return Some(plugin);
+        }
+    }
+    None
+}
+
+fn find_encoder<'a>(
+    registry: &'a photopipeline_plugin::Registry,
+    format: &photopipeline_core::ImageFormat,
+) -> Option<Arc<dyn FormatProcessor>> {
+    for plugin in registry.iter_format_processors() {
+        if plugin.can_encode(format) {
+            return Some(plugin);
+        }
+    }
+    None
+}
+
+async fn process_batch_files(
+    state: Arc<SharedState>,
+    batch_id: Uuid,
+    files: Vec<String>,
+    output_dir: String,
+    template_str: String,
+) {
+    let template: PipelineTemplate = match toml::from_str(&template_str) {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::error!("batch {}: failed to parse pipeline config: {}", batch_id, e);
+            if let Some(job) = state.batch_jobs.write().get_mut(&batch_id) {
+                job.status = ProtoStatus::Error as i32;
+            }
+            return;
+        }
+    };
+
+    if let Err(e) = template.validate() {
+        tracing::error!("batch {}: invalid pipeline: {}", batch_id, e);
+        if let Some(job) = state.batch_jobs.write().get_mut(&batch_id) {
+            job.status = ProtoStatus::Error as i32;
+        }
+        return;
+    }
+
+    let graph = template.into_graph();
+    let resolver = state.resolver.clone();
+    let executor = NodeExecutor::new(state.registry.clone(), resolver);
+
+    // Update status to running
+    {
+        let mut jobs = state.batch_jobs.write();
+        if let Some(job) = jobs.get_mut(&batch_id) {
+            job.status = ProtoStatus::Running as i32;
+        }
+    }
+
+    let total = files.len();
+    tracing::info!("batch {}: processing {} files", batch_id, total);
+
+    for (i, file_path) in files.iter().enumerate() {
+        // Update current file
+        {
+            let mut jobs = state.batch_jobs.write();
+            if let Some(job) = jobs.get_mut(&batch_id) {
+                job.current_file = file_path.clone();
+            }
+        }
+
+        tracing::info!(
+            "batch {}: [{}/{}] processing {}",
+            batch_id,
+            i + 1,
+            total,
+            file_path
+        );
+
+        match process_single_file(&executor, &state.registry, file_path, &output_dir, &graph).await
+        {
+            Ok(()) => {
+                let mut jobs = state.batch_jobs.write();
+                if let Some(job) = jobs.get_mut(&batch_id) {
+                    job.completed_files = (i + 1) as i32;
+                }
+            }
+            Err(e) => {
+                tracing::error!("batch {}: failed {}: {}", batch_id, file_path, e);
+                let mut jobs = state.batch_jobs.write();
+                if let Some(job) = jobs.get_mut(&batch_id) {
+                    job.failed_files += 1;
+                    job.completed_files = (i + 1) as i32;
+                }
+            }
+        }
+    }
+
+    // Mark as completed
+    {
+        let mut jobs = state.batch_jobs.write();
+        if let Some(job) = jobs.get_mut(&batch_id) {
+            job.status = ProtoStatus::Done as i32;
+            tracing::info!(
+                "batch {}: completed. {}/{} succeeded, {} failed",
+                batch_id,
+                job.completed_files - job.failed_files,
+                job.total_files,
+                job.failed_files,
+            );
+        }
+    }
+}
+
+async fn process_single_file(
+    executor: &NodeExecutor,
+    registry: &photopipeline_plugin::Registry,
+    input_path: &str,
+    output_dir: &str,
+    graph: &photopipeline_engine::graph::PipelineGraph,
+) -> Result<(), String> {
+    // Probe format
+    let probe = photopipeline_core::FormatProbe {
+        path: Some(std::path::PathBuf::from(input_path)),
+        extension: std::path::Path::new(input_path)
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|s| s.to_string()),
+        magic_bytes: None,
+        mime_type: None,
+    };
+
+    let decoder =
+        find_decoder(registry, &probe).ok_or_else(|| format!("No decoder for {}", input_path))?;
+
+    let input_bytes =
+        std::fs::read(input_path).map_err(|e| format!("Read {}: {}", input_path, e))?;
+
+    let decode_opts = DecodeOptions::default();
+    let decoded = decoder
+        .decode(&input_bytes, &decode_opts)
+        .await
+        .map_err(|e| format!("Decode {}: {}", input_path, e))?;
+
+    let filename = std::path::Path::new(input_path)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "input".to_string());
+
+    let image_info = ImageInfo {
+        id: Uuid::new_v4(),
+        path: input_path.to_string(),
+        filename,
+        format: decoded.format,
+        width: decoded.buffer.width,
+        height: decoded.buffer.height,
+        file_size_bytes: input_bytes.len() as u64,
+        pixel_format: decoded.buffer.format,
+        color_space: decoded.buffer.color_space.clone(),
+    };
+
+    let canceled = Arc::new(AtomicBool::new(false));
+    let progress = Box::new(NoopProgress {
+        canceled: canceled.clone(),
+    });
+
+    let result = executor
+        .execute(
+            graph,
+            &image_info,
+            Some(decoded.buffer),
+            &decoded.metadata,
+            progress,
+        )
+        .await
+        .map_err(|e| format!("Execute {}: {}", input_path, e))?;
+
+    // Encode output
+    let output_path = {
+        let stem = std::path::Path::new(input_path)
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| "output".to_string());
+        std::path::Path::new(output_dir).join(format!("{}.tiff", stem))
+    };
+
+    if let Some(exec_result) = result.buffer {
+        let output_format = photopipeline_core::ImageFormat::TIFF;
+        let encoder = find_encoder(registry, &output_format)
+            .ok_or_else(|| "No TIFF encoder found".to_string())?;
+
+        let encode_opts = EncodeOptions {
+            format: output_format,
+            quality: None,
+            lossless: true,
+            bit_depth: 16,
+            chroma_subsampling: None,
+            encoder: None,
+            effort: None,
+            compression: Some("lzw".into()),
+            embed_profile: Some(true),
+        };
+
+        let encoded = encoder
+            .encode(&exec_result, &decoded.metadata, &encode_opts)
+            .await
+            .map_err(|e| format!("Encode {}: {}", output_path.display(), e))?;
+
+        std::fs::write(&output_path, &encoded)
+            .map_err(|e| format!("Write {}: {}", output_path.display(), e))?;
+    }
+
+    Ok(())
 }
 
 #[tonic::async_trait]
@@ -53,6 +288,14 @@ impl BatchService for BatchServiceImpl {
                 )));
             }
         }
+
+        // Read pipeline config
+        let template_str = std::fs::read_to_string(&spec.pipeline_config_path).map_err(|e| {
+            Status::not_found(format!(
+                "pipeline config '{}' not found: {}",
+                spec.pipeline_config_path, e
+            ))
+        })?;
 
         let mut files: Vec<String> = Vec::new();
         let norm_pattern = if pattern.starts_with('/') || pattern.contains(':') {
@@ -100,6 +343,15 @@ impl BatchService for BatchServiceImpl {
                 status: ProtoStatus::Pending as i32,
             },
         );
+
+        // Spawn background processing
+        let state = self.state.clone();
+        let output_dir_clone = output_dir.clone();
+        tokio::spawn(async move {
+            process_batch_files(state, batch_id, files, output_dir_clone, template_str).await;
+        });
+
+        tracing::info!("submit_batch: batch {} started in background", batch_id);
 
         Ok(Response::new(BatchId {
             id: batch_id.to_string(),

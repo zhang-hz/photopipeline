@@ -24,8 +24,12 @@ fn encode_png(image: &PixelBuffer) -> Vec<u8> {
         ..Default::default()
     };
     let rt = tokio::runtime::Runtime::new().unwrap();
-    rt.block_on(async { processor.encode(image, &Metadata::default(), &options).await })
-        .expect("PNG encode failed")
+    rt.block_on(async {
+        processor
+            .encode(image, &Metadata::default(), &options)
+            .await
+    })
+    .expect("PNG encode failed")
 }
 
 #[test]

@@ -446,16 +446,22 @@ impl PixelProcessor for Lut3dPlugin {
         }
 
         if let Ok(lut_data) = std::fs::read(lut_path) {
-            let _intensity = params
+            let intensity = params
                 .get("intensity")
                 .and_then(|v| v.as_f64())
                 .unwrap_or(100.0);
+            let method = params
+                .get_str("interpolation_method")
+                .unwrap_or("tetrahedral");
 
             if let Some((lut, size)) = parse_cube_lut(&lut_data) {
-                apply_trilinear_lut(input, output, &lut, size);
+                match method {
+                    "tetrahedral" => apply_tetrahedral_lut(input, output, &lut, size, intensity),
+                    _ => apply_trilinear_lut(input, output, &lut, size, intensity),
+                }
 
                 let pixels = input.pixel_count();
-                progress.set_progress(1.0, "done (trilinear LUT fallback)");
+                progress.set_progress(1.0, &format!("done ({method} LUT)"));
 
                 return Ok(ProcessingStats {
                     elapsed_ms: 0,
@@ -503,49 +509,11 @@ fn parse_cube_lut(data: &[u8]) -> Option<(Vec<f32>, usize)> {
     Some((values, size))
 }
 
-fn apply_trilinear_lut(input: &PixelBuffer, output: &mut PixelBuffer, lut: &[f32], size: usize) {
-    output.data.data.copy_from_slice(&input.data.data);
-    output.color_space = input.color_space.clone();
-    output.icc_profile = input.icc_profile.clone();
-
-    let expected = size * size * size * 3;
-    if lut.len() < expected {
-        return;
-    }
-
-    match input.format {
-        PixelFormat::U8 => {
-            let input_data: &[u8] = &input.data.data;
-            let output_data: &mut [u8] = &mut output.data.data;
-            let channels = input.layout.channel_count() as usize;
-            let size_f = size as f32;
-            for px in 0..input.pixel_count() as usize {
-                let pi = px * channels;
-                if pi + 2 < input_data.len() {
-                    let r =
-                        (input_data[pi] as f32 / 255.0 * (size_f - 1.0)).clamp(0.0, size_f - 1.0);
-                    let g = (input_data[pi + 1] as f32 / 255.0 * (size_f - 1.0))
-                        .clamp(0.0, size_f - 1.0);
-                    let b = (input_data[pi + 2] as f32 / 255.0 * (size_f - 1.0))
-                        .clamp(0.0, size_f - 1.0);
-                    let (lr, lg, lb) = sample_lut(lut, size, r, g, b);
-                    if pi < output_data.len() {
-                        output_data[pi] = (lr * 255.0).clamp(0.0, 255.0) as u8;
-                    }
-                    if pi + 1 < output_data.len() {
-                        output_data[pi + 1] = (lg * 255.0).clamp(0.0, 255.0) as u8;
-                    }
-                    if pi + 2 < output_data.len() {
-                        output_data[pi + 2] = (lb * 255.0).clamp(0.0, 255.0) as u8;
-                    }
-                }
-            }
-        }
-        _ => {}
-    }
+fn lut_index(size: usize, r: usize, g: usize, b: usize) -> usize {
+    (r * size * size + g * size + b) * 3
 }
 
-fn sample_lut(lut: &[f32], size: usize, r: f32, g: f32, b: f32) -> (f32, f32, f32) {
+fn sample_lut_trilinear(lut: &[f32], size: usize, r: f32, g: f32, b: f32) -> (f32, f32, f32) {
     let r0 = (r as usize).min(size - 1);
     let r1 = (r0 + 1).min(size - 1);
     let g0 = (g as usize).min(size - 1);
@@ -557,69 +525,295 @@ fn sample_lut(lut: &[f32], size: usize, r: f32, g: f32, b: f32) -> (f32, f32, f3
     let dg = g - g0 as f32;
     let db = b - b0 as f32;
 
-    let idx = |r: usize, g: usize, b: usize| -> usize { (r * size * size + g * size + b) * 3 };
+    let idx = |ri: usize, gi: usize, bi: usize| lut_index(size, ri, gi, bi);
+    let c000 = &lut[idx(r0, g0, b0)..idx(r0, g0, b0) + 3];
+    let c001 = &lut[idx(r0, g0, b1)..idx(r0, g0, b1) + 3];
+    let c010 = &lut[idx(r0, g1, b0)..idx(r0, g1, b0) + 3];
+    let c011 = &lut[idx(r0, g1, b1)..idx(r0, g1, b1) + 3];
+    let c100 = &lut[idx(r1, g0, b0)..idx(r1, g0, b0) + 3];
+    let c101 = &lut[idx(r1, g0, b1)..idx(r1, g0, b1) + 3];
+    let c110 = &lut[idx(r1, g1, b0)..idx(r1, g1, b0) + 3];
+    let c111 = &lut[idx(r1, g1, b1)..idx(r1, g1, b1) + 3];
 
-    let c000_r = lut[idx(r0, g0, b0)];
-    let c000_g = lut[idx(r0, g0, b0) + 1];
-    let c000_b = lut[idx(r0, g0, b0) + 2];
+    let c00 = [
+        c000[0] * (1.0 - db) + c001[0] * db,
+        c000[1] * (1.0 - db) + c001[1] * db,
+        c000[2] * (1.0 - db) + c001[2] * db,
+    ];
+    let c01 = [
+        c010[0] * (1.0 - db) + c011[0] * db,
+        c010[1] * (1.0 - db) + c011[1] * db,
+        c010[2] * (1.0 - db) + c011[2] * db,
+    ];
+    let c10 = [
+        c100[0] * (1.0 - db) + c101[0] * db,
+        c100[1] * (1.0 - db) + c101[1] * db,
+        c100[2] * (1.0 - db) + c101[2] * db,
+    ];
+    let c11 = [
+        c110[0] * (1.0 - db) + c111[0] * db,
+        c110[1] * (1.0 - db) + c111[1] * db,
+        c110[2] * (1.0 - db) + c111[2] * db,
+    ];
 
-    let c001_r = lut[idx(r0, g0, b1)];
-    let c001_g = lut[idx(r0, g0, b1) + 1];
-    let c001_b = lut[idx(r0, g0, b1) + 2];
+    let c0 = [
+        c00[0] * (1.0 - dg) + c01[0] * dg,
+        c00[1] * (1.0 - dg) + c01[1] * dg,
+        c00[2] * (1.0 - dg) + c01[2] * dg,
+    ];
+    let c1 = [
+        c10[0] * (1.0 - dg) + c11[0] * dg,
+        c10[1] * (1.0 - dg) + c11[1] * dg,
+        c10[2] * (1.0 - dg) + c11[2] * dg,
+    ];
 
-    let c010_r = lut[idx(r0, g1, b0)];
-    let c010_g = lut[idx(r0, g1, b0) + 1];
-    let c010_b = lut[idx(r0, g1, b0) + 2];
+    (
+        c0[0] * (1.0 - dr) + c1[0] * dr,
+        c0[1] * (1.0 - dr) + c1[1] * dr,
+        c0[2] * (1.0 - dr) + c1[2] * dr,
+    )
+}
 
-    let c011_r = lut[idx(r0, g1, b1)];
-    let c011_g = lut[idx(r0, g1, b1) + 1];
-    let c011_b = lut[idx(r0, g1, b1) + 2];
+fn sample_lut_tetrahedral(lut: &[f32], size: usize, r: f32, g: f32, b: f32) -> (f32, f32, f32) {
+    let r0 = (r as usize).min(size - 1);
+    let r1 = (r0 + 1).min(size - 1);
+    let g0 = (g as usize).min(size - 1);
+    let g1 = (g0 + 1).min(size - 1);
+    let b0 = (b as usize).min(size - 1);
+    let b1 = (b0 + 1).min(size - 1);
 
-    let c100_r = lut[idx(r1, g0, b0)];
-    let c100_g = lut[idx(r1, g0, b0) + 1];
-    let c100_b = lut[idx(r1, g0, b0) + 2];
+    let dr = r - r0 as f32;
+    let dg = g - g0 as f32;
+    let db = b - b0 as f32;
 
-    let c101_r = lut[idx(r1, g0, b1)];
-    let c101_g = lut[idx(r1, g0, b1) + 1];
-    let c101_b = lut[idx(r1, g0, b1) + 2];
+    let idx = |ri: usize, gi: usize, bi: usize| lut_index(size, ri, gi, bi);
+    let c000 = &lut[idx(r0, g0, b0)..idx(r0, g0, b0) + 3];
+    let c100 = &lut[idx(r1, g0, b0)..idx(r1, g0, b0) + 3];
+    let c010 = &lut[idx(r0, g1, b0)..idx(r0, g1, b0) + 3];
+    let c001 = &lut[idx(r0, g0, b1)..idx(r0, g0, b1) + 3];
+    let c110 = &lut[idx(r1, g1, b0)..idx(r1, g1, b0) + 3];
+    let c101 = &lut[idx(r1, g0, b1)..idx(r1, g0, b1) + 3];
+    let c011 = &lut[idx(r0, g1, b1)..idx(r0, g1, b1) + 3];
+    let c111 = &lut[idx(r1, g1, b1)..idx(r1, g1, b1) + 3];
 
-    let c110_r = lut[idx(r1, g1, b0)];
-    let c110_g = lut[idx(r1, g1, b0) + 1];
-    let c110_b = lut[idx(r1, g1, b0) + 2];
+    let (r_out, g_out, b_out) = if dr > dg {
+        if dg > db {
+            // T1: dr > dg > db → c000, c100, c110, c111
+            let w0 = 1.0 - dr;
+            let w1 = dr - dg;
+            let w2 = dg - db;
+            let w3 = db;
+            (
+                w0 * c000[0] + w1 * c100[0] + w2 * c110[0] + w3 * c111[0],
+                w0 * c000[1] + w1 * c100[1] + w2 * c110[1] + w3 * c111[1],
+                w0 * c000[2] + w1 * c100[2] + w2 * c110[2] + w3 * c111[2],
+            )
+        } else if dr > db {
+            // T2: dr > db > dg → c000, c100, c101, c111
+            let w0 = 1.0 - dr;
+            let w1 = dr - db;
+            let w2 = db - dg;
+            let w3 = dg;
+            (
+                w0 * c000[0] + w1 * c100[0] + w2 * c101[0] + w3 * c111[0],
+                w0 * c000[1] + w1 * c100[1] + w2 * c101[1] + w3 * c111[1],
+                w0 * c000[2] + w1 * c100[2] + w2 * c101[2] + w3 * c111[2],
+            )
+        } else {
+            // T6: db > dr > dg → c000, c001, c101, c111
+            let w0 = 1.0 - db;
+            let w1 = db - dr;
+            let w2 = dr - dg;
+            let w3 = dg;
+            (
+                w0 * c000[0] + w1 * c001[0] + w2 * c101[0] + w3 * c111[0],
+                w0 * c000[1] + w1 * c001[1] + w2 * c101[1] + w3 * c111[1],
+                w0 * c000[2] + w1 * c001[2] + w2 * c101[2] + w3 * c111[2],
+            )
+        }
+    } else {
+        if db > dg {
+            // T5: db > dg > dr → c000, c001, c011, c111
+            let w0 = 1.0 - db;
+            let w1 = db - dg;
+            let w2 = dg - dr;
+            let w3 = dr;
+            (
+                w0 * c000[0] + w1 * c001[0] + w2 * c011[0] + w3 * c111[0],
+                w0 * c000[1] + w1 * c001[1] + w2 * c011[1] + w3 * c111[1],
+                w0 * c000[2] + w1 * c001[2] + w2 * c011[2] + w3 * c111[2],
+            )
+        } else if db > dr {
+            // T6-like: dg > db > dr → c000, c010, c011, c111
+            let w0 = 1.0 - dg;
+            let w1 = dg - db;
+            let w2 = db - dr;
+            let w3 = dr;
+            (
+                w0 * c000[0] + w1 * c010[0] + w2 * c011[0] + w3 * c111[0],
+                w0 * c000[1] + w1 * c010[1] + w2 * c011[1] + w3 * c111[1],
+                w0 * c000[2] + w1 * c010[2] + w2 * c011[2] + w3 * c111[2],
+            )
+        } else {
+            // T3: dg > dr > db → c000, c010, c110, c111
+            let w0 = 1.0 - dg;
+            let w1 = dg - dr;
+            let w2 = dr - db;
+            let w3 = db;
+            (
+                w0 * c000[0] + w1 * c010[0] + w2 * c110[0] + w3 * c111[0],
+                w0 * c000[1] + w1 * c010[1] + w2 * c110[1] + w3 * c111[1],
+                w0 * c000[2] + w1 * c010[2] + w2 * c110[2] + w3 * c111[2],
+            )
+        }
+    };
 
-    let c111_r = lut[idx(r1, g1, b1)];
-    let c111_g = lut[idx(r1, g1, b1) + 1];
-    let c111_b = lut[idx(r1, g1, b1) + 2];
+    (r_out, g_out, b_out)
+}
 
-    let c00_r = c000_r * (1.0 - db) + c001_r * db;
-    let c00_g = c000_g * (1.0 - db) + c001_g * db;
-    let c00_b = c000_b * (1.0 - db) + c001_b * db;
+fn apply_trilinear_lut(
+    input: &PixelBuffer,
+    output: &mut PixelBuffer,
+    lut: &[f32],
+    size: usize,
+    intensity: f64,
+) {
+    apply_lut_impl(input, output, lut, size, intensity, false)
+}
 
-    let c01_r = c010_r * (1.0 - db) + c011_r * db;
-    let c01_g = c010_g * (1.0 - db) + c011_g * db;
-    let c01_b = c010_b * (1.0 - db) + c011_b * db;
+fn apply_tetrahedral_lut(
+    input: &PixelBuffer,
+    output: &mut PixelBuffer,
+    lut: &[f32],
+    size: usize,
+    intensity: f64,
+) {
+    apply_lut_impl(input, output, lut, size, intensity, true)
+}
 
-    let c10_r = c100_r * (1.0 - db) + c101_r * db;
-    let c10_g = c100_g * (1.0 - db) + c101_g * db;
-    let c10_b = c100_b * (1.0 - db) + c101_b * db;
+fn apply_lut_impl(
+    input: &PixelBuffer,
+    output: &mut PixelBuffer,
+    lut: &[f32],
+    size: usize,
+    intensity: f64,
+    tetrahedral: bool,
+) {
+    output.data.data.copy_from_slice(&input.data.data);
+    output.color_space = input.color_space.clone();
+    output.icc_profile = input.icc_profile.clone();
 
-    let c11_r = c110_r * (1.0 - db) + c111_r * db;
-    let c11_g = c110_g * (1.0 - db) + c111_g * db;
-    let c11_b = c110_b * (1.0 - db) + c111_b * db;
+    let expected = size * size * size * 3;
+    if lut.len() < expected || intensity <= 0.0 {
+        return;
+    }
 
-    let c0_r = c00_r * (1.0 - dg) + c01_r * dg;
-    let c0_g = c00_g * (1.0 - dg) + c01_g * dg;
-    let c0_b = c00_b * (1.0 - dg) + c01_b * dg;
+    let sample_fn: fn(&[f32], usize, f32, f32, f32) -> (f32, f32, f32) = if tetrahedral {
+        sample_lut_tetrahedral
+    } else {
+        sample_lut_trilinear
+    };
 
-    let c1_r = c10_r * (1.0 - dg) + c11_r * dg;
-    let c1_g = c10_g * (1.0 - dg) + c11_g * dg;
-    let c1_b = c10_b * (1.0 - dg) + c11_b * dg;
+    let channels = input.layout.channel_count() as usize;
+    let size_f = size as f32;
+    let intensity_f = intensity as f32 / 100.0;
 
-    let out_r = c0_r * (1.0 - dr) + c1_r * dr;
-    let out_g = c0_g * (1.0 - dr) + c1_g * dr;
-    let out_b = c0_b * (1.0 - dr) + c1_b * dr;
+    match input.format {
+        PixelFormat::U8 => {
+            let src: &[u8] = &input.data.data;
+            let dst: &mut [u8] = &mut output.data.data;
+            for px in 0..input.pixel_count() as usize {
+                let pi = px * channels;
+                if pi + 2 >= src.len() {
+                    continue;
+                }
+                let r = (src[pi] as f32 / 255.0 * (size_f - 1.0)).clamp(0.0, size_f - 1.0);
+                let g = (src[pi + 1] as f32 / 255.0 * (size_f - 1.0)).clamp(0.0, size_f - 1.0);
+                let b = (src[pi + 2] as f32 / 255.0 * (size_f - 1.0)).clamp(0.0, size_f - 1.0);
+                let (lr, lg, lb) = sample_fn(lut, size, r, g, b);
+                if pi < dst.len() {
+                    dst[pi] = blend_u8(src[pi], lr, intensity_f);
+                }
+                if pi + 1 < dst.len() {
+                    dst[pi + 1] = blend_u8(src[pi + 1], lg, intensity_f);
+                }
+                if pi + 2 < dst.len() {
+                    dst[pi + 2] = blend_u8(src[pi + 2], lb, intensity_f);
+                }
+            }
+        }
+        PixelFormat::U16 => {
+            let src = input.data.as_u16_slice();
+            let dst: &mut [u16] = bytemuck::cast_slice_mut(&mut output.data.data);
+            for px in 0..input.pixel_count() as usize {
+                let pi = px * channels;
+                if pi + 2 >= src.len() {
+                    continue;
+                }
+                let r = (src[pi] as f32 / 65535.0 * (size_f - 1.0)).clamp(0.0, size_f - 1.0);
+                let g = (src[pi + 1] as f32 / 65535.0 * (size_f - 1.0)).clamp(0.0, size_f - 1.0);
+                let b = (src[pi + 2] as f32 / 65535.0 * (size_f - 1.0)).clamp(0.0, size_f - 1.0);
+                let (lr, lg, lb) = sample_fn(lut, size, r, g, b);
+                if pi < dst.len() {
+                    dst[pi] = blend_u16(src[pi], lr, intensity_f);
+                }
+                if pi + 1 < dst.len() {
+                    dst[pi + 1] = blend_u16(src[pi + 1], lg, intensity_f);
+                }
+                if pi + 2 < dst.len() {
+                    dst[pi + 2] = blend_u16(src[pi + 2], lb, intensity_f);
+                }
+            }
+        }
+        PixelFormat::F32 => {
+            let src = input.data.as_f32_slice();
+            let dst: &mut [f32] = bytemuck::cast_slice_mut(&mut output.data.data);
+            for px in 0..input.pixel_count() as usize {
+                let pi = px * channels;
+                if pi + 2 >= src.len() {
+                    continue;
+                }
+                let r = (src[pi] * (size_f - 1.0)).clamp(0.0, size_f - 1.0);
+                let g = (src[pi + 1] * (size_f - 1.0)).clamp(0.0, size_f - 1.0);
+                let b = (src[pi + 2] * (size_f - 1.0)).clamp(0.0, size_f - 1.0);
+                let (lr, lg, lb) = sample_fn(lut, size, r, g, b);
+                if pi < dst.len() {
+                    dst[pi] = blend_f32(src[pi], lr, intensity_f);
+                }
+                if pi + 1 < dst.len() {
+                    dst[pi + 1] = blend_f32(src[pi + 1], lg, intensity_f);
+                }
+                if pi + 2 < dst.len() {
+                    dst[pi + 2] = blend_f32(src[pi + 2], lb, intensity_f);
+                }
+            }
+        }
+        _ => {}
+    }
+}
 
-    (out_r, out_g, out_b)
+fn blend_u8(orig: u8, lut_val: f32, t: f32) -> u8 {
+    if t >= 1.0 {
+        (lut_val * 255.0).clamp(0.0, 255.0) as u8
+    } else {
+        (orig as f32 + ((lut_val * 255.0) - orig as f32) * t).clamp(0.0, 255.0) as u8
+    }
+}
+
+fn blend_u16(orig: u16, lut_val: f32, t: f32) -> u16 {
+    if t >= 1.0 {
+        (lut_val * 65535.0).clamp(0.0, 65535.0) as u16
+    } else {
+        (orig as f32 + ((lut_val * 65535.0) - orig as f32) * t).clamp(0.0, 65535.0) as u16
+    }
+}
+
+fn blend_f32(orig: f32, lut_val: f32, t: f32) -> f32 {
+    if t >= 1.0 {
+        lut_val
+    } else {
+        orig + (lut_val - orig) * t
+    }
 }
 
 static TAGS: LazyLock<Vec<String>> = LazyLock::new(|| {

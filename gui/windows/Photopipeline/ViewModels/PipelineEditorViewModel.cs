@@ -1,13 +1,16 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.DependencyInjection;
 using Photopipeline.Models;
+using Photopipeline.Services;
 using System.Collections.ObjectModel;
-using System.Windows.Input;
 
 namespace Photopipeline.ViewModels;
 
 public sealed partial class PipelineEditorViewModel : ObservableObject
 {
+    private readonly IPipelineService _pipelineService;
+
     [ObservableProperty]
     private ObservableCollection<PipelineNode> _nodes = new();
 
@@ -56,8 +59,21 @@ public sealed partial class PipelineEditorViewModel : ObservableObject
     [ObservableProperty]
     private bool _isDraggingNode;
 
+    [ObservableProperty]
+    private bool _isPipelineValid;
+
+    [ObservableProperty]
+    private string _validationResult = string.Empty;
+
     private double _lastMouseX;
     private double _lastMouseY;
+
+    public PipelineEditorViewModel(IPipelineService pipelineService)
+    {
+        _pipelineService = pipelineService;
+    }
+
+    public PipelineEditorViewModel() : this(App.Services?.GetRequiredService<IPipelineService>() ?? new LocalPipelineService()) { }
 
     [RelayCommand]
     private void AddNode(PluginInfo plugin)
@@ -75,9 +91,10 @@ public sealed partial class PipelineEditorViewModel : ObservableObject
             node.Parameters[schema.Name] = schema.DefaultValue ?? new object();
         }
 
+        // Clear default ports and rebuild based on plugin definition
+        node.InputPorts.Clear();
         if (plugin.MinInputs > 0)
         {
-            node.InputPorts.Clear();
             for (int i = 0; i < plugin.MaxInputs; i++)
             {
                 node.InputPorts.Add(new Port
@@ -90,9 +107,9 @@ public sealed partial class PipelineEditorViewModel : ObservableObject
             }
         }
 
+        node.OutputPorts.Clear();
         if (plugin.Outputs > 0)
         {
-            node.OutputPorts.Clear();
             for (int i = 0; i < plugin.Outputs; i++)
             {
                 node.OutputPorts.Add(new Port
@@ -217,7 +234,7 @@ public sealed partial class PipelineEditorViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void ValidatePipeline()
+    private async Task ValidatePipeline()
     {
         bool valid = true;
         string error = string.Empty;
@@ -245,6 +262,10 @@ public sealed partial class PipelineEditorViewModel : ObservableObject
                 break;
             }
         }
+
+        IsPipelineValid = valid;
+        ValidationResult = valid ? "Pipeline is valid" : error;
+        OnPropertyChanged(nameof(ValidationResult));
     }
 
     public void FitAll()

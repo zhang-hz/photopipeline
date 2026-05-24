@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.DependencyInjection;
 using Photopipeline.Models;
 using Photopipeline.Services;
 using System.Collections.ObjectModel;
@@ -8,6 +9,9 @@ namespace Photopipeline.ViewModels;
 
 public sealed partial class MainViewModel : ObservableObject
 {
+    private readonly IPipelineService _pipelineService;
+    private readonly IImageService _imageService;
+
     [ObservableProperty]
     private ObservableCollection<ImageEntry> _images = new();
 
@@ -44,14 +48,41 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private ObservableCollection<string> _logMessages = new();
 
-    public PipelineEditorViewModel PipelineEditor { get; } = new();
-    public PluginPanelViewModel PluginPanel { get; } = new();
-    public BatchViewModel Batch { get; } = new();
+    public PipelineEditorViewModel PipelineEditor { get; }
+    public PluginPanelViewModel PluginPanel { get; }
+    public BatchViewModel Batch { get; }
+
+    public MainViewModel(
+        IPipelineService pipelineService,
+        IImageService imageService,
+        PipelineEditorViewModel pipelineEditor,
+        PluginPanelViewModel pluginPanel,
+        BatchViewModel batch)
+    {
+        _pipelineService = pipelineService;
+        _imageService = imageService;
+        PipelineEditor = pipelineEditor;
+        PluginPanel = pluginPanel;
+        Batch = batch;
+    }
+
+    public MainViewModel() : this(
+        App.Services?.GetRequiredService<IPipelineService>() ?? new LocalPipelineService(),
+        App.Services?.GetRequiredService<IImageService>() ?? new LocalImageService(),
+        new PipelineEditorViewModel(),
+        new PluginPanelViewModel(),
+        new BatchViewModel())
+    { }
 
     [RelayCommand]
-    private void AddImage()
+    private async Task AddImage()
     {
         StatusMessage = "Opening file picker...";
+        _ = _pipelineService.GetAvailablePluginsAsync().ContinueWith(t =>
+        {
+            if (t.Status == TaskStatus.RanToCompletion)
+                PluginPanel.LoadPlugins(t.Result);
+        });
     }
 
     [RelayCommand]
@@ -74,10 +105,24 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void RunPipeline()
+    private async Task RunPipeline()
     {
+        if (SelectedImage is null) return;
         CurrentPipeline.IsExecuting = true;
         StatusMessage = "Executing pipeline...";
+        try
+        {
+            await _pipelineService.ExecutePipelineAsync(CurrentPipeline, SelectedImage.FilePath);
+            StatusMessage = "Pipeline completed";
+        }
+        catch
+        {
+            StatusMessage = "Pipeline execution failed";
+        }
+        finally
+        {
+            CurrentPipeline.IsExecuting = false;
+        }
     }
 
     [RelayCommand]
@@ -101,15 +146,19 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void SavePipeline()
+    private async Task SavePipeline()
     {
+        await _pipelineService.CreatePipelineAsync(CurrentPipeline.Name, CurrentPipeline.Description);
         StatusMessage = $"Saved pipeline: {CurrentPipeline.Name}";
     }
 
     [RelayCommand]
-    private void ExportImage()
+    private async Task ExportImage()
     {
+        if (SelectedImage is null) return;
         StatusMessage = "Exporting processed image...";
+        await _imageService.ExportImageAsync(SelectedImage, "output.tif", CurrentPipeline);
+        StatusMessage = "Export complete";
     }
 
     [RelayCommand]

@@ -96,10 +96,6 @@ pub enum GpuBackend {
     CUDA,
     Metal,
     Vulkan,
-    DirectX,
-    OpenCL,
-    ROCm,
-    OpenVINO,
     Auto,
 }
 
@@ -514,7 +510,6 @@ mod tests {
         assert_eq!(GpuBackend::None.to_string(), "None");
         assert_eq!(GpuBackend::CUDA.to_string(), "CUDA");
         assert_eq!(GpuBackend::Vulkan.to_string(), "Vulkan");
-        assert_eq!(GpuBackend::OpenCL.to_string(), "OpenCL");
         assert_eq!(GpuBackend::Auto.to_string(), "Auto");
     }
 
@@ -775,23 +770,8 @@ mod tests {
     }
 
     #[test]
-    fn gpu_backend_directx_display() {
-        assert_eq!(GpuBackend::DirectX.to_string(), "DirectX");
-    }
-
-    #[test]
-    fn gpu_backend_rocm_display() {
-        assert_eq!(GpuBackend::ROCm.to_string(), "ROCm");
-    }
-
-    #[test]
     fn gpu_backend_metal_display() {
         assert_eq!(GpuBackend::Metal.to_string(), "Metal");
-    }
-
-    #[test]
-    fn gpu_backend_openvino_display() {
-        assert_eq!(GpuBackend::OpenVINO.to_string(), "OpenVINO");
     }
 
     #[test]

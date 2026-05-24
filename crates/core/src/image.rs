@@ -69,18 +69,6 @@ impl ChannelLayout {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct ImageDimensions {
-    pub width: u32,
-    pub height: u32,
-}
-
-impl ImageDimensions {
-    pub fn pixel_count(&self) -> u64 {
-        self.width as u64 * self.height as u64
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TileCoord {
     pub x: u32,
     pub y: u32,
@@ -211,17 +199,6 @@ impl PixelBuffer {
             _ => None,
         }
     }
-
-    pub fn gpu_handle(&self) -> Option<GpuBufferHandle> {
-        None
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct GpuBufferHandle {
-    pub handle: u64,
-    pub size_bytes: u64,
-    pub backend: crate::types::GpuBackend,
 }
 
 #[derive(Debug, Clone)]
@@ -285,6 +262,8 @@ pub struct EncodeOptions {
     pub chroma_subsampling: Option<ChromaSubsampling>,
     pub encoder: Option<String>,
     pub effort: Option<u8>,
+    pub compression: Option<String>,
+    pub embed_profile: Option<bool>,
 }
 
 impl Default for EncodeOptions {
@@ -297,6 +276,8 @@ impl Default for EncodeOptions {
             chroma_subsampling: Some(ChromaSubsampling::Yuv444),
             encoder: None,
             effort: None,
+            compression: None,
+            embed_profile: None,
         }
     }
 }
@@ -331,21 +312,6 @@ impl Default for HardwareRequirement {
             requires_gpu: false,
             min_ram_mb: 256,
             preferred_backend: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct PluginConfig {
-    pub enabled: bool,
-    pub settings: std::collections::HashMap<String, String>,
-}
-
-impl Default for PluginConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            settings: Default::default(),
         }
     }
 }
@@ -518,18 +484,6 @@ mod tests {
     }
 
     #[test]
-    fn gpu_buffer_handle_accessors() {
-        let handle = GpuBufferHandle {
-            handle: 42,
-            size_bytes: 1024,
-            backend: GpuBackend::CUDA,
-        };
-        assert_eq!(handle.handle, 42);
-        assert_eq!(handle.size_bytes, 1024);
-        assert_eq!(handle.backend, GpuBackend::CUDA);
-    }
-
-    #[test]
     fn decode_options_default() {
         let opts = DecodeOptions::default();
         assert!(opts.pixel_format.is_none());
@@ -544,15 +498,6 @@ mod tests {
         assert_eq!(opts.quality, Some(95.0));
         assert!(!opts.lossless);
         assert_eq!(opts.bit_depth, 10);
-    }
-
-    #[test]
-    fn image_dimensions_pixel_count() {
-        let dims = ImageDimensions {
-            width: 1920,
-            height: 1080,
-        };
-        assert_eq!(dims.pixel_count(), 2073600);
     }
 
     #[test]
@@ -800,6 +745,8 @@ mod tests {
             chroma_subsampling: Some(ChromaSubsampling::Yuv420),
             encoder: Some("rav1e".into()),
             effort: Some(6),
+            compression: None,
+            embed_profile: Some(true),
         };
         assert_eq!(opts.format, ImageFormat::AVIF);
         assert_eq!(opts.quality, Some(80.0));
@@ -848,13 +795,6 @@ mod tests {
     }
 
     #[test]
-    fn plugin_config_default() {
-        let cfg = PluginConfig::default();
-        assert!(cfg.enabled);
-        assert!(cfg.settings.is_empty());
-    }
-
-    #[test]
     fn format_probe_fields() {
         let probe = FormatProbe {
             path: Some(std::path::PathBuf::from("/tmp/a.heic")),
@@ -863,16 +803,6 @@ mod tests {
             mime_type: Some("image/heic".into()),
         };
         assert_eq!(probe.extension, Some("heic".into()));
-    }
-
-    #[test]
-    fn gpu_buffer_handle_backend_opencl() {
-        let handle = GpuBufferHandle {
-            handle: 99,
-            size_bytes: 2048,
-            backend: GpuBackend::OpenCL,
-        };
-        assert_eq!(handle.backend, GpuBackend::OpenCL);
     }
 
     #[test]
@@ -916,12 +846,6 @@ mod tests {
         };
         assert_eq!(t.shape.len(), 4);
         assert_eq!(t.data.len(), 196608);
-    }
-
-    #[test]
-    fn pixel_buffer_gpu_handle_none() {
-        let pb = PixelBuffer::new(10, 10, ChannelLayout::RGB, PixelFormat::U8);
-        assert!(pb.gpu_handle().is_none());
     }
 
     #[test]

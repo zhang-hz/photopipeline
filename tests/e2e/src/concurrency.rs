@@ -270,8 +270,8 @@ fn e2e_concurrent_plugin_validate() {
 
                     let mut mod_params = defaults.clone();
                     mod_params.insert("extra".into(), serde_json::json!("test"));
-                    let result2 = rt.block_on(async { p.validate(&mod_params).await });
-                    let _ = result2;
+                    // Extra params: plugin may accept or reject; verify no panic
+                    let _ = rt.block_on(async { p.validate(&mod_params).await });
                 }
             }
         }));
@@ -299,7 +299,8 @@ fn e2e_concurrent_mixed_registry_operations() {
                     let schema = p.parameter_schema();
                     let defaults = schema.defaults();
                     let rt = tokio::runtime::Runtime::new().unwrap();
-                    let _ = rt.block_on(async { p.validate(&defaults).await });
+                    let v = rt.block_on(async { p.validate(&defaults).await });
+                    assert!(v.is_ok(), "validate with defaults should succeed");
                 }
                 let manifests = r.manifests();
                 assert!(!manifests.is_empty());

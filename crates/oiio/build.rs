@@ -1,4 +1,5 @@
 fn main() {
+    println!("cargo::rustc-check-cfg=cfg(oiio_found)");
     let oiio_lib = pkg_config::Config::new()
         .atleast_version("2.4")
         .probe("OpenImageIO");
@@ -14,7 +15,6 @@ fn main() {
             println!("cargo:rustc-cfg=oiio_found");
         }
         Err(_) => {
-            println!("cargo:rustc-cfg=oiio_not_found");
             println!("cargo:warning=OpenImageIO not found via pkg-config; OIIO features disabled");
         }
     }

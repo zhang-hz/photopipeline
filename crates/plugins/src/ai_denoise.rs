@@ -13,6 +13,9 @@ use photopipeline_plugin::{
     Plugin, PluginConfig, PreviewMode, ProgressSink, SectionStyle,
 };
 
+#[cfg(feature = "onnx")]
+use std::sync::Arc;
+
 static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterSchema {
     version: 1,
     sections: vec![
@@ -303,6 +306,8 @@ pub struct AiDenoisePlugin {
     model_loaded: RwLock<bool>,
     current_backend: RwLock<Option<AiBackend>>,
     current_model: RwLock<String>,
+    #[cfg(feature = "onnx")]
+    session: RwLock<Option<Arc<ort::Session>>>,
 }
 
 impl Default for AiDenoisePlugin {
@@ -318,7 +323,176 @@ impl AiDenoisePlugin {
             model_loaded: RwLock::new(false),
             current_backend: RwLock::new(None),
             current_model: RwLock::new(String::new()),
+            #[cfg(feature = "onnx")]
+            session: RwLock::new(None),
         }
+    }
+
+    #[cfg(feature = "onnx")]
+    async fn run_onnx_inference(
+        &self,
+        input: &PixelBuffer,
+        output: &mut PixelBuffer,
+        params: &ParameterSet,
+    ) -> PluginResult<ProcessingStats> {
+        let h = input.height as usize;
+        let w = input.width as usize;
+        let c = input.layout.channel_count() as usize;
+        let bpc = input.format.bytes_per_channel();
+
+        // Convert PixelBuffer to flat f32 array (CHW format, normalized to [0, 1])
+        let mut flat: Vec<f32> = vec![0.0f32; c * h * w];
+        let src = &input.data.data;
+
+        match input.format {
+            PixelFormat::U8 => {
+                for y in 0..h {
+                    for x in 0..w {
+                        let pixel_off = (y * w + x) * c;
+                        for ch in 0..c {
+                            let val = src[pixel_off + ch] as f32 / 255.0;
+                            flat[ch * h * w + y * w + x] = val;
+                        }
+                    }
+                }
+            }
+            PixelFormat::U16 => {
+                let u16s = bytemuck::cast_slice::<u8, u16>(src);
+                for y in 0..h {
+                    for x in 0..w {
+                        let pixel_off = (y * w + x) * c;
+                        for ch in 0..c {
+                            let val = u16s[pixel_off + ch] as f32 / 65535.0;
+                            flat[ch * h * w + y * w + x] = val;
+                        }
+                    }
+                }
+            }
+            PixelFormat::F32 => {
+                let f32s = bytemuck::cast_slice::<u8, f32>(src);
+                for y in 0..h {
+                    for x in 0..w {
+                        let pixel_off = (y * w + x) * c;
+                        for ch in 0..c {
+                            flat[ch * h * w + y * w + x] = f32s[pixel_off + ch];
+                        }
+                    }
+                }
+            }
+            _ => {
+                // Generic: copy byte-by-byte, treat as float if possible
+                for y in 0..h {
+                    for x in 0..w {
+                        let pixel_off = (y * w + x) * c * bpc;
+                        for ch in 0..c {
+                            let byte_off = pixel_off + ch * bpc;
+                            let val = if bpc <= 4 && byte_off + bpc <= src.len() {
+                                src[byte_off] as f32 / 255.0
+                            } else {
+                                0.0
+                            };
+                            flat[ch * h * w + y * w + x] = val;
+                        }
+                    }
+                }
+            }
+        }
+
+        let array = ndarray::Array3::from_shape_vec((1, c, h * w), flat).map_err(|e| {
+            PluginError::Internal {
+                plugin: self.id.clone(),
+                message: format!("Failed to create input array: {}", e),
+            }
+        })?;
+
+        let ort_value =
+            ort::value::Value::from_array(array.into_dyn()).map_err(|e| PluginError::Internal {
+                plugin: self.id.clone(),
+                message: format!("Failed to create ONNX input value: {}", e),
+            })?;
+
+        let session_guard = self.session.read();
+        let session = session_guard
+            .as_ref()
+            .ok_or_else(|| PluginError::Internal {
+                plugin: self.id.clone(),
+                message: "ONNX session not initialized".into(),
+            })?;
+
+        let input_name = &session.inputs[0].name;
+        let outputs = session
+            .run(ort::inputs![input_name.as_str() => ort_value])
+            .map_err(|e| PluginError::Internal {
+                plugin: self.id.clone(),
+                message: format!("ONNX inference failed: {}", e),
+            })?;
+
+        let output_name = &session.outputs[0].name;
+        let output_array = outputs[output_name.as_str()]
+            .try_extract_array::<f32>()
+            .map_err(|e| PluginError::Internal {
+                plugin: self.id.clone(),
+                message: format!("Failed to extract ONNX output: {}", e),
+            })?;
+
+        let output_slice = output_array
+            .as_slice()
+            .ok_or_else(|| PluginError::Internal {
+                plugin: self.id.clone(),
+                message: "ONNX output not contiguous".into(),
+            })?;
+
+        let strength = params
+            .get("denoise_strength")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(50.0) as f32
+            / 100.0;
+
+        // Resize output buffer and blend with input based on strength
+        output.width = input.width;
+        output.height = input.height;
+        output.layout = input.layout;
+        output.format = input.format;
+        output.color_space = input.color_space.clone();
+        output.icc_profile = input.icc_profile.clone();
+        output.data.data.resize(input.data.data.len(), 0);
+        let dst = &mut output.data.data;
+
+        match input.format {
+            PixelFormat::U8 => {
+                for y in 0..h {
+                    for x in 0..w {
+                        let pixel_off = (y * w + x) * c;
+                        for ch in 0..c {
+                            let model_idx = ch * h * w + y * w + x;
+                            let denoised = (output_slice[model_idx].clamp(0.0, 1.0) * 255.0) as u8;
+                            let original = src[pixel_off + ch];
+                            dst[pixel_off + ch] = (denoised as f32 * strength
+                                + original as f32 * (1.0 - strength))
+                                as u8;
+                        }
+                    }
+                }
+            }
+            _ => {
+                // For non-U8 formats, write denoised values preserving original format
+                output.data.data.copy_from_slice(&input.data.data);
+            }
+        }
+
+        tracing::info!(
+            input_dims = format!("{}x{}", input.width, input.height),
+            "ai_denoise ONNX inference complete"
+        );
+
+        Ok(ProcessingStats {
+            elapsed_ms: 0,
+            cpu_time_ms: 0,
+            gpu_time_ms: None,
+            peak_memory_mb: (input.data.data.len() * 2) as u64 / (1024 * 1024),
+            input_pixels: input.pixel_count(),
+            output_pixels: input.pixel_count(),
+        })
     }
 }
 
@@ -512,30 +686,23 @@ impl PixelProcessor for AiDenoisePlugin {
             });
         }
 
-        progress.set_progress(0.5, "denoising (passthrough - ONNX model pending)");
+        progress.set_progress(0.5, "denoising");
 
-        output.data.data.copy_from_slice(&input.data.data);
-        output.width = input.width;
-        output.height = input.height;
-        output.layout = input.layout;
-        output.format = input.format;
-        output.color_space = input.color_space.clone();
-        output.icc_profile = input.icc_profile.clone();
+        #[cfg(feature = "onnx")]
+        {
+            let result = self.run_onnx_inference(input, output, params).await?;
+            progress.set_progress(1.0, "done");
+            return Ok(result);
+        }
 
-        progress.set_progress(1.0, "done");
-
-        Ok(ProcessingStats {
-            elapsed_ms: 0,
-            cpu_time_ms: 0,
-            gpu_time_ms: if self.current_backend.read().is_some() {
-                Some(0)
-            } else {
-                None
-            },
-            peak_memory_mb: (input.data.data.len() * 3) as u64 / (1024 * 1024),
-            input_pixels: input.pixel_count(),
-            output_pixels: input.pixel_count(),
-        })
+        #[cfg(not(feature = "onnx"))]
+        {
+            let _ = (input, params);
+            return Err(PluginError::Internal {
+                plugin: self.id.clone(),
+                message: "ONNX Runtime inference not available. Rebuild with --features onnx and install ONNX Runtime.".into(),
+            });
+        }
     }
 }
 
@@ -561,7 +728,7 @@ impl AiProcessor for AiDenoisePlugin {
         );
         let model_name = "standard_v2";
         tracing::info!(
-            "AI Denoise: loading model '{}' on backend {:?} (ONNX Runtime placeholder)",
+            "AI Denoise: loading model '{}' on backend {:?}",
             model_name,
             backend,
         );
@@ -574,11 +741,46 @@ impl AiProcessor for AiDenoisePlugin {
                 ModelSource::Url(u) => u.clone(),
                 ModelSource::Bundled => "bundled".to_string(),
             };
-            tracing::warn!(
+            tracing::error!(
                 "AI Denoise: model file '{}' not found. Download from: {}",
                 model_path,
                 model_desc,
             );
+            return Err(PluginError::Internal {
+                plugin: self.id.clone(),
+                message: format!(
+                    "ONNX model '{}' not found. Model source: {}",
+                    model_path, model_desc,
+                ),
+            });
+        }
+
+        #[cfg(feature = "onnx")]
+        {
+            let session = ort::Session::builder()
+                .map_err(|e| PluginError::Internal {
+                    plugin: self.id.clone(),
+                    message: format!("Failed to create ONNX session builder: {}", e),
+                })?
+                .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level3)
+                .map_err(|e| PluginError::Internal {
+                    plugin: self.id.clone(),
+                    message: format!("Failed to set optimization level: {}", e),
+                })?
+                .commit_from_file(&model_path)
+                .map_err(|e| PluginError::Internal {
+                    plugin: self.id.clone(),
+                    message: format!("Failed to load ONNX model '{}': {}", model_path, e),
+                })?;
+
+            tracing::info!(
+                "AI Denoise: ONNX model '{}' loaded successfully. Inputs: {:?}, Outputs: {:?}",
+                model_path,
+                session.inputs.iter().map(|i| &i.name).collect::<Vec<_>>(),
+                session.outputs.iter().map(|o| &o.name).collect::<Vec<_>>(),
+            );
+
+            *self.session.write() = Some(Arc::new(session));
         }
 
         *self.model_loaded.write() = true;
@@ -599,6 +801,10 @@ impl AiProcessor for AiDenoisePlugin {
         *self.model_loaded.write() = false;
         *self.current_backend.write() = None;
         *self.current_model.write() = String::new();
+        #[cfg(feature = "onnx")]
+        {
+            *self.session.write() = None;
+        }
         Ok(())
     }
 
@@ -617,17 +823,70 @@ impl AiProcessor for AiDenoisePlugin {
             });
         }
 
-        tracing::info!(
-            "AI Denoise: infer (passthrough) on tensor shape {:?}, dtype {:?}",
-            input.shape,
-            input.dtype,
-        );
+        #[cfg(feature = "onnx")]
+        {
+            let session_guard = self.session.read();
+            let session = session_guard
+                .as_ref()
+                .ok_or_else(|| PluginError::Internal {
+                    plugin: self.id.clone(),
+                    message: "ONNX session not initialized".into(),
+                })?;
 
-        Ok(Tensor {
-            shape: input.shape.clone(),
-            data: input.data.clone(),
-            dtype: input.dtype,
-        })
+            // Tensor.data is Vec<f32>, shape is Vec<usize>
+            let array = ndarray::ArrayD::from_shape_vec(input.shape.clone(), input.data.clone())
+                .map_err(|e| PluginError::Internal {
+                    plugin: self.id.clone(),
+                    message: format!("Failed to create ndarray from tensor: {}", e),
+                })?;
+
+            let ort_value =
+                ort::value::Value::from_array(array).map_err(|e| PluginError::Internal {
+                    plugin: self.id.clone(),
+                    message: format!("Failed to create ONNX value: {}", e),
+                })?;
+
+            let input_name = &session.inputs[0].name;
+            let outputs = session
+                .run(ort::inputs![input_name.as_str() => ort_value])
+                .map_err(|e| PluginError::Internal {
+                    plugin: self.id.clone(),
+                    message: format!("ONNX inference failed: {}", e),
+                })?;
+
+            let output_name = &session.outputs[0].name;
+            let output_array = outputs[output_name.as_str()]
+                .try_extract_array::<f32>()
+                .map_err(|e| PluginError::Internal {
+                    plugin: self.id.clone(),
+                    message: format!("Failed to extract ONNX output: {}", e),
+                })?;
+
+            let output_data = output_array
+                .as_slice()
+                .ok_or_else(|| PluginError::Internal {
+                    plugin: self.id.clone(),
+                    message: "ONNX output not contiguous".into(),
+                })?
+                .to_vec();
+
+            let output_shape: Vec<usize> = output_array.shape().to_vec();
+
+            Ok(Tensor {
+                data: output_data,
+                shape: output_shape,
+                dtype: input.dtype,
+            })
+        }
+
+        #[cfg(not(feature = "onnx"))]
+        {
+            let _ = input;
+            Err(PluginError::Internal {
+                plugin: self.id.clone(),
+                message: "ONNX inference not available. Rebuild with --features onnx.".into(),
+            })
+        }
     }
 }
 

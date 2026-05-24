@@ -1,4 +1,3 @@
-use std::io::Write;
 use tempfile::TempDir;
 
 pub struct MockEncoder {
@@ -47,33 +46,46 @@ impl MockEncoder {
     }
 
     pub fn install(&self) {
-        let script_path = self.temp_dir.path().join(self.encoder_type.binary_name());
-        let output_data = self.output_data.clone();
-        let should_fail = self.should_fail;
-
-        if let Some(ref data) = output_data {
+        let name = self.encoder_type.binary_name();
+        if let Some(ref data) = self.output_data {
             let data_path = self.temp_dir.path().join("mock_output.bin");
             std::fs::write(&data_path, data).expect("Failed to write mock output data");
         }
 
         let mock_data_path = self.temp_dir.path().join("mock_output.bin");
-        let mock_data_escaped = mock_data_path.to_string_lossy().replace('\'', "'\\''");
+        let mock_data_str = mock_data_path.to_string_lossy().to_string();
 
-        let script_content = format!(
-            r#"#!/bin/bash
+        #[cfg(windows)]
+        {
+            let escaped = mock_data_str.replace('%', "%%");
+            let content = if self.should_fail {
+                format!("@echo off\r\necho {name} mock error 1>&2\r\nexit /b 1\r\n")
+            } else {
+                format!(
+                    "@echo off\r\nif \"%~1\"==\"--version\" (echo {name} mock 1.0 & exit /b 0)\r\nif exist \"{escaped}\" copy /y \"{escaped}\" \"%~nx1\" >nul 2>&1\r\nexit /b 0\r\n"
+                )
+            };
+            let bat_path = self.temp_dir.path().join(format!("{name}.bat"));
+            std::fs::write(&bat_path, &content).expect("Failed to write mock bat file");
+            // Also create at the bare name for PATH compatibility
+            let bare_path = self.temp_dir.path().join(name);
+            std::fs::write(&bare_path, &content).expect("Failed to write mock bat at bare path");
+        }
+
+        #[cfg(not(windows))]
+        {
+            let script_path = self.temp_dir.path().join(name);
+            let escaped = mock_data_str.replace('\'', "'\\''");
+            let script_content = if self.should_fail {
+                format!("#!/bin/bash\necho \"{} mock error\" >&2\nexit 1\n", name)
+            } else {
+                format!(
+                    r#"#!/bin/bash
 if [ "$1" = "--version" ]; then
     echo "{} mock 1.0"
     exit 0
 fi
-{}"#,
-            self.encoder_type.binary_name(),
-            if should_fail {
-                r#"echo "Mock encoder error" >&2
-exit 1"#
-                    .to_string()
-            } else {
-                format!(
-                    r#"outfile=""
+outfile=""
 args=("$@")
 for ((i=0; i<${{#args[@]}}; i++)); do
     if [ "${{args[i]}}" = "-o" ] && [ $((i+1)) -lt ${{#args[@]}} ]; then
@@ -84,30 +96,27 @@ done
 if [ -z "$outfile" ] && [ ${{#args[@]}} -ge 1 ]; then
     outfile="${{args[-1]}}"
 fi
-if [ -n "$outfile" ] && [ -f '{mock_data_path}' ]; then
-    cp '{mock_data_path}' "$outfile"
+if [ -n "$outfile" ] && [ -f '{}' ]; then
+    cp '{}' "$outfile"
 fi
-exit 0"#,
-                    mock_data_path = mock_data_escaped,
+exit 0
+"#,
+                    name, escaped, escaped
                 )
-            }
-        );
-
-        let mut file =
-            std::fs::File::create(&script_path).expect("Failed to create mock encoder script");
-        file.write_all(script_content.as_bytes())
-            .expect("Failed to write mock script");
-        #[cfg(unix)]
-        {
+            };
+            let mut file =
+                std::fs::File::create(&script_path).expect("Failed to create mock encoder script");
+            file.write_all(script_content.as_bytes())
+                .expect("Failed to write mock script");
+            #[allow(unused_imports)]
             use std::os::unix::fs::PermissionsExt;
-            let mut perms = file
-                .metadata()
+            let perms = std::fs::metadata(&script_path)
                 .expect("Failed to get metadata")
                 .permissions();
+            let mut perms = perms;
             perms.set_mode(0o755);
             std::fs::set_permissions(&script_path, perms).expect("Failed to set permissions");
         }
-        drop(output_data);
     }
 
     pub fn dir_path(&self) -> &std::path::Path {

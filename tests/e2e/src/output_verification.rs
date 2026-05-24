@@ -2,7 +2,6 @@ use photopipeline_core::*;
 use photopipeline_engine::{
     NodeExecutor, ParameterResolver, PipelineTemplate, TemplateEdge, TemplateNode,
 };
-use photopipeline_plugin::ProgressSink;
 use photopipeline_plugin::registry::Registry;
 use photopipeline_plugins;
 use std::sync::Arc;
@@ -16,6 +15,7 @@ use test_harness::fixtures::metadata::{
     empty_metadata, exif_canon_r5, exif_nikon_z9, exif_sony_a7r5, full_metadata, gps_beijing,
 };
 use test_harness::mocks::progress::MockProgressSink;
+use test_harness::mocks::progress::NoopProgress;
 use uuid::Uuid;
 
 fn make_registry() -> Arc<Registry> {
@@ -40,14 +40,6 @@ fn make_image_info() -> ImageInfo {
 
 fn rt() -> tokio::runtime::Runtime {
     tokio::runtime::Runtime::new().unwrap()
-}
-
-struct NoopProgress;
-impl ProgressSink for NoopProgress {
-    fn set_progress(&self, _: f32, _: &str) {}
-    fn is_canceled(&self) -> bool {
-        false
-    }
 }
 
 fn encode_png(reg: &Arc<Registry>, pb: &PixelBuffer, rt: &tokio::runtime::Runtime) -> Vec<u8> {
@@ -859,5 +851,224 @@ fn quality_structure_identical_is_one() {
     assert!(
         ssim > 0.99,
         "identical buffers structure similarity {ssim} should be ~1.0"
+    );
+}
+
+// ── Lossy Format Roundtrip Helpers ──────────────────────────────────
+
+fn encode_format(
+    reg: &Arc<Registry>,
+    plugin_id: &str,
+    pb: &PixelBuffer,
+    quality: f32,
+    rt: &tokio::runtime::Runtime,
+) -> Vec<u8> {
+    let proc = reg.get_format_processor(&plugin_id.into()).unwrap();
+    let opts = EncodeOptions {
+        format: ImageFormat::JPEG,
+        quality: Some(quality),
+        ..EncodeOptions::default()
+    };
+    rt.block_on(async { proc.encode(pb, &Metadata::default(), &opts).await })
+        .unwrap()
+}
+
+fn decode_format(
+    reg: &Arc<Registry>,
+    plugin_id: &str,
+    data: &[u8],
+    rt: &tokio::runtime::Runtime,
+) -> PixelBuffer {
+    let proc = reg.get_format_processor(&plugin_id.into()).unwrap();
+    rt.block_on(async { proc.decode(data, &DecodeOptions::default()).await })
+        .unwrap()
+        .buffer
+}
+
+fn roundtrip_lossy(
+    reg: &Arc<Registry>,
+    encoder_id: &str,
+    original: &PixelBuffer,
+    quality: f32,
+    min_psnr: f64,
+    min_ssim: f64,
+    rt: &tokio::runtime::Runtime,
+) {
+    let encoded = encode_format(reg, encoder_id, original, quality, rt);
+    assert!(!encoded.is_empty(), "{encoder_id}: encoded output is empty");
+    let decoded = decode_format(reg, encoder_id, &encoded, rt);
+    assert_quality_psnr(original, &decoded, min_psnr);
+    assert_structure_preserved(original, &decoded, min_ssim);
+}
+
+// ── HEIF Roundtrip Tests (2) ──────────────────────────────────────
+
+#[test]
+fn heif_roundtrip_solid_u8_quality_high() {
+    let reg = make_registry();
+    let rt = rt();
+    let original = known_value_solid_u8(128, 128, 128, 64, 32);
+    roundtrip_lossy(
+        &reg,
+        "photopipeline.plugins.heif_encoder",
+        &original,
+        95.0,
+        40.0,
+        0.99,
+        &rt,
+    );
+}
+
+#[test]
+fn heif_roundtrip_color_bars_quality_medium() {
+    let reg = make_registry();
+    let rt = rt();
+    let original = color_bars(256, 128);
+    roundtrip_lossy(
+        &reg,
+        "photopipeline.plugins.heif_encoder",
+        &original,
+        80.0,
+        35.0,
+        0.97,
+        &rt,
+    );
+}
+
+// ── AVIF Roundtrip Tests (2) ──────────────────────────────────────
+
+#[test]
+fn avif_roundtrip_solid_u8_quality_high() {
+    let reg = make_registry();
+    let rt = rt();
+    let original = known_value_solid_u8(128, 128, 200, 150, 100);
+    roundtrip_lossy(
+        &reg,
+        "photopipeline.plugins.avif_encoder",
+        &original,
+        95.0,
+        40.0,
+        0.99,
+        &rt,
+    );
+}
+
+#[test]
+fn avif_roundtrip_vertical_ramp_quality_medium() {
+    let reg = make_registry();
+    let rt = rt();
+    let original = vertical_ramp(256, 256, PixelFormat::U8);
+    roundtrip_lossy(
+        &reg,
+        "photopipeline.plugins.avif_encoder",
+        &original,
+        80.0,
+        35.0,
+        0.97,
+        &rt,
+    );
+}
+
+// ── JXL Roundtrip Tests (2) ──────────────────────────────────────
+
+#[test]
+fn jxl_roundtrip_solid_u8_quality_high() {
+    let reg = make_registry();
+    let rt = rt();
+    let original = known_value_solid_u8(128, 128, 64, 128, 192);
+    roundtrip_lossy(
+        &reg,
+        "photopipeline.plugins.jxl_encoder",
+        &original,
+        95.0,
+        40.0,
+        0.99,
+        &rt,
+    );
+}
+
+#[test]
+fn jxl_roundtrip_diagonal_ramp_quality_medium() {
+    let reg = make_registry();
+    let rt = rt();
+    let original = diagonal_ramp(128, 128);
+    roundtrip_lossy(
+        &reg,
+        "photopipeline.plugins.jxl_encoder",
+        &original,
+        80.0,
+        35.0,
+        0.97,
+        &rt,
+    );
+}
+
+// ── Cross-Format Roundtrip Tests (3) ──────────────────────────────
+
+#[test]
+fn cross_format_png_to_heif_to_png_quality() {
+    let reg = make_registry();
+    let rt = rt();
+    let original = checkerboard_black_white(32, 32, 4, PixelFormat::U8);
+
+    let png_data = encode_png(&reg, &original, &rt);
+    let heif_data = encode_format(
+        &reg,
+        "photopipeline.plugins.heif_encoder",
+        &original,
+        95.0,
+        &rt,
+    );
+    let decoded_from_heif =
+        decode_format(&reg, "photopipeline.plugins.heif_encoder", &heif_data, &rt);
+
+    assert!(!png_data.is_empty());
+    assert!(!heif_data.is_empty());
+    assert_quality_psnr(&original, &decoded_from_heif, 40.0);
+}
+
+#[test]
+fn cross_format_png_to_avif_to_png_quality() {
+    let reg = make_registry();
+    let rt = rt();
+    let original = horizontal_ramp(128, 128, PixelFormat::U8);
+
+    let avif_data = encode_format(
+        &reg,
+        "photopipeline.plugins.avif_encoder",
+        &original,
+        95.0,
+        &rt,
+    );
+    let decoded_from_avif =
+        decode_format(&reg, "photopipeline.plugins.avif_encoder", &avif_data, &rt);
+
+    assert!(!avif_data.is_empty());
+    assert_quality_psnr(&original, &decoded_from_avif, 40.0);
+}
+
+#[test]
+fn cross_format_lossy_vs_lossless_size() {
+    let reg = make_registry();
+    let rt = rt();
+    let original = vertical_ramp(128, 128, PixelFormat::U8);
+
+    let png_data = encode_png(&reg, &original, &rt);
+    let heif_data = encode_format(
+        &reg,
+        "photopipeline.plugins.heif_encoder",
+        &original,
+        90.0,
+        &rt,
+    );
+
+    assert!(!png_data.is_empty());
+    assert!(!heif_data.is_empty());
+    // Lossy HEIF at high quality should still achieve compression vs PNG
+    assert!(
+        heif_data.len() <= png_data.len(),
+        "lossy HEIF ({} bytes) should not exceed lossless PNG ({} bytes)",
+        heif_data.len(),
+        png_data.len()
     );
 }

@@ -31,15 +31,34 @@ impl std::fmt::Display for GoldenMismatch {
 }
 
 pub fn assert_golden_bytes(actual: &[u8], golden_path: &Path, label: &str) {
-    let expected = match std::fs::read(golden_path) {
-        Ok(data) => data,
-        Err(e) => {
-            eprintln!(
-                "Golden file not found at {}: {}. Skipping golden comparison.",
+    // Generate mode: write golden files on demand
+    if std::env::var("PHOTOPIPELINE_GENERATE_GOLDEN").is_ok() {
+        if let Some(parent) = golden_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        std::fs::write(golden_path, actual).unwrap_or_else(|e| {
+            panic!(
+                "Failed to write golden file {}: {}",
                 golden_path.display(),
                 e
             );
-            return;
+        });
+        eprintln!(
+            "Golden file written: {} ({} bytes)",
+            golden_path.display(),
+            actual.len()
+        );
+        return;
+    }
+
+    let expected = match std::fs::read(golden_path) {
+        Ok(data) => data,
+        Err(e) => {
+            panic!(
+                "Golden file not found at {}: {}. Set PHOTOPIPELINE_GENERATE_GOLDEN=1 to generate.",
+                golden_path.display(),
+                e
+            );
         }
     };
 

@@ -21,10 +21,10 @@
             <AppBarButton Icon="ZoomOut" Label="Zoom Out" />
             <AppBarSeparator />
             <AppBarToggleButton Icon="View" Label="Split View" IsChecked="True" />
-            <AppBarToggleButton Icon="Compare" Label="Side by Side" />
+            <AppBarToggleButton Icon="View" Label="Side by Side" />
             <AppBarSeparator />
             <AppBarButton Icon="Refresh" Label="Fit" />
-            <AppBarButton Icon="FullScreen" Label="1:1" />
+            <AppBarButton Icon="Zoom" Label="1:1" />
             <AppBarSeparator />
             <AppBarButton Icon="Save" Label="Export" />
             <AppBarButton Icon="Send" Label="Send to PS" />
@@ -44,7 +44,7 @@
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
                             Visibility="Visible">
-                    <SymbolIcon Symbol="Picture" Width="48" Height="48"
+                    <SymbolIcon Symbol="Pictures" Width="48" Height="48"
                                 Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                     <TextBlock Text="No image selected"
                                Style="{StaticResource SubtitleTextBlockStyle}"

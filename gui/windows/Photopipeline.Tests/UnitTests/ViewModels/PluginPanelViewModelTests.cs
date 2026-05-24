@@ -143,7 +143,7 @@ public sealed class PluginPanelViewModelTests
             }
         };
 
-        vm.SelectPlugin(plugin);
+        vm.SelectPluginCommand.Execute(plugin);
 
         vm.SelectedPlugin.Should().Be(plugin);
         vm.ParameterControls.Should().HaveCount(2);
@@ -168,7 +168,7 @@ public sealed class PluginPanelViewModelTests
             }
         };
 
-        vm.SelectPlugin(plugin);
+        vm.SelectPluginCommand.Execute(plugin);
 
         vm.ParameterControls[0].Value.Should().Be(1.5);
         vm.ParameterControls[0].Schema.Name.Should().Be("ev");
@@ -191,7 +191,7 @@ public sealed class PluginPanelViewModelTests
             }
         };
 
-        vm.SelectPlugin(plugin);
+        vm.SelectPluginCommand.Execute(plugin);
 
         var control = vm.ParameterControls[0];
         control.StringValue = "New Text";
@@ -217,7 +217,7 @@ public sealed class PluginPanelViewModelTests
             }
         };
 
-        vm.SelectPlugin(plugin);
+        vm.SelectPluginCommand.Execute(plugin);
 
         var control = vm.ParameterControls[0];
         control.NumericValue = 5;
@@ -247,7 +247,7 @@ public sealed class PluginPanelViewModelTests
             }
         };
 
-        vm.SelectPlugin(plugin);
+        vm.SelectPluginCommand.Execute(plugin);
 
         var control = vm.ParameterControls[0];
         control.NumericValue = 2.5;
@@ -271,7 +271,7 @@ public sealed class PluginPanelViewModelTests
             }
         };
 
-        vm.SelectPlugin(plugin);
+        vm.SelectPluginCommand.Execute(plugin);
 
         var control = vm.ParameterControls[0];
         control.BoolValue = true;
@@ -297,7 +297,7 @@ public sealed class PluginPanelViewModelTests
             }
         };
 
-        vm.SelectPlugin(plugin);
+        vm.SelectPluginCommand.Execute(plugin);
 
         var control = vm.ParameterControls[0];
         control.SelectedEnumIndex = 2;
@@ -323,7 +323,7 @@ public sealed class PluginPanelViewModelTests
             }
         };
 
-        vm.SelectPlugin(plugin);
+        vm.SelectPluginCommand.Execute(plugin);
 
         var control = vm.ParameterControls[0];
         control.SelectedEnumIndex = -1;
@@ -350,7 +350,7 @@ public sealed class PluginPanelViewModelTests
             }
         };
 
-        vm.SelectPlugin(plugin);
+        vm.SelectPluginCommand.Execute(plugin);
 
         var control = vm.ParameterControls[0];
         control.StringValue = @"C:\Presets\my_preset.json";
@@ -374,7 +374,7 @@ public sealed class PluginPanelViewModelTests
             }
         };
 
-        vm.SelectPlugin(plugin);
+        vm.SelectPluginCommand.Execute(plugin);
 
         var control = vm.ParameterControls[0];
         control.StringValue = @"C:\Output";
@@ -397,7 +397,7 @@ public sealed class PluginPanelViewModelTests
                 }
             }
         };
-        vm.SelectPlugin(plugin);
+        vm.SelectPluginCommand.Execute(plugin);
 
         vm.ParameterControls[0].NumericValue = 0.9;
 
@@ -427,7 +427,7 @@ public sealed class PluginPanelViewModelTests
                 }
             }
         };
-        vm.SelectPlugin(plugin);
+        vm.SelectPluginCommand.Execute(plugin);
 
         var values = vm.GetCurrentParameterValues();
 
@@ -454,8 +454,8 @@ public sealed class PluginPanelViewModelTests
             }
         };
 
-        vm.SelectPlugin(plugin1);
-        vm.SelectPlugin(plugin2);
+        vm.SelectPluginCommand.Execute(plugin1);
+        vm.SelectPluginCommand.Execute(plugin2);
 
         vm.ParameterControls.Should().HaveCount(2);
         vm.ParameterControls[0].Schema.Name.Should().Be("x");
@@ -502,7 +502,7 @@ public sealed class PluginPanelViewModelTests
                 new ParameterSchema { Name = "param1", ParameterType = ParameterType.String }
             }
         };
-        vm.SelectPlugin(plugin);
+        vm.SelectPluginCommand.Execute(plugin);
 
         vm.ApplyParametersCommand.Execute(null);
     }

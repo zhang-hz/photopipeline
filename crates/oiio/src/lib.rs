@@ -1,6 +1,6 @@
+#![allow(dead_code, clippy::needless_return)]
+
 use photopipeline_core::*;
-use std::ffi::{CStr, CString};
-use std::os::raw::{c_char, c_void};
 
 #[cfg(oiio_found)]
 mod ffi {

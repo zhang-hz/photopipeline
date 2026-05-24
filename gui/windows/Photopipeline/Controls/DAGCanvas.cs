@@ -1,4 +1,5 @@
 using Microsoft.Graphics.Canvas;
+using Microsoft.Graphics.Canvas.Text;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
@@ -7,8 +8,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Photopipeline.Models;
 using Photopipeline.ViewModels;
-using System;
-using System.Linq;
+using System.ComponentModel;
 using Windows.Foundation;
 using Windows.UI;
 
@@ -18,6 +18,7 @@ public sealed class DAGCanvas : UserControl
 {
     private CanvasControl? _canvasControl;
     private PipelineEditorViewModel? _viewModel;
+    private PropertyChangedEventHandler? _propertyChangedHandler;
 
     private static readonly Color NodeBackgroundColor = Color.FromArgb(255, 40, 44, 52);
     private static readonly Color NodeBorderColor = Color.FromArgb(255, 80, 84, 92);
@@ -54,12 +55,19 @@ public sealed class DAGCanvas : UserControl
         if (this.DataContext is PipelineEditorViewModel vm)
         {
             _viewModel = vm;
-            _viewModel.PropertyChanged += (s, args) => _canvasControl?.Invalidate();
+            _propertyChangedHandler = (s, args) => _canvasControl?.Invalidate();
+            _viewModel.PropertyChanged += _propertyChangedHandler;
         }
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        if (_viewModel is not null && _propertyChangedHandler is not null)
+        {
+            _viewModel.PropertyChanged -= _propertyChangedHandler;
+            _propertyChangedHandler = null;
+        }
+
         if (_canvasControl is not null)
         {
             _canvasControl.Draw -= OnDraw;
@@ -70,6 +78,8 @@ public sealed class DAGCanvas : UserControl
             _canvasControl.RemoveFromVisualTree();
             _canvasControl = null;
         }
+
+        _viewModel = null;
     }
 
     private void OnDraw(CanvasControl sender, CanvasDrawEventArgs args)
@@ -90,21 +100,16 @@ public sealed class DAGCanvas : UserControl
 
             var midX = (x1 + x2) / 2;
 
-            ds.DrawBezier(
-                new System.Numerics.Vector2(x1, y1),
-                new System.Numerics.Vector2(midX, y1),
-                new System.Numerics.Vector2(midX, y2),
-                new System.Numerics.Vector2(x2, y2),
-                EdgeColor, 2.5f);
+            // Approximate cubic bezier with polyline segments
+            DrawBezierApproximation(ds, x1, y1, midX, y1, midX, y2, x2, y2, EdgeColor, 2.5f);
         }
 
         if (_viewModel.IsDrawingConnection)
         {
             ds.DrawLine(
-                new System.Numerics.Vector2((float)_viewModel.ConnectionLineX1, (float)_viewModel.ConnectionLineY1),
-                new System.Numerics.Vector2((float)_viewModel.ConnectionLineX2, (float)_viewModel.ConnectionLineY2),
-                Color.FromArgb(255, 96, 165, 250), 2.0f,
-                new CanvasStrokeStyle { DashStyle = CanvasDashStyle.Dash });
+                (float)_viewModel.ConnectionLineX1, (float)_viewModel.ConnectionLineY1,
+                (float)_viewModel.ConnectionLineX2, (float)_viewModel.ConnectionLineY2,
+                Color.FromArgb(255, 96, 165, 250), 2.0f);
         }
 
         foreach (var node in _viewModel.Nodes)
@@ -160,7 +165,7 @@ public sealed class DAGCanvas : UserControl
             new CanvasTextFormat
             {
                 FontSize = 11,
-                FontWeight = Windows.UI.Text.FontWeights.SemiBold,
+                FontWeight = new Windows.UI.Text.FontWeight(600),
                 WordWrapping = CanvasWordWrapping.NoWrap,
                 VerticalAlignment = CanvasVerticalAlignment.Top,
             });
@@ -174,9 +179,32 @@ public sealed class DAGCanvas : UserControl
                 new CanvasTextFormat
                 {
                     FontSize = 9,
-                    FontWeight = Windows.UI.Text.FontWeights.Normal,
+                    FontWeight = new Windows.UI.Text.FontWeight(400),
                     WordWrapping = CanvasWordWrapping.NoWrap,
                 });
+        }
+    }
+
+    private static void DrawBezierApproximation(CanvasDrawingSession ds,
+        float x1, float y1, float cx1, float cy1, float cx2, float cy2, float x2, float y2,
+        Color color, float strokeWidth, int segments = 16)
+    {
+        System.Span<System.Numerics.Vector2> span = new System.Numerics.Vector2[segments + 1];
+        for (int i = 0; i <= segments; i++)
+        {
+            float t = (float)i / segments;
+            float t2 = t * t;
+            float t3 = t2 * t;
+            float u = 1 - t;
+            float u2 = u * u;
+            float u3 = u2 * u;
+            span[i] = new System.Numerics.Vector2(
+                u3 * x1 + 3 * u2 * t * cx1 + 3 * u * t2 * cx2 + t3 * x2,
+                u3 * y1 + 3 * u2 * t * cy1 + 3 * u * t2 * cy2 + t3 * y2);
+        }
+        for (int i = 0; i < segments; i++)
+        {
+            ds.DrawLine(span[i], span[i + 1], color, strokeWidth);
         }
     }
 
@@ -205,7 +233,7 @@ public sealed class DAGCanvas : UserControl
         }
         else
         {
-            _viewModel.ClearSelection();
+            _viewModel.ClearSelectionCommand.Execute(null);
         }
     }
 

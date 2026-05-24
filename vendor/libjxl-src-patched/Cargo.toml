@@ -1,0 +1,13 @@
+[package]
+name = "libjxl-src"
+version = "0.7.6"
+edition = "2018"
+license = "ISC"
+description = "Patched: links vcpkg pre-built libjxl instead of building from source"
+
+[features]
+default = []
+instant-build = []
+
+[dependencies]
+cmake = "0.1.48"

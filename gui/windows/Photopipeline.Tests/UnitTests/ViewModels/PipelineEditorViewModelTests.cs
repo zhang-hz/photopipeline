@@ -174,8 +174,7 @@ public sealed class PipelineEditorViewModelTests
 
         vm.RemoveNodeCommand.Execute(n1);
 
-        vm.SelectedNode.Should().NotBeNull();
-        vm.SelectedNode.Should().Be(vm.Nodes[0]);
+        vm.SelectedNode.Should().BeNull();
     }
 
     [Fact]

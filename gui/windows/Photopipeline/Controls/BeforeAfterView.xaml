@@ -15,7 +15,7 @@
         </Grid.ColumnDefinitions>
 
         <!-- Before Image -->
-        <Grid Grid.Column="0" x:Name="BeforePanel" ClipToBounds="True">
+        <Grid Grid.Column="0" x:Name="BeforePanel">
             <Border Background="{ThemeResource LayerFillColorDefaultBrush}">
                 <Image x:Name="BeforeImage"
                        Source="{x:Null}"
@@ -36,7 +36,6 @@
         <Grid Grid.Column="1" x:Name="SplitHandle" Width="4"
               ManipulationMode="TranslateX"
               ManipulationDelta="OnSplitHandleDrag"
-              Cursor="SizeWestEast"
               HorizontalAlignment="Center">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -51,11 +50,8 @@
                     Background="White"
                     CornerRadius="2"
                     VerticalAlignment="Center"
-                    HorizontalAlignment="Center">
-                <Border.Effect>
-                    <DropShadowEffect BlurRadius="4" Opacity="0.4" ShadowDepth="0" />
-                </Border.Effect>
-            </Border>
+                    HorizontalAlignment="Center"
+                    Shadow="{ThemeResource SharedShadow}" />
 
             <StackPanel Grid.Column="1" HorizontalAlignment="Center"
                         VerticalAlignment="Center" Spacing="4">
@@ -65,7 +61,7 @@
         </Grid>
 
         <!-- After Image -->
-        <Grid Grid.Column="2" x:Name="AfterPanel" ClipToBounds="True">
+        <Grid Grid.Column="2" x:Name="AfterPanel">
             <Border Background="{ThemeResource LayerFillColorDefaultBrush}">
                 <Image x:Name="AfterImage"
                        Source="{x:Null}"

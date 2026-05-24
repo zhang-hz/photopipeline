@@ -10,7 +10,9 @@ use photopipeline_plugin::{
     EnumOption, FormatProcessor, GuiLayout, GuiSchema, GuiSection, ParameterField, ParameterSchema,
     ParameterSection, ParameterSet, ParameterType, Plugin, PreviewMode, SectionStyle,
 };
+use tiff::encoder::compression::{Deflate, Lzw, Packbits, Uncompressed};
 use tiff::encoder::{TiffEncoder, colortype};
+use tiff::tags::Tag;
 
 static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterSchema {
     version: 1,
@@ -297,65 +299,220 @@ impl FormatProcessor for TiffEncoderPlugin {
         options: &EncodeOptions,
     ) -> PluginResult<Vec<u8>> {
         let _timer = PerfTimer::with_target("encode_tiff", &format!("plugins.{}", self.id()));
-        let _ = metadata;
-        let _ = options;
+
+        let compression = options.compression.as_deref().unwrap_or("deflate");
+        let embed_icc = options.embed_profile.unwrap_or(true);
+
+        tracing::info!(
+            format = ?image.format,
+            layout = ?image.layout,
+            width = image.width,
+            height = image.height,
+            compression = compression,
+            embed_icc = embed_icc,
+            "TIFF encoding {}x{} {:?}/{:?}",
+            image.width, image.height, image.layout, image.format,
+        );
 
         let mut output_buf = Vec::new();
+        let use_bigtiff = image.width as u64
+            * image.height as u64
+            * image.format.bytes_per_channel() as u64
+            * image.layout.channel_count() as u64
+            > 4_000_000_000;
 
-        match (image.layout, image.format) {
-            (ChannelLayout::RGB, PixelFormat::U8) => {
-                let mut tiff = TiffEncoder::new(std::io::Cursor::new(&mut output_buf))
-                    .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
-                let img = tiff
-                    .new_image::<colortype::RGB8>(image.width as u32, image.height as u32)
-                    .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
-                img.write_data(&image.data.data)
-                    .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
-            }
-            (ChannelLayout::RGB, PixelFormat::U16) => {
-                let mut tiff = TiffEncoder::new(std::io::Cursor::new(&mut output_buf))
-                    .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
-                let data_u16: &[u16] = bytemuck::cast_slice(&image.data.data);
-                let img = tiff
-                    .new_image::<colortype::RGB16>(image.width as u32, image.height as u32)
-                    .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
-                img.write_data(bytemuck::cast_slice(data_u16))
-                    .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
-            }
-            (ChannelLayout::RGBA, PixelFormat::U8) => {
-                let mut tiff = TiffEncoder::new(std::io::Cursor::new(&mut output_buf))
-                    .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
-                let img = tiff
-                    .new_image::<colortype::RGBA8>(image.width as u32, image.height as u32)
-                    .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
-                img.write_data(&image.data.data)
-                    .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
-            }
-            (ChannelLayout::Gray, PixelFormat::U8) => {
-                let mut tiff = TiffEncoder::new(std::io::Cursor::new(&mut output_buf))
-                    .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
-                let img = tiff
-                    .new_image::<colortype::Gray8>(image.width as u32, image.height as u32)
-                    .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
-                img.write_data(&image.data.data)
-                    .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
-            }
-            _ => {
-                return Err(PluginError::EncodingFailed(format!(
-                    "unsupported pixel format {:?} for TIFF",
-                    image.format
-                )));
-            }
+        if use_bigtiff {
+            tracing::info!("TIFF output exceeds 4GB, using BigTIFF format");
+        }
+
+        macro_rules! encode_tiff {
+            ($color:ty, $comp:ty, $comp_expr:expr, $data:expr) => {{
+                let writer = std::io::Cursor::new(&mut output_buf);
+                if use_bigtiff {
+                    let mut tiff = TiffEncoder::new_big(writer)
+                        .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
+                    let mut img = tiff
+                        .new_image_with_compression::<$color, $comp>(
+                            image.width as u32,
+                            image.height as u32,
+                            $comp_expr,
+                        )
+                        .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
+                    if embed_icc {
+                        if let Some(ref icc) = image.icc_profile {
+                            let _ = img.encoder().write_tag(Tag::Unknown(34675), icc.as_slice());
+                        }
+                    }
+                    img.write_data($data)
+                        .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
+                } else {
+                    let mut tiff = TiffEncoder::new(writer)
+                        .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
+                    let mut img = tiff
+                        .new_image_with_compression::<$color, $comp>(
+                            image.width as u32,
+                            image.height as u32,
+                            $comp_expr,
+                        )
+                        .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
+                    if embed_icc {
+                        if let Some(ref icc) = image.icc_profile {
+                            let _ = img.encoder().write_tag(Tag::Unknown(34675), icc.as_slice());
+                        }
+                    }
+                    img.write_data($data)
+                        .map_err(|e| PluginError::EncodingFailed(e.to_string()))?;
+                }
+            }};
+        }
+
+        match compression {
+            "deflate" | "zip" => match (image.layout, image.format) {
+                (ChannelLayout::RGB, PixelFormat::U8) => encode_tiff!(
+                    colortype::RGB8,
+                    Deflate,
+                    Deflate::default(),
+                    &image.data.data
+                ),
+                (ChannelLayout::RGB, PixelFormat::U16) => {
+                    let data_u16: &[u16] = bytemuck::cast_slice(&image.data.data);
+                    encode_tiff!(colortype::RGB16, Deflate, Deflate::default(), data_u16)
+                }
+                (ChannelLayout::RGB, PixelFormat::F32) => {
+                    let data_f32 = image.data.as_f32_slice();
+                    encode_tiff!(colortype::RGB32Float, Deflate, Deflate::default(), data_f32)
+                }
+                (ChannelLayout::RGBA, PixelFormat::U8) => encode_tiff!(
+                    colortype::RGBA8,
+                    Deflate,
+                    Deflate::default(),
+                    &image.data.data
+                ),
+                (ChannelLayout::Gray, PixelFormat::U8) => encode_tiff!(
+                    colortype::Gray8,
+                    Deflate,
+                    Deflate::default(),
+                    &image.data.data
+                ),
+                (ChannelLayout::Gray, PixelFormat::U16) => {
+                    let data_u16: &[u16] = bytemuck::cast_slice(&image.data.data);
+                    encode_tiff!(colortype::Gray16, Deflate, Deflate::default(), data_u16)
+                }
+                _ => {
+                    return Err(PluginError::EncodingFailed(format!(
+                        "unsupported pixel format {:?}/{:?} for TIFF",
+                        image.layout, image.format
+                    )));
+                }
+            },
+            "lzw" => match (image.layout, image.format) {
+                (ChannelLayout::RGB, PixelFormat::U8) => {
+                    encode_tiff!(colortype::RGB8, Lzw, Lzw, &image.data.data)
+                }
+                (ChannelLayout::RGB, PixelFormat::U16) => {
+                    let data_u16: &[u16] = bytemuck::cast_slice(&image.data.data);
+                    encode_tiff!(colortype::RGB16, Lzw, Lzw, data_u16)
+                }
+                (ChannelLayout::RGB, PixelFormat::F32) => {
+                    let data_f32 = image.data.as_f32_slice();
+                    encode_tiff!(colortype::RGB32Float, Lzw, Lzw, data_f32)
+                }
+                (ChannelLayout::RGBA, PixelFormat::U8) => {
+                    encode_tiff!(colortype::RGBA8, Lzw, Lzw, &image.data.data)
+                }
+                (ChannelLayout::Gray, PixelFormat::U8) => {
+                    encode_tiff!(colortype::Gray8, Lzw, Lzw, &image.data.data)
+                }
+                (ChannelLayout::Gray, PixelFormat::U16) => {
+                    let data_u16: &[u16] = bytemuck::cast_slice(&image.data.data);
+                    encode_tiff!(colortype::Gray16, Lzw, Lzw, data_u16)
+                }
+                _ => {
+                    return Err(PluginError::EncodingFailed(format!(
+                        "unsupported pixel format {:?}/{:?} for TIFF",
+                        image.layout, image.format
+                    )));
+                }
+            },
+            "packbits" => match (image.layout, image.format) {
+                (ChannelLayout::RGB, PixelFormat::U8) => {
+                    encode_tiff!(colortype::RGB8, Packbits, Packbits, &image.data.data)
+                }
+                (ChannelLayout::RGB, PixelFormat::U16) => {
+                    let data_u16: &[u16] = bytemuck::cast_slice(&image.data.data);
+                    encode_tiff!(colortype::RGB16, Packbits, Packbits, data_u16)
+                }
+                (ChannelLayout::RGB, PixelFormat::F32) => {
+                    let data_f32 = image.data.as_f32_slice();
+                    encode_tiff!(colortype::RGB32Float, Packbits, Packbits, data_f32)
+                }
+                (ChannelLayout::RGBA, PixelFormat::U8) => {
+                    encode_tiff!(colortype::RGBA8, Packbits, Packbits, &image.data.data)
+                }
+                (ChannelLayout::Gray, PixelFormat::U8) => {
+                    encode_tiff!(colortype::Gray8, Packbits, Packbits, &image.data.data)
+                }
+                (ChannelLayout::Gray, PixelFormat::U16) => {
+                    let data_u16: &[u16] = bytemuck::cast_slice(&image.data.data);
+                    encode_tiff!(colortype::Gray16, Packbits, Packbits, data_u16)
+                }
+                _ => {
+                    return Err(PluginError::EncodingFailed(format!(
+                        "unsupported pixel format {:?}/{:?} for TIFF",
+                        image.layout, image.format
+                    )));
+                }
+            },
+            _ => match (image.layout, image.format) {
+                (ChannelLayout::RGB, PixelFormat::U8) => encode_tiff!(
+                    colortype::RGB8,
+                    Uncompressed,
+                    Uncompressed,
+                    &image.data.data
+                ),
+                (ChannelLayout::RGB, PixelFormat::U16) => {
+                    let data_u16: &[u16] = bytemuck::cast_slice(&image.data.data);
+                    encode_tiff!(colortype::RGB16, Uncompressed, Uncompressed, data_u16)
+                }
+                (ChannelLayout::RGB, PixelFormat::F32) => {
+                    let data_f32 = image.data.as_f32_slice();
+                    encode_tiff!(colortype::RGB32Float, Uncompressed, Uncompressed, data_f32)
+                }
+                (ChannelLayout::RGBA, PixelFormat::U8) => encode_tiff!(
+                    colortype::RGBA8,
+                    Uncompressed,
+                    Uncompressed,
+                    &image.data.data
+                ),
+                (ChannelLayout::Gray, PixelFormat::U8) => encode_tiff!(
+                    colortype::Gray8,
+                    Uncompressed,
+                    Uncompressed,
+                    &image.data.data
+                ),
+                (ChannelLayout::Gray, PixelFormat::U16) => {
+                    let data_u16: &[u16] = bytemuck::cast_slice(&image.data.data);
+                    encode_tiff!(colortype::Gray16, Uncompressed, Uncompressed, data_u16)
+                }
+                _ => {
+                    return Err(PluginError::EncodingFailed(format!(
+                        "unsupported pixel format {:?}/{:?} for TIFF",
+                        image.layout, image.format
+                    )));
+                }
+            },
         }
 
         tracing::info!(
-            target = format!("plugins.{}", self.id()),
             width = image.width,
             height = image.height,
             output_bytes = output_buf.len(),
-            "TIFF encoded"
+            bigtiff = use_bigtiff,
+            "TIFF encoded ({} bytes)",
+            output_buf.len(),
         );
 
+        let _ = metadata;
         Ok(output_buf)
     }
 }

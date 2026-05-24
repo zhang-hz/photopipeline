@@ -1,0 +1,15 @@
+{
+  "name": "photopipeline",
+  "version": "0.1.0",
+  "dependencies": [
+    "libheif",
+    "libjxl",
+    "libraw",
+    "lcms2",
+    "libpng",
+    "tiff",
+    "libjpeg-turbo",
+    "zlib",
+    "protobuf"
+  ]
+}

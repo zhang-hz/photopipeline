@@ -1,18 +1,13 @@
 use std::sync::Mutex;
 use tracing_subscriber::EnvFilter;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum LogOutput {
+    #[default]
     Console,
     File(String),
     Journald,
     None,
-}
-
-impl Default for LogOutput {
-    fn default() -> Self {
-        LogOutput::Console
-    }
 }
 
 #[derive(Debug, Clone)]

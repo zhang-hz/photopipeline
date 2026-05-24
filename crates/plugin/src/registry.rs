@@ -11,9 +11,7 @@ pub struct Registry {
     metadata_processors: DashMap<PluginId, Arc<dyn MetadataProcessor>>,
     pixel_processors: DashMap<PluginId, Arc<dyn PixelProcessor>>,
     format_processors: DashMap<PluginId, Arc<dyn FormatProcessor>>,
-    gpu_processors: DashMap<PluginId, Arc<dyn GpuProcessor>>,
     ai_processors: DashMap<PluginId, Arc<dyn AiProcessor>>,
-    external_tool_processors: DashMap<PluginId, Arc<dyn ExternalToolProcessor>>,
 }
 
 struct RegistryEntry {
@@ -37,9 +35,7 @@ impl Registry {
             metadata_processors: DashMap::new(),
             pixel_processors: DashMap::new(),
             format_processors: DashMap::new(),
-            gpu_processors: DashMap::new(),
             ai_processors: DashMap::new(),
-            external_tool_processors: DashMap::new(),
         }
     }
 
@@ -88,9 +84,7 @@ impl Registry {
         self.metadata_processors.remove(id);
         self.pixel_processors.remove(id);
         self.format_processors.remove(id);
-        self.gpu_processors.remove(id);
         self.ai_processors.remove(id);
-        self.external_tool_processors.remove(id);
         self.entries.remove(id).map(|(_, entry)| entry.plugin)
     }
 
@@ -114,21 +108,10 @@ impl Registry {
         self.format_processors.get(id).map(|e| e.value().clone())
     }
 
-    pub fn get_gpu_processor(&self, id: &PluginId) -> Option<Arc<dyn GpuProcessor>> {
-        self.gpu_processors.get(id).map(|e| e.value().clone())
-    }
-
-    pub fn get_ai_processor(&self, id: &PluginId) -> Option<Arc<dyn AiProcessor>> {
-        self.ai_processors.get(id).map(|e| e.value().clone())
-    }
-
-    pub fn get_external_tool_processor(
-        &self,
-        id: &PluginId,
-    ) -> Option<Arc<dyn ExternalToolProcessor>> {
-        self.external_tool_processors
-            .get(id)
-            .map(|e| e.value().clone())
+    pub fn iter_format_processors(&self) -> impl Iterator<Item = Arc<dyn FormatProcessor>> + '_ {
+        self.format_processors
+            .iter()
+            .map(|entry| entry.value().clone())
     }
 
     pub fn query(&self, q: &PluginQuery) -> Vec<Arc<dyn Plugin>> {
@@ -239,27 +222,10 @@ impl Registry {
         Ok(())
     }
 
-    pub fn register_gpu_processor(&self, plugin: Arc<dyn GpuProcessor>) -> PluginResult<()> {
-        let id = plugin.id().clone();
-        tracing::debug!(plugin_id = %id, "Registering GPU processor: {}", id);
-        self.gpu_processors.insert(id, plugin);
-        Ok(())
-    }
-
     pub fn register_ai_processor(&self, plugin: Arc<dyn AiProcessor>) -> PluginResult<()> {
         let id = plugin.id().clone();
         tracing::debug!(plugin_id = %id, "Registering AI processor: {}", id);
         self.ai_processors.insert(id, plugin);
-        Ok(())
-    }
-
-    pub fn register_external_tool_processor(
-        &self,
-        plugin: Arc<dyn ExternalToolProcessor>,
-    ) -> PluginResult<()> {
-        let id = plugin.id().clone();
-        tracing::debug!(plugin_id = %id, "Registering external tool processor: {}", id);
-        self.external_tool_processors.insert(id, plugin);
         Ok(())
     }
 }

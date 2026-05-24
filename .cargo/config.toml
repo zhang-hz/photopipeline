@@ -1,0 +1,2 @@
+[env]
+VCPKG_ROOT = { value = "C:/vcpkg", force = false }

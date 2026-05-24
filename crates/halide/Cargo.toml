@@ -3,9 +3,6 @@ name = "photopipeline-halide"
 version.workspace = true
 edition.workspace = true
 
-[features]
-default = []
-halide-runtime = []
 
 [dependencies]
 photopipeline-core = { path = "../core" }

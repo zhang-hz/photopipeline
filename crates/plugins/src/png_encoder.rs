@@ -309,7 +309,7 @@ impl FormatProcessor for PngEncoderPlugin {
         &self,
         image: &PixelBuffer,
         metadata: &Metadata,
-        options: &EncodeOptions,
+        _options: &EncodeOptions,
     ) -> PluginResult<Vec<u8>> {
         let _timer = PerfTimer::with_target("encode_png", &format!("plugins.{}", self.id()));
 

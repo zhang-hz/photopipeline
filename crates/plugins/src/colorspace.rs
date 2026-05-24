@@ -637,6 +637,23 @@ impl PixelProcessor for ColorSpacePlugin {
             });
         }
 
+        if convert_via_matrix(input, output, &source_cs, &target_cs).is_ok() {
+            tracing::warn!("Halide and lcms2 unavailable, using pure Rust matrix conversion");
+            if embed_icc {
+                output.icc_profile = Some(generate_icc_profile(&source_cs, &target_cs));
+            }
+            let pixels = output.pixel_count();
+            progress.set_progress(1.0, "done (matrix)");
+            return Ok(ProcessingStats {
+                elapsed_ms: 0,
+                cpu_time_ms: 0,
+                gpu_time_ms: Some(0),
+                peak_memory_mb: (input.data.data.len() * 2) as u64 / (1024 * 1024),
+                input_pixels: input.pixel_count(),
+                output_pixels: pixels,
+            });
+        }
+
         Err(PluginError::Internal {
             plugin: self.id.clone(),
             message: format!(
@@ -668,8 +685,8 @@ mod lcms2_ffi {
     pub const INTENT_SATURATION: c_uint = 2;
     pub const INTENT_ABSOLUTE_COLORIMETRIC: c_uint = 3;
 
-    #[link(name = "lcms2")]
-    extern "C" {
+    // Link directives provided by lcms2-sys build.rs
+    unsafe extern "C" {
         pub fn cmsCreate_sRGBProfile() -> CmsHPROFILE;
         pub fn cmsOpenProfileFromMem(data: *const c_void, size: c_uint) -> CmsHPROFILE;
         pub fn cmsCloseProfile(h: CmsHPROFILE);
@@ -691,400 +708,6 @@ mod lcms2_ffi {
     }
 }
 
-#[cfg(feature = "lcms2-native")]
-mod lcms2_profile_builder {
-    use photopipeline_core::{ColorPrimaries, ColorSpace, TransferFunction, WhitePoint};
-
-    pub fn primaries_chromaticities(p: &ColorPrimaries) -> ((f64, f64), (f64, f64), (f64, f64)) {
-        match p {
-            ColorPrimaries::SRGB | ColorPrimaries::BT709 => {
-                ((0.6400, 0.3300), (0.3000, 0.6000), (0.1500, 0.0600))
-            }
-            ColorPrimaries::DisplayP3 | ColorPrimaries::DCIP3 => {
-                ((0.6800, 0.3200), (0.2650, 0.6900), (0.1500, 0.0600))
-            }
-            ColorPrimaries::AdobeRGB => ((0.6400, 0.3300), (0.2100, 0.7100), (0.1500, 0.0600)),
-            ColorPrimaries::BT2020 | ColorPrimaries::Rec2100 => {
-                ((0.7080, 0.2920), (0.1700, 0.7970), (0.1310, 0.0460))
-            }
-            ColorPrimaries::ACEScg | ColorPrimaries::ACES => {
-                ((0.7130, 0.2930), (0.1650, 0.8300), (0.1280, 0.0440))
-            }
-            ColorPrimaries::ProPhoto => ((0.7347, 0.2653), (0.1596, 0.8404), (0.0366, 0.0001)),
-            ColorPrimaries::CIEXYZ => ((1.0, 0.0), (0.0, 1.0), (0.0, 0.0)),
-        }
-    }
-
-    pub fn white_point_chromaticity(wp: &WhitePoint) -> (f64, f64) {
-        match wp {
-            WhitePoint::D50 => (0.34567, 0.35850),
-            WhitePoint::D55 => (0.33242, 0.34743),
-            WhitePoint::D60 => (0.32168, 0.33767),
-            WhitePoint::D65 => (0.31270, 0.32900),
-            WhitePoint::D75 => (0.29900, 0.31490),
-            WhitePoint::DCI => (0.31400, 0.35100),
-            WhitePoint::E => (1.0 / 3.0, 1.0 / 3.0),
-            WhitePoint::Custom(x, _) => (*x as f64, 0.32900),
-        }
-    }
-
-    pub fn white_point_to_xyz(wp: &WhitePoint) -> (f64, f64, f64) {
-        match wp {
-            WhitePoint::D50 => (0.96422, 1.0, 0.82521),
-            WhitePoint::D55 => (0.95682, 1.0, 0.92149),
-            WhitePoint::D60 => (0.952646, 1.0, 1.008825),
-            WhitePoint::D65 => (0.95047, 1.0, 1.08883),
-            WhitePoint::D75 => (0.94972, 1.0, 1.22638),
-            WhitePoint::DCI => (0.98000, 1.0, 1.18000),
-            WhitePoint::E => (1.0, 1.0, 1.0),
-            WhitePoint::Custom(_, _) => (0.95047, 1.0, 1.08883),
-        }
-    }
-
-    fn mat3_inverse(m: &[[f64; 3]; 3]) -> [[f64; 3]; 3] {
-        let det = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
-            - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
-            + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
-        let inv_det = 1.0 / det;
-        [
-            [
-                (m[1][1] * m[2][2] - m[1][2] * m[2][1]) * inv_det,
-                (m[0][2] * m[2][1] - m[0][1] * m[2][2]) * inv_det,
-                (m[0][1] * m[1][2] - m[0][2] * m[1][1]) * inv_det,
-            ],
-            [
-                (m[1][2] * m[2][0] - m[1][0] * m[2][2]) * inv_det,
-                (m[0][0] * m[2][2] - m[0][2] * m[2][0]) * inv_det,
-                (m[0][2] * m[1][0] - m[0][0] * m[1][2]) * inv_det,
-            ],
-            [
-                (m[1][0] * m[2][1] - m[1][1] * m[2][0]) * inv_det,
-                (m[0][1] * m[2][0] - m[0][0] * m[2][1]) * inv_det,
-                (m[0][0] * m[1][1] - m[0][1] * m[1][0]) * inv_det,
-            ],
-        ]
-    }
-
-    fn mat3_mul_vec3(m: &[[f64; 3]; 3], v: &[f64; 3]) -> [f64; 3] {
-        [
-            m[0][0] * v[0] + m[0][1] * v[1] + m[0][2] * v[2],
-            m[1][0] * v[0] + m[1][1] * v[1] + m[1][2] * v[2],
-            m[2][0] * v[0] + m[2][1] * v[1] + m[2][2] * v[2],
-        ]
-    }
-
-    fn mat3_mul(a: &[[f64; 3]; 3], b: &[[f64; 3]; 3]) -> [[f64; 3]; 3] {
-        let mut result = [[0.0; 3]; 3];
-        for i in 0..3 {
-            for j in 0..3 {
-                result[i][j] = a[i][0] * b[0][j] + a[i][1] * b[1][j] + a[i][2] * b[2][j];
-            }
-        }
-        result
-    }
-
-    fn bradford_cat(src_xyz: &[f64; 3], dst_xyz: &[f64; 3]) -> [[f64; 3]; 3] {
-        let bfd = [
-            [0.8951000, 0.2664000, -0.1614000],
-            [-0.7502000, 1.7135000, 0.0367000],
-            [0.0389000, -0.0685000, 1.0296000],
-        ];
-        let bfd_inv = [
-            [0.9869929, -0.1470543, 0.1599627],
-            [0.4323053, 0.5183603, 0.0492912],
-            [-0.0085287, 0.0400428, 0.9684867],
-        ];
-
-        let src_lms = mat3_mul_vec3(&bfd, src_xyz);
-        let dst_lms = mat3_mul_vec3(&bfd, dst_xyz);
-
-        let d = [
-            dst_lms[0] / src_lms[0],
-            dst_lms[1] / src_lms[1],
-            dst_lms[2] / src_lms[2],
-        ];
-
-        let mut m1 = [[0.0; 3]; 3];
-        for i in 0..3 {
-            for j in 0..3 {
-                m1[i][j] = d[i] * bfd[i][j];
-            }
-        }
-        mat3_mul(&bfd_inv, &m1)
-    }
-
-    pub fn compute_color_space_matrix(
-        primaries: &ColorPrimaries,
-        white_point: &WhitePoint,
-    ) -> ([f64; 3], [f64; 3], [f64; 3], [f64; 3]) {
-        let ((xr, yr), (xg, yg), (xb, yb)) = primaries_chromaticities(primaries);
-        let (xw, yw) = white_point_chromaticity(white_point);
-
-        let xr_xyz = xr / yr;
-        let zr_xyz = (1.0 - xr - yr) / yr;
-        let xg_xyz = xg / yg;
-        let zg_xyz = (1.0 - xg - yg) / yg;
-        let xb_xyz = xb / yb;
-        let zb_xyz = (1.0 - xb - yb) / yb;
-
-        let xw_xyz = xw / yw;
-        let zw_xyz = (1.0 - xw - yw) / yw;
-
-        let m_prim = [
-            [xr_xyz, xg_xyz, xb_xyz],
-            [1.0, 1.0, 1.0],
-            [zr_xyz, zg_xyz, zb_xyz],
-        ];
-        let m_inv = mat3_inverse(&m_prim);
-        let w_vec = [xw_xyz, 1.0, zw_xyz];
-        let s = mat3_mul_vec3(&m_inv, &w_vec);
-
-        let rxyz = [s[0] * xr_xyz, s[0] * 1.0, s[0] * zr_xyz];
-        let gxyz = [s[1] * xg_xyz, s[1] * 1.0, s[1] * zg_xyz];
-        let bxyz = [s[2] * xb_xyz, s[2] * 1.0, s[2] * zb_xyz];
-        let wtpt_native = [xw_xyz, 1.0, zw_xyz];
-
-        let wp_src = white_point_to_xyz(white_point);
-        let wp_d50 = white_point_to_xyz(&WhitePoint::D50);
-
-        if (wp_src.0 - wp_d50.0).abs() < 0.001
-            && (wp_src.1 - wp_d50.1).abs() < 0.001
-            && (wp_src.2 - wp_d50.2).abs() < 0.001
-        {
-            return (rxyz, gxyz, bxyz, wtpt_native);
-        }
-
-        let cat = bradford_cat(
-            &[wp_src.0, wp_src.1, wp_src.2],
-            &[wp_d50.0, wp_d50.1, wp_d50.2],
-        );
-        let rxyz_d50 = mat3_mul_vec3(&cat, &rxyz);
-        let gxyz_d50 = mat3_mul_vec3(&cat, &gxyz);
-        let bxyz_d50 = mat3_mul_vec3(&cat, &bxyz);
-        let wtpt_d50 = mat3_mul_vec3(&cat, &wtpt_native);
-
-        (rxyz_d50, gxyz_d50, bxyz_d50, wtpt_d50)
-    }
-
-    fn generate_trc_curve(tf: &TransferFunction) -> Vec<u8> {
-        const CURVE_ENTRIES: usize = 256;
-        let mut data = Vec::with_capacity(12 + CURVE_ENTRIES * 2);
-
-        data.extend_from_slice(b"curv");
-        data.extend_from_slice(&0u32.to_be_bytes());
-        data.extend_from_slice(&(CURVE_ENTRIES as u32).to_be_bytes());
-
-        for i in 0..CURVE_ENTRIES {
-            let x = i as f64 / (CURVE_ENTRIES - 1) as f64;
-            let y = match tf {
-                TransferFunction::Linear => x,
-                TransferFunction::SRGB => srgb_to_linear_f64(x),
-                TransferFunction::Gamma22 => x.powf(2.2),
-                TransferFunction::Gamma24 => x.powf(2.4),
-                TransferFunction::Gamma26 => x.powf(2.6),
-                TransferFunction::Gamma28 => x.powf(2.8),
-                TransferFunction::PQ => pq_eotf_normalized(x),
-                TransferFunction::HLG => hlg_oetf_inverse(x),
-                TransferFunction::SLog3 => x,
-                TransferFunction::LogC => x,
-                TransferFunction::Custom(g) => x.powf(*g),
-            };
-            let y16 = (y.clamp(0.0, 1.0) * 65535.0).round() as u16;
-            data.extend_from_slice(&y16.to_be_bytes());
-        }
-
-        data
-    }
-
-    fn srgb_to_linear_f64(v: f64) -> f64 {
-        if v <= 0.04045 {
-            v / 12.92
-        } else {
-            ((v + 0.055) / 1.055).powf(2.4)
-        }
-    }
-
-    fn pq_eotf_normalized(v: f64) -> f64 {
-        let m1 = 2610.0 / 16384.0;
-        let m2 = 2523.0 / 32.0;
-        let c1 = 3424.0 / 4096.0;
-        let c2 = 2413.0 / 128.0;
-        let c3 = 2392.0 / 128.0;
-
-        let v_pow = v.powf(1.0 / m2);
-        let num = (v_pow - c1).max(0.0);
-        let den = c2 - c3 * v_pow;
-        let linear = (num / den.max(1e-10)).powf(1.0 / m1);
-        linear / 10000.0
-    }
-
-    fn hlg_oetf_inverse(v: f64) -> f64 {
-        let a = 0.17883277;
-        let b = 1.0 - 4.0 * a;
-        let c = 0.5 - a * (4.0f64).ln();
-
-        if v <= 0.5 {
-            v * v / 3.0
-        } else {
-            (((v - c) / a).exp() + b) / 12.0
-        }
-    }
-
-    pub fn build_icc_v2_profile(
-        rxyz: &[f64; 3],
-        gxyz: &[f64; 3],
-        bxyz: &[f64; 3],
-        wtpt: &[f64; 3],
-        tf: &TransferFunction,
-        primaries: &ColorPrimaries,
-    ) -> Vec<u8> {
-        let desc = match primaries {
-            ColorPrimaries::SRGB => "sRGB IEC61966-2.1",
-            ColorPrimaries::DisplayP3 => "Display P3",
-            ColorPrimaries::AdobeRGB => "Adobe RGB (1998)",
-            ColorPrimaries::BT2020 => "ITU-R BT.2020",
-            ColorPrimaries::ProPhoto => "ProPhoto RGB",
-            ColorPrimaries::ACEScg => "ACEScg",
-            ColorPrimaries::ACES => "ACES",
-            ColorPrimaries::DCIP3 => "DCI-P3",
-            ColorPrimaries::Rec2100 => "ITU-R BT.2100",
-            ColorPrimaries::BT709 => "ITU-R BT.709",
-            ColorPrimaries::CIEXYZ => "CIE XYZ",
-        };
-
-        fn s15f16(v: f64) -> u32 {
-            (v * 65536.0).round() as i32 as u32
-        }
-
-        fn write_xyz_tag(data: &mut Vec<u8>, _sig: &[u8; 4], xyz: &[f64; 3]) {
-            let _offset = data.len();
-            data.extend_from_slice(b"XYZ ");
-            data.extend_from_slice(&0u32.to_be_bytes());
-            data.extend_from_slice(&s15f16(xyz[0]).to_be_bytes());
-            data.extend_from_slice(&s15f16(xyz[1]).to_be_bytes());
-            data.extend_from_slice(&s15f16(xyz[2]).to_be_bytes());
-        }
-
-        let mut tag_data: Vec<u8> = Vec::new();
-        let mut tag_table: Vec<(u32, usize, usize)> = Vec::new();
-
-        let rxyz_offset = tag_data.len();
-        write_xyz_tag(&mut tag_data, b"rXYZ", rxyz);
-        tag_table.push((0x7258595A, rxyz_offset, 20));
-
-        let gxyz_offset = tag_data.len();
-        write_xyz_tag(&mut tag_data, b"gXYZ", gxyz);
-        tag_table.push((0x6758595A, gxyz_offset, 20));
-
-        let bxyz_offset = tag_data.len();
-        write_xyz_tag(&mut tag_data, b"bXYZ", bxyz);
-        tag_table.push((0x6258595A, bxyz_offset, 20));
-
-        let wtpt_offset = tag_data.len();
-        write_xyz_tag(&mut tag_data, b"wtpt", wtpt);
-        tag_table.push((0x77747074, wtpt_offset, 20));
-
-        let trc = generate_trc_curve(tf);
-        let trc_size = trc.len();
-
-        let rtrc_offset = tag_data.len();
-        tag_data.extend_from_slice(&trc);
-        tag_table.push((0x72545243, rtrc_offset, trc_size));
-
-        let gtrc_offset = tag_data.len();
-        tag_data.extend_from_slice(&trc);
-        tag_table.push((0x67545243, gtrc_offset, trc_size));
-
-        let btrc_offset = tag_data.len();
-        tag_data.extend_from_slice(&trc);
-        tag_table.push((0x62545243, btrc_offset, trc_size));
-
-        let desc_ascii = format!("{}\0", desc);
-        let desc_payload_len = desc_ascii.len();
-        let desc_padded = (desc_payload_len + 3) & !3;
-
-        let mut desc_tag = Vec::with_capacity(12 + desc_padded + 16);
-        desc_tag.extend_from_slice(b"desc");
-        desc_tag.extend_from_slice(&0u32.to_be_bytes());
-        desc_tag.extend_from_slice(&(desc_payload_len as u32).to_be_bytes());
-        desc_tag.extend_from_slice(desc_ascii.as_bytes());
-        while desc_tag.len() < 12 + desc_padded {
-            desc_tag.push(0);
-        }
-        desc_tag.extend_from_slice(&0u32.to_be_bytes());
-        desc_tag.extend_from_slice(&0u32.to_be_bytes());
-        desc_tag.extend_from_slice(&0u32.to_be_bytes());
-        desc_tag.extend_from_slice(&0u32.to_be_bytes());
-
-        let desc_offset = tag_data.len();
-        let desc_size = desc_tag.len();
-        tag_data.extend_from_slice(&desc_tag);
-        tag_table.push((0x64657363, desc_offset, desc_size));
-
-        let header_size = 128;
-        let tag_table_size = 4 + tag_table.len() * 12;
-        let tag_data_offset = header_size + tag_table_size;
-        let total_size = tag_data_offset + tag_data.len();
-
-        let mut profile = Vec::with_capacity(total_size);
-        profile.resize(total_size, 0);
-
-        profile[0..4].copy_from_slice(&(total_size as u32).to_be_bytes());
-        profile[4..8].copy_from_slice(b"lcms");
-        profile[8..12].copy_from_slice(&0x04200000u32.to_be_bytes());
-        profile[12..16].copy_from_slice(b"mntr");
-        profile[16..20].copy_from_slice(b"RGB ");
-        profile[20..24].copy_from_slice(b"XYZ ");
-        profile[24..36].fill(0);
-        profile[36..40].copy_from_slice(b"acsp");
-        profile[40..44].fill(0);
-        profile[44..48].fill(0);
-        profile[48..52].fill(0);
-        profile[52..56].fill(0);
-        profile[56..64].fill(0);
-        profile[64..68].copy_from_slice(&0u32.to_be_bytes());
-        profile[68..72].copy_from_slice(&s15f16(0.9642).to_be_bytes());
-        profile[72..76].copy_from_slice(&s15f16(1.0).to_be_bytes());
-        profile[76..80].copy_from_slice(&s15f16(0.8249).to_be_bytes());
-        profile[80..84].fill(0);
-        profile[84..128].fill(0);
-
-        let table_start = 128;
-        profile[table_start..table_start + 4]
-            .copy_from_slice(&(tag_table.len() as u32).to_be_bytes());
-
-        for (i, (sig, data_off, size)) in tag_table.iter().enumerate() {
-            let entry_offset = table_start + 4 + i * 12;
-            let actual_offset = (tag_data_offset + data_off) as u32;
-            profile[entry_offset..entry_offset + 4].copy_from_slice(&sig.to_be_bytes());
-            profile[entry_offset + 4..entry_offset + 8]
-                .copy_from_slice(&actual_offset.to_be_bytes());
-            profile[entry_offset + 8..entry_offset + 12]
-                .copy_from_slice(&(*size as u32).to_be_bytes());
-        }
-
-        profile[tag_data_offset..tag_data_offset + tag_data.len()].copy_from_slice(&tag_data);
-
-        profile
-    }
-
-    pub fn color_space_to_icc_profile(cs: &ColorSpace) -> Option<Vec<u8>> {
-        if matches!((&cs.primaries, &cs.transfer), (ColorPrimaries::CIEXYZ, _)) {
-            return None;
-        }
-
-        let (rxyz, gxyz, bxyz, wtpt) = compute_color_space_matrix(&cs.primaries, &cs.white_point);
-        Some(build_icc_v2_profile(
-            &rxyz,
-            &gxyz,
-            &bxyz,
-            &wtpt,
-            &cs.transfer,
-            &cs.primaries,
-        ))
-    }
-}
-
 fn convert_via_lcms2(
     _input: &PixelBuffer,
     _output: &mut PixelBuffer,
@@ -1103,25 +726,29 @@ fn convert_via_lcms2(
     #[cfg(feature = "lcms2-native")]
     unsafe {
         use lcms2_ffi::*;
-        use lcms2_profile_builder::color_space_to_icc_profile;
+        use std::ffi::{c_uint, c_void};
 
         let src_icc =
-            color_space_to_icc_profile(_source_space).ok_or_else(|| PluginError::Internal {
-                plugin: "colorspace".into(),
-                message: format!(
-                    "unsupported source color space: {:?} + {:?}",
-                    _source_space.primaries, _source_space.transfer
-                ),
-            })?;
+            _source_space
+                .generate_icc_profile()
+                .ok_or_else(|| PluginError::Internal {
+                    plugin: "colorspace".into(),
+                    message: format!(
+                        "unsupported source color space: {:?} + {:?}",
+                        _source_space.primaries, _source_space.transfer
+                    ),
+                })?;
 
         let dst_icc =
-            color_space_to_icc_profile(_target_space).ok_or_else(|| PluginError::Internal {
-                plugin: "colorspace".into(),
-                message: format!(
-                    "unsupported target color space: {:?} + {:?}",
-                    _target_space.primaries, _target_space.transfer
-                ),
-            })?;
+            _target_space
+                .generate_icc_profile()
+                .ok_or_else(|| PluginError::Internal {
+                    plugin: "colorspace".into(),
+                    message: format!(
+                        "unsupported target color space: {:?} + {:?}",
+                        _target_space.primaries, _target_space.transfer
+                    ),
+                })?;
 
         let src_profile =
             cmsOpenProfileFromMem(src_icc.as_ptr() as *const c_void, src_icc.len() as u32);
@@ -1217,28 +844,148 @@ fn resolve_color_space(name: &str) -> ColorSpace {
 }
 
 fn generate_icc_profile(_source: &ColorSpace, target: &ColorSpace) -> Vec<u8> {
-    let desc = match target.primaries {
-        photopipeline_core::ColorPrimaries::SRGB => "sRGB IEC61966-2.1",
-        photopipeline_core::ColorPrimaries::DisplayP3 => "Display P3",
-        photopipeline_core::ColorPrimaries::AdobeRGB => "Adobe RGB (1998)",
-        photopipeline_core::ColorPrimaries::BT2020 => "ITU-R BT.2020",
-        _ => "Custom Color Space",
-    };
+    target.generate_icc_profile().unwrap_or_else(|| {
+        format!(
+            "ICC_PROFILE:{}:{:?}\n",
+            target.primaries.description(),
+            target.white_point
+        )
+        .into_bytes()
+    })
+}
 
-    format!(
-        "ICC_PROFILE_PLACEHOLDER:{}:{}:{:?}:{:?}\n",
-        desc,
-        match target.transfer {
-            photopipeline_core::TransferFunction::SRGB => "srgb-trc",
-            photopipeline_core::TransferFunction::Linear => "linear",
-            photopipeline_core::TransferFunction::Gamma22 => "gamma2.2",
-            photopipeline_core::TransferFunction::PQ => "pq",
-            _ => "custom",
-        },
-        target.white_point,
-        target.hdr_nits,
-    )
-    .into_bytes()
+fn convert_via_matrix(
+    input: &PixelBuffer,
+    output: &mut PixelBuffer,
+    source_space: &ColorSpace,
+    target_space: &ColorSpace,
+) -> PluginResult<()> {
+    let matrix = source_space
+        .conversion_matrix_to(target_space)
+        .ok_or_else(|| PluginError::Internal {
+            plugin: "colorspace".into(),
+            message: format!(
+                "Cannot compute conversion matrix from {:?}/{:?} to {:?}/{:?}",
+                source_space.primaries,
+                source_space.transfer,
+                target_space.primaries,
+                target_space.transfer,
+            ),
+        })?;
+
+    let channels = input.layout.channel_count() as usize;
+    let pixel_count = input.width as usize * input.height as usize;
+    let src_tf = source_space.transfer;
+    let dst_tf = target_space.transfer;
+
+    match input.format {
+        PixelFormat::U8 => {
+            let src: &[u8] = &input.data.data;
+            let dst: &mut [u8] = bytemuck::cast_slice_mut(&mut output.data.data);
+            for i in 0..pixel_count {
+                let base = i * channels;
+                let r = src_tf.decode_to_linear(src[base] as f32 / 255.0);
+                let g = src_tf.decode_to_linear(src[base + 1] as f32 / 255.0);
+                let b = src_tf.decode_to_linear(src[base + 2] as f32 / 255.0);
+
+                let r2 =
+                    (matrix[0][0] as f32 * r + matrix[0][1] as f32 * g + matrix[0][2] as f32 * b)
+                        .clamp(0.0, 1.0);
+                let g2 =
+                    (matrix[1][0] as f32 * r + matrix[1][1] as f32 * g + matrix[1][2] as f32 * b)
+                        .clamp(0.0, 1.0);
+                let b2 =
+                    (matrix[2][0] as f32 * r + matrix[2][1] as f32 * g + matrix[2][2] as f32 * b)
+                        .clamp(0.0, 1.0);
+
+                let enc_r = dst_tf.encode_from_linear(r2);
+                let enc_g = dst_tf.encode_from_linear(g2);
+                let enc_b = dst_tf.encode_from_linear(b2);
+
+                dst[base] = (enc_r * 255.0).round().clamp(0.0, 255.0) as u8;
+                dst[base + 1] = (enc_g * 255.0).round().clamp(0.0, 255.0) as u8;
+                dst[base + 2] = (enc_b * 255.0).round().clamp(0.0, 255.0) as u8;
+                if channels >= 4 {
+                    dst[base + 3] = src[base + 3];
+                }
+            }
+        }
+        PixelFormat::U16 => {
+            let src = input.data.as_u16_slice();
+            let dst: &mut [u16] = bytemuck::cast_slice_mut(&mut output.data.data);
+            for i in 0..pixel_count {
+                let base = i * channels;
+                let r = src_tf.decode_to_linear(src[base] as f32 / 65535.0);
+                let g = src_tf.decode_to_linear(src[base + 1] as f32 / 65535.0);
+                let b = src_tf.decode_to_linear(src[base + 2] as f32 / 65535.0);
+
+                let r2 =
+                    (matrix[0][0] as f32 * r + matrix[0][1] as f32 * g + matrix[0][2] as f32 * b)
+                        .clamp(0.0, 1.0);
+                let g2 =
+                    (matrix[1][0] as f32 * r + matrix[1][1] as f32 * g + matrix[1][2] as f32 * b)
+                        .clamp(0.0, 1.0);
+                let b2 =
+                    (matrix[2][0] as f32 * r + matrix[2][1] as f32 * g + matrix[2][2] as f32 * b)
+                        .clamp(0.0, 1.0);
+
+                let enc_r = dst_tf.encode_from_linear(r2);
+                let enc_g = dst_tf.encode_from_linear(g2);
+                let enc_b = dst_tf.encode_from_linear(b2);
+
+                dst[base] = (enc_r * 65535.0).round().clamp(0.0, 65535.0) as u16;
+                dst[base + 1] = (enc_g * 65535.0).round().clamp(0.0, 65535.0) as u16;
+                dst[base + 2] = (enc_b * 65535.0).round().clamp(0.0, 65535.0) as u16;
+                if channels >= 4 {
+                    dst[base + 3] = src[base + 3];
+                }
+            }
+        }
+        PixelFormat::U32 => {
+            return Err(PluginError::Internal {
+                plugin: "colorspace".into(),
+                message: "U32 matrix conversion not supported in pure Rust path".into(),
+            });
+        }
+        PixelFormat::F16 => {
+            return Err(PluginError::Internal {
+                plugin: "colorspace".into(),
+                message: "F16 matrix conversion not supported in pure Rust path".into(),
+            });
+        }
+        PixelFormat::F32 => {
+            let src = input.data.as_f32_slice();
+            let dst: &mut [f32] = bytemuck::cast_slice_mut(&mut output.data.data);
+            for i in 0..pixel_count {
+                let base = i * channels;
+                let r = src_tf.decode_to_linear(src[base]);
+                let g = src_tf.decode_to_linear(src[base + 1]);
+                let b = src_tf.decode_to_linear(src[base + 2]);
+
+                let r2 =
+                    matrix[0][0] as f32 * r + matrix[0][1] as f32 * g + matrix[0][2] as f32 * b;
+                let g2 =
+                    matrix[1][0] as f32 * r + matrix[1][1] as f32 * g + matrix[1][2] as f32 * b;
+                let b2 =
+                    matrix[2][0] as f32 * r + matrix[2][1] as f32 * g + matrix[2][2] as f32 * b;
+
+                dst[base] = dst_tf.encode_from_linear(r2.max(0.0));
+                dst[base + 1] = dst_tf.encode_from_linear(g2.max(0.0));
+                dst[base + 2] = dst_tf.encode_from_linear(b2.max(0.0));
+                if channels >= 4 {
+                    dst[base + 3] = src[base + 3];
+                }
+            }
+        }
+    }
+
+    output.width = input.width;
+    output.height = input.height;
+    output.layout = input.layout;
+    output.format = input.format;
+    output.color_space = target_space.clone();
+
+    Ok(())
 }
 
 fn extract_f32_pixels(input: &PixelBuffer) -> Result<Vec<f32>, ()> {

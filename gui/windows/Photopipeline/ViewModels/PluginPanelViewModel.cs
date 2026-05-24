@@ -1,12 +1,16 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.DependencyInjection;
 using Photopipeline.Models;
+using Photopipeline.Services;
 using System.Collections.ObjectModel;
 
 namespace Photopipeline.ViewModels;
 
 public sealed partial class PluginPanelViewModel : ObservableObject
 {
+    private readonly IPipelineService _pipelineService;
+
     [ObservableProperty]
     private PluginInfo? _selectedPlugin;
 
@@ -25,7 +29,17 @@ public sealed partial class PluginPanelViewModel : ObservableObject
     [ObservableProperty]
     private ObservableCollection<string> _categories = new();
 
+    [ObservableProperty]
+    private PipelineNode? _selectedNode;
+
     private ObservableCollection<PluginInfo> _allPlugins = new();
+
+    public PluginPanelViewModel(IPipelineService pipelineService)
+    {
+        _pipelineService = pipelineService;
+    }
+
+    public PluginPanelViewModel() : this(App.Services?.GetRequiredService<IPipelineService>() ?? new LocalPipelineService()) { }
 
     public void LoadPlugins(ObservableCollection<PluginInfo> plugins)
     {
@@ -81,8 +95,11 @@ public sealed partial class PluginPanelViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void ApplyParameters()
+    private async Task ApplyParameters()
     {
+        if (SelectedNode is null) return;
+        var parameters = GetCurrentParameterValues();
+        await _pipelineService.UpdateNodeParametersAsync(SelectedNode.Id, parameters);
     }
 
     public Dictionary<string, object> GetCurrentParameterValues()

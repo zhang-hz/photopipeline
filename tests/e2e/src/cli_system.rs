@@ -188,7 +188,8 @@ fn e2e_cli_pipeline_validate_valid_config() {
 
     match status {
         Ok(s) => {
-            let _ = s.code();
+            let code = s.code();
+            assert!(code.is_some(), "validate should return an exit code");
         }
         Err(e) => {
             eprintln!("could not run photopipeline binary: {e}");
@@ -333,7 +334,8 @@ fn e2e_cli_batch_run_with_glob_pattern() {
 
     match status {
         Ok(s) => {
-            let _ = s.code();
+            let code = s.code();
+            assert!(code.is_some(), "batch run should return an exit code");
         }
         Err(e) => {
             eprintln!("could not run photopipeline binary: {e}");
@@ -361,7 +363,8 @@ fn e2e_cli_batch_validate() {
 
     match status {
         Ok(s) => {
-            let _ = s.code();
+            let code = s.code();
+            assert!(code.is_some(), "batch validate should return an exit code");
         }
         Err(e) => {
             eprintln!("could not run photopipeline binary: {e}");
@@ -452,7 +455,9 @@ fn e2e_cli_log_level_flag_accepted() {
 
     match output {
         Ok(o) => {
-            let _ = o.status.code();
+            let code = o.status.code();
+            assert!(code.is_some(), "--help should return an exit code");
+            assert!(o.stdout.len() > 0, "--help should produce output");
         }
         Err(e) => {
             eprintln!("could not run photopipeline binary: {e}");

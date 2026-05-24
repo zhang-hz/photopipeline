@@ -1,7 +1,7 @@
 use std::fmt;
 use std::sync::Mutex;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ExecutionDump {
     pub pipeline_id: Option<String>,
     pub image_path: Option<String>,
@@ -11,21 +11,6 @@ pub struct ExecutionDump {
     pub buffer_size_bytes: u64,
     pub gpu_backend: Option<String>,
     pub gpu_memory_mb: u64,
-}
-
-impl Default for ExecutionDump {
-    fn default() -> Self {
-        Self {
-            pipeline_id: None,
-            image_path: None,
-            current_node_id: None,
-            current_plugin: None,
-            node_history: Vec::new(),
-            buffer_size_bytes: 0,
-            gpu_backend: None,
-            gpu_memory_mb: 0,
-        }
-    }
 }
 
 impl fmt::Display for ExecutionDump {

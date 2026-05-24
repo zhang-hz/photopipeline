@@ -8,14 +8,9 @@
     xmlns:views="using:Photopipeline.Views"
     xmlns:controls="using:Photopipeline.Controls"
     mc:Ignorable="d"
-    Title="Photopipeline"
-    Width="1400"
-    Height="900"
-    ExtendsContentIntoTitleBar="True"
-    SystemBackdrop="Mica"
-    Activated="OnWindowActivated">
+    Title="Photopipeline">
 
-    <Grid>
+    <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="32" />
             <RowDefinition Height="*" />
@@ -61,10 +56,7 @@
             </Grid>
 
             <!-- Left Splitter -->
-            <GridSplitter Grid.Column="1" Width="4"
-                          Background="Transparent"
-                          ResizeDirection="Columns"
-                          ResizeBehavior="BasedOnAlignment" />
+            <Border Grid.Column="1" Width="4" Background="Transparent" />
 
             <!-- Center Panel: Preview + Mini DAG -->
             <Grid Grid.Column="2">
@@ -75,18 +67,12 @@
                 </Grid.RowDefinitions>
 
                 <views:PreviewView Grid.Row="0" x:Name="PreviewControl" />
-                <GridSplitter Grid.Row="1" Height="4"
-                              Background="Transparent"
-                              ResizeDirection="Rows"
-                              ResizeBehavior="BasedOnAlignment" />
+                <Border Grid.Row="1" Height="4" Background="Transparent" />
                 <views:PipelineEditorView Grid.Row="2" x:Name="PipelineEditorControl" />
             </Grid>
 
             <!-- Right Splitter -->
-            <GridSplitter Grid.Column="3" Width="4"
-                          Background="Transparent"
-                          ResizeDirection="Columns"
-                          ResizeBehavior="BasedOnAlignment" />
+            <Border Grid.Column="3" Width="4" Background="Transparent" />
 
             <!-- Right Panel: Plugin Controls -->
             <ScrollViewer Grid.Column="4"

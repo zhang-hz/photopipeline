@@ -1,0 +1,11 @@
+[package]
+name = "libjxl-sys"
+version = "0.7.2"
+edition = "2021"
+license = "ISC"
+description = "Patched: Rust bindings for libjxl using vcpkg pre-built libraries"
+links = "jxl"
+
+[build-dependencies]
+bindgen = "0.69"
+libjxl-src = { path = "../libjxl-src-patched", default-features = false }

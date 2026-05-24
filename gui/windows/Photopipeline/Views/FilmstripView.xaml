@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:models="using:Photopipeline.Models"
     mc:Ignorable="d">
 
     <Grid>
@@ -47,11 +48,11 @@
                   x:Name="FilmstripList"
                   SelectionMode="Extended"
                   IsItemClickEnabled="True"
-                  ItemContainerStyle="{StaticResource DefaultListViewItemStyle}"
+                  ItemsSource="{Binding Images}"
                   ScrollViewer.HorizontalScrollMode="Disabled"
                   ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <ListView.ItemTemplate>
-                <DataTemplate x:DataType="x:String">
+                <DataTemplate x:DataType="models:ImageEntry">
                     <Grid Height="72" Margin="4,2" ColumnSpacing="8">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="48" />
@@ -63,16 +64,16 @@
                                 CornerRadius="4"
                                 Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
                             <Image x:Name="ThumbnailImage"
-                                   Source="{Binding}"
+                                   Source="{x:Null}"
                                    Stretch="UniformToFill"
                                    Width="48" Height="48" />
                         </Border>
 
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <TextBlock Text="image_0001.tif"
+                            <TextBlock Text="{Binding FileName}"
                                        Style="{StaticResource BodyTextBlockStyle}"
                                        TextTrimming="CharacterEllipsis" />
-                            <TextBlock Text="6000x4000 · 72MB"
+                            <TextBlock Text="—"
                                        Style="{StaticResource CaptionTextBlockStyle}"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         </StackPanel>

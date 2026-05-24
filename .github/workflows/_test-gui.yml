@@ -1,0 +1,31 @@
+name: Test GUI (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      include-ui-auto:
+        required: false
+        type: boolean
+        default: false
+        description: 'Also compile UI automation test project'
+
+jobs:
+  test:
+    name: GUI Tests
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Build solution
+        shell: bash
+        run: dotnet build gui/windows/Photopipeline.sln -c Release -p:Platform=x64
+      - name: Run unit tests
+        shell: bash
+        run: dotnet test gui/windows/Photopipeline.Tests/Photopipeline.Tests.csproj -c Release -p:Platform=x64 --no-build --filter "FullyQualifiedName~UnitTests"
+      - name: Compile UI automation tests
+        if: ${{ inputs.include-ui-auto }}
+        shell: bash
+        run: dotnet build gui/windows/Photopipeline.UIAutomationTests/Photopipeline.UIAutomationTests.csproj -c Release -p:Platform=x64

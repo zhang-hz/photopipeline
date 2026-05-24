@@ -359,6 +359,17 @@ impl FormatProcessor for AvifEncoderPlugin {
             .map(|e| (10 - e.min(9)).max(1) as u8)
             .unwrap_or(5);
 
+        tracing::info!(
+            format = ?image.format,
+            layout = ?image.layout,
+            width = image.width,
+            height = image.height,
+            quality = quality,
+            speed = speed,
+            "AVIF encoding {}x{} {:?}/{:?}",
+            image.width, image.height, image.layout, image.format,
+        );
+
         let result = match (image.layout, image.format) {
             (ChannelLayout::RGB, PixelFormat::U8) => {
                 let pixels = image.data.data.as_rgb();
@@ -378,9 +389,12 @@ impl FormatProcessor for AvifEncoderPlugin {
                     .encode_rgba(img)
             }
             (ChannelLayout::RGB, PixelFormat::U16) => {
+                tracing::warn!(
+                    "ravif 0.11 only supports 8-bit; downconverting U16 → U8 for AVIF encoding"
+                );
                 let data_u16: &[u16] = bytemuck::cast_slice(&image.data.data);
-                let u8_data: Vec<u8> = data_u16.iter().map(|&v| (v >> 8) as u8).collect();
-                let pixels = u8_data.as_rgb();
+                let data_u8: Vec<u8> = data_u16.iter().map(|&v| (v >> 8) as u8).collect();
+                let pixels = data_u8.as_rgb();
                 let img = Img::new(pixels, image.width as usize, image.height as usize);
                 AvifEncoder::new()
                     .with_quality(quality)
@@ -388,9 +402,12 @@ impl FormatProcessor for AvifEncoderPlugin {
                     .encode_rgb(img)
             }
             (ChannelLayout::RGBA, PixelFormat::U16) => {
+                tracing::warn!(
+                    "ravif 0.11 only supports 8-bit; downconverting U16 → U8 for AVIF encoding"
+                );
                 let data_u16: &[u16] = bytemuck::cast_slice(&image.data.data);
-                let u8_data: Vec<u8> = data_u16.iter().map(|&v| (v >> 8) as u8).collect();
-                let pixels = u8_data.as_rgba();
+                let data_u8: Vec<u8> = data_u16.iter().map(|&v| (v >> 8) as u8).collect();
+                let pixels = data_u8.as_rgba();
                 let img = Img::new(pixels, image.width as usize, image.height as usize);
                 AvifEncoder::new()
                     .with_quality(quality)

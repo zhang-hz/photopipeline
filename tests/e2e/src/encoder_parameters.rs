@@ -281,7 +281,7 @@ fn e2e_encoder_no_output_path_handled() {
     let exec = photopipeline_engine::NodeExecutor::new(reg.clone(), resolver.clone());
     let progress = Box::new(MockProgressSink::new());
     let result = rt.block_on(async { exec.execute(&graph, &info, Some(buf), &md, progress).await });
-    let _ = result;
+    assert!(result.is_err(), "encoder without output path should fail");
 }
 
 #[test]

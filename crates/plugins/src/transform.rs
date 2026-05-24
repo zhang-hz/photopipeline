@@ -3,8 +3,8 @@ use std::sync::LazyLock;
 
 use photopipeline_core::{
     ChannelLayout, ColorSpace, GpuBackend, HardwareRequirement, PerfTimer, PixelBuffer,
-    PixelFormat, PluginCategory, PluginError, PluginId, PluginResult, PluginVersion,
-    ProcessingStats, ValidationIssue,
+    PixelFormat, PluginCategory, PluginId, PluginResult, PluginVersion, ProcessingStats,
+    ValidationIssue,
 };
 use photopipeline_plugin::{
     AuxView, EnumOption, GuiLayout, GuiSchema, GuiSection, ParameterField, ParameterSchema,
@@ -702,15 +702,17 @@ impl PixelProcessor for TransformPlugin {
             target_w as usize * target_h as usize * channels * input.format.bytes_per_channel();
         output.data.data.resize(expected_bytes, 0);
 
-        match filter {
+        let _used_halide = match filter {
             "nearest" => {
                 nearest_resize(
                     input, output, target_w, target_h, channels, in_stride, out_stride,
                 );
+                false
             }
             "lanczos3" => {
+                let mut halide_ok = false;
                 if let Ok(f32_input) = extract_transform_f32(input, channels) {
-                    match photopipeline_halide::HalideContext::resize(
+                    if let Ok(result) = photopipeline_halide::HalideContext::resize(
                         &f32_input,
                         input.width,
                         input.height,
@@ -719,51 +721,30 @@ impl PixelProcessor for TransformPlugin {
                         target_h,
                         "lanczos3",
                     ) {
-                        Ok(result) => {
-                            write_transform_f32_result(output, &result, target_w, target_h, input);
-                            if flip_h || flip_v {
-                                flip_buffer(
-                                    output,
-                                    target_w,
-                                    target_h,
-                                    channels,
-                                    target_w as usize * channels,
-                                    flip_h,
-                                    flip_v,
-                                );
-                            }
-                            output.width = target_w;
-                            output.height = target_h;
-                            output.layout = input.layout;
-                            output.format = input.format;
-                            output.color_space = input.color_space.clone();
-                            output.icc_profile = input.icc_profile.clone();
-
-                            let pixels = target_w as u64 * target_h as u64;
-                            progress.set_progress(1.0, "done (Halide lanczos3)");
-                            return Ok(ProcessingStats {
-                                elapsed_ms: 0,
-                                cpu_time_ms: 0,
-                                gpu_time_ms: Some(0),
-                                peak_memory_mb: (output.data.data.len() * 2) as u64 / (1024 * 1024),
-                                input_pixels: input.width as u64 * input.height as u64,
-                                output_pixels: pixels,
-                            });
-                        }
-                        Err(_) => {}
+                        write_transform_f32_result(output, &result, target_w, target_h, input);
+                        halide_ok = true;
                     }
                 }
-                return Err(PluginError::Internal {
-                    plugin: self.id.clone(),
-                    message: "Lanczos3 resize requires Halide runtime. Install Halide 14.0+."
-                        .into(),
-                });
+                if !halide_ok {
+                    tracing::warn!("Halide unavailable, using pure Rust lanczos3 resize");
+                    lanczos3_resize(input, output, target_w, target_h, channels, out_stride);
+                }
+                halide_ok
             }
             _ => {
                 bilinear_resize(
                     input, output, target_w, target_h, channels, in_stride, out_stride,
                 );
+                false
             }
+        };
+
+        if angle.abs() > 0.001 {
+            let resized = output.clone();
+            output.data.data.fill(0);
+            rotate_bilinear(
+                &resized, output, target_w, target_h, channels, out_stride, angle,
+            );
         }
 
         if flip_h || flip_v {
@@ -808,33 +789,32 @@ fn nearest_resize(
     target_w: u32,
     target_h: u32,
     channels: usize,
-    in_stride: usize,
+    _in_stride: usize,
     out_stride: usize,
 ) {
+    let bpc = input.format.bytes_per_channel();
     let scale_x = input.width as f64 / target_w as f64;
     let scale_y = input.height as f64 / target_h as f64;
 
     for y in 0..target_h {
         let src_y = ((y as f64 + 0.5) * scale_y - 0.5).round() as usize;
         let src_y = src_y.min(input.height as usize - 1);
-        let row_start = src_y * in_stride;
-        let row_end = ((src_y + 1) * in_stride).min(input.data.data.len());
-        let src_row = &input.data.data[row_start..row_end];
         let dst_row_start = y as usize * out_stride;
 
         for x in 0..target_w {
             let src_x = ((x as f64 + 0.5) * scale_x - 0.5).round() as usize;
             let src_x = src_x.min(input.width as usize - 1);
-            let src_offset = src_x * channels;
-            let dst_offset = dst_row_start + x as usize * channels;
+            let src_byte = (src_y * input.width as usize + src_x) * channels * bpc;
+            let dst_byte = dst_row_start + x as usize * channels * bpc;
 
-            if dst_offset + channels > output.data.data.len() {
+            if dst_byte + channels * bpc > output.data.data.len()
+                || src_byte + channels * bpc > input.data.data.len()
+            {
                 continue;
             }
-            for c in 0..channels {
-                output.data.data[dst_offset + c] =
-                    src_row.get(src_offset + c).copied().unwrap_or(0);
-            }
+            let copy_len = channels * bpc;
+            output.data.data[dst_byte..dst_byte + copy_len]
+                .copy_from_slice(&input.data.data[src_byte..src_byte + copy_len]);
         }
     }
 }
@@ -845,17 +825,36 @@ fn bilinear_resize(
     target_w: u32,
     target_h: u32,
     channels: usize,
-    in_stride: usize,
+    _in_stride: usize,
     out_stride: usize,
 ) {
-    // NOTE: This implementation assumes 8-bit channels.
-    // For 16-bit or float formats, use a format-aware resize path.
-    if input.format.bytes_per_channel() != 1 {
-        nearest_resize(
-            input, output, target_w, target_h, channels, in_stride, out_stride,
-        );
-        return;
+    match input.format {
+        PixelFormat::U8 => {
+            bilinear_resize_u8(input, output, target_w, target_h, channels, out_stride)
+        }
+        PixelFormat::U16 => {
+            bilinear_resize_u16(input, output, target_w, target_h, channels, out_stride)
+        }
+        PixelFormat::F16 => nearest_resize(
+            input, output, target_w, target_h, channels, _in_stride, out_stride,
+        ),
+        PixelFormat::U32 => nearest_resize(
+            input, output, target_w, target_h, channels, _in_stride, out_stride,
+        ),
+        PixelFormat::F32 => {
+            bilinear_resize_f32(input, output, target_w, target_h, channels, out_stride)
+        }
     }
+}
+
+fn bilinear_resize_u8(
+    input: &PixelBuffer,
+    output: &mut PixelBuffer,
+    target_w: u32,
+    target_h: u32,
+    channels: usize,
+    out_stride: usize,
+) {
     let scale_x = if target_w > 1 {
         (input.width as f64 - 1.0) / (target_w as f64 - 1.0)
     } else {
@@ -866,20 +865,14 @@ fn bilinear_resize(
     } else {
         1.0
     };
+    let in_stride = input.width as usize * channels;
 
     for y in 0..target_h {
         let src_y_f = y as f64 * scale_y;
         let src_y0 = (src_y_f.floor() as usize).min(input.height as usize - 1);
         let src_y1 = (src_y0 + 1).min(input.height as usize - 1);
         let frac_y = src_y_f - src_y_f.floor();
-
-        let row0_start = src_y0 * in_stride;
-        let row0_end = (src_y0 + 1) * in_stride;
-        let row1_start = src_y1 * in_stride;
-        let row1_end = (src_y1 + 1) * in_stride;
-        let row0 = &input.data.data[row0_start..row0_end.min(input.data.data.len())];
-        let row1 = &input.data.data[row1_start..row1_end.min(input.data.data.len())];
-        let dst_row_start = y as usize * out_stride;
+        let dst_row = y as usize * out_stride;
 
         for x in 0..target_w {
             let src_x_f = x as f64 * scale_x;
@@ -887,24 +880,343 @@ fn bilinear_resize(
             let src_x1 = (src_x0 + 1).min(input.width as usize - 1);
             let frac_x = src_x_f - src_x_f.floor();
 
-            let dst_offset = dst_row_start + x as usize * channels;
-            if dst_offset + channels > output.data.data.len() {
+            let dst_off = dst_row + x as usize * channels;
+            if dst_off + channels > output.data.data.len() {
                 continue;
             }
 
             for c in 0..channels {
-                let src_idx0 = (src_x0 * channels + c).min(row0.len().saturating_sub(1));
-                let src_idx1 = (src_x1 * channels + c).min(row1.len().saturating_sub(1));
-                let v00 = row0[src_idx0] as f64;
-                let v10 = row0.get(src_idx1).copied().unwrap_or(0) as f64;
-                let v01 = row1.get(src_idx0).copied().unwrap_or(0) as f64;
-                let v11 = row1.get(src_idx1).copied().unwrap_or(0) as f64;
-
+                let v00 = input.data.data[src_y0 * in_stride + src_x0 * channels + c] as f64;
+                let v10 = input.data.data[src_y0 * in_stride + src_x1 * channels + c] as f64;
+                let v01 = input.data.data[src_y1 * in_stride + src_x0 * channels + c] as f64;
+                let v11 = input.data.data[src_y1 * in_stride + src_x1 * channels + c] as f64;
                 let top = v00 + (v10 - v00) * frac_x;
-                let bottom = v01 + (v11 - v01) * frac_x;
-                let val = (top + (bottom - top) * frac_y).clamp(0.0, 255.0);
+                let bot = v01 + (v11 - v01) * frac_x;
+                let val = (top + (bot - top) * frac_y).clamp(0.0, 255.0);
+                output.data.data[dst_off + c] = val.round() as u8;
+            }
+        }
+    }
+}
 
-                output.data.data[dst_offset + c] = val.round() as u8;
+fn bilinear_resize_u16(
+    input: &PixelBuffer,
+    output: &mut PixelBuffer,
+    target_w: u32,
+    target_h: u32,
+    channels: usize,
+    out_stride: usize,
+) {
+    let scale_x = if target_w > 1 {
+        (input.width as f64 - 1.0) / (target_w as f64 - 1.0)
+    } else {
+        1.0
+    };
+    let scale_y = if target_h > 1 {
+        (input.height as f64 - 1.0) / (target_h as f64 - 1.0)
+    } else {
+        1.0
+    };
+    let in_stride = input.width as usize * channels;
+    let src_u16 = input.data.as_u16_slice();
+    let dst_u16: &mut [u16] = bytemuck::cast_slice_mut(&mut output.data.data);
+
+    for y in 0..target_h {
+        let src_y_f = y as f64 * scale_y;
+        let src_y0 = (src_y_f.floor() as usize).min(input.height as usize - 1);
+        let src_y1 = (src_y0 + 1).min(input.height as usize - 1);
+        let frac_y = src_y_f - src_y_f.floor();
+        let dst_row = y as usize * out_stride;
+
+        for x in 0..target_w {
+            let src_x_f = x as f64 * scale_x;
+            let src_x0 = (src_x_f.floor() as usize).min(input.width as usize - 1);
+            let src_x1 = (src_x0 + 1).min(input.width as usize - 1);
+            let frac_x = src_x_f - src_x_f.floor();
+
+            let dst_off = dst_row + x as usize * channels;
+            if dst_off + channels > dst_u16.len() {
+                continue;
+            }
+
+            for c in 0..channels {
+                let v00 = src_u16[src_y0 * in_stride + src_x0 * channels + c] as f64;
+                let v10 = src_u16[src_y0 * in_stride + src_x1 * channels + c] as f64;
+                let v01 = src_u16[src_y1 * in_stride + src_x0 * channels + c] as f64;
+                let v11 = src_u16[src_y1 * in_stride + src_x1 * channels + c] as f64;
+                let top = v00 + (v10 - v00) * frac_x;
+                let bot = v01 + (v11 - v01) * frac_x;
+                let val = (top + (bot - top) * frac_y).clamp(0.0, 65535.0);
+                dst_u16[dst_off + c] = val.round() as u16;
+            }
+        }
+    }
+}
+
+fn bilinear_resize_f32(
+    input: &PixelBuffer,
+    output: &mut PixelBuffer,
+    target_w: u32,
+    target_h: u32,
+    channels: usize,
+    out_stride: usize,
+) {
+    let scale_x = if target_w > 1 {
+        (input.width as f64 - 1.0) / (target_w as f64 - 1.0)
+    } else {
+        1.0
+    };
+    let scale_y = if target_h > 1 {
+        (input.height as f64 - 1.0) / (target_h as f64 - 1.0)
+    } else {
+        1.0
+    };
+    let in_stride = input.width as usize * channels;
+    let src_f32 = input.data.as_f32_slice();
+    let dst_f32: &mut [f32] = bytemuck::cast_slice_mut(&mut output.data.data);
+
+    for y in 0..target_h {
+        let src_y_f = y as f64 * scale_y;
+        let src_y0 = (src_y_f.floor() as usize).min(input.height as usize - 1);
+        let src_y1 = (src_y0 + 1).min(input.height as usize - 1);
+        let frac_y = (src_y_f - src_y_f.floor()) as f32;
+        let dst_row = y as usize * out_stride;
+
+        for x in 0..target_w {
+            let src_x_f = x as f64 * scale_x;
+            let src_x0 = (src_x_f.floor() as usize).min(input.width as usize - 1);
+            let src_x1 = (src_x0 + 1).min(input.width as usize - 1);
+            let frac_x = (src_x_f - src_x_f.floor()) as f32;
+
+            let dst_off = dst_row + x as usize * channels;
+            if dst_off + channels > dst_f32.len() {
+                continue;
+            }
+
+            for c in 0..channels {
+                let v00 = src_f32[src_y0 * in_stride + src_x0 * channels + c];
+                let v10 = src_f32[src_y0 * in_stride + src_x1 * channels + c];
+                let v01 = src_f32[src_y1 * in_stride + src_x0 * channels + c];
+                let v11 = src_f32[src_y1 * in_stride + src_x1 * channels + c];
+                let top = v00 + (v10 - v00) * frac_x;
+                let bot = v01 + (v11 - v01) * frac_x;
+                dst_f32[dst_off + c] = top + (bot - top) * frac_y;
+            }
+        }
+    }
+}
+
+fn lanczos3_resize(
+    input: &PixelBuffer,
+    output: &mut PixelBuffer,
+    target_w: u32,
+    target_h: u32,
+    channels: usize,
+    out_stride: usize,
+) {
+    match input.format {
+        PixelFormat::U8 => {
+            lanczos3_resize_u8(input, output, target_w, target_h, channels, out_stride)
+        }
+        PixelFormat::U16 => {
+            lanczos3_resize_u16(input, output, target_w, target_h, channels, out_stride)
+        }
+        PixelFormat::F16 => {
+            nearest_resize(input, output, target_w, target_h, channels, 0, out_stride)
+        }
+        PixelFormat::U32 => {
+            nearest_resize(input, output, target_w, target_h, channels, 0, out_stride)
+        }
+        PixelFormat::F32 => {
+            lanczos3_resize_f32(input, output, target_w, target_h, channels, out_stride)
+        }
+    }
+}
+
+fn lanczos3_weight(x: f64) -> f64 {
+    if x.abs() < 1e-10 {
+        1.0
+    } else if x.abs() >= 3.0 {
+        0.0
+    } else {
+        let pix = std::f64::consts::PI * x;
+        (pix.sin() / pix) * ((pix / 3.0).sin() / (pix / 3.0))
+    }
+}
+
+fn lanczos3_resize_u8(
+    input: &PixelBuffer,
+    output: &mut PixelBuffer,
+    target_w: u32,
+    target_h: u32,
+    channels: usize,
+    out_stride: usize,
+) {
+    let in_stride = input.width as usize * channels;
+    for y in 0..target_h {
+        let src_y = (y as f64 + 0.5) * input.height as f64 / target_h as f64 - 0.5;
+        let iy0 = src_y.floor() as isize;
+        let dst_row = y as usize * out_stride;
+
+        for x in 0..target_w {
+            let src_x = (x as f64 + 0.5) * input.width as f64 / target_w as f64 - 0.5;
+            let ix0 = src_x.floor() as isize;
+
+            let dst_off = dst_row + x as usize * channels;
+            if dst_off + channels > output.data.data.len() {
+                continue;
+            }
+
+            for c in 0..channels {
+                let mut sum = 0.0;
+                let mut weight_sum = 0.0;
+                for j in -2..=3 {
+                    let iy = iy0 + j;
+                    if iy < 0 || iy >= input.height as isize {
+                        continue;
+                    }
+                    let wy = lanczos3_weight((src_y - iy as f64).abs());
+
+                    for i in -2..=3 {
+                        let ix = ix0 + i;
+                        if ix < 0 || ix >= input.width as isize {
+                            continue;
+                        }
+                        let wx = lanczos3_weight((src_x - ix as f64).abs());
+                        let w = wy * wx;
+                        let v =
+                            input.data.data[(iy as usize * in_stride + ix as usize * channels + c)
+                                .min(input.data.data.len().saturating_sub(1))]
+                                as f64;
+                        sum += v * w;
+                        weight_sum += w;
+                    }
+                }
+                let val = if weight_sum > 0.0 {
+                    (sum / weight_sum).clamp(0.0, 255.0)
+                } else {
+                    0.0
+                };
+                output.data.data[dst_off + c] = val.round() as u8;
+            }
+        }
+    }
+}
+
+fn lanczos3_resize_u16(
+    input: &PixelBuffer,
+    output: &mut PixelBuffer,
+    target_w: u32,
+    target_h: u32,
+    channels: usize,
+    out_stride: usize,
+) {
+    let in_stride = input.width as usize * channels;
+    let src_u16 = input.data.as_u16_slice();
+    let dst_u16: &mut [u16] = bytemuck::cast_slice_mut(&mut output.data.data);
+
+    for y in 0..target_h {
+        let src_y = (y as f64 + 0.5) * input.height as f64 / target_h as f64 - 0.5;
+        let iy0 = src_y.floor() as isize;
+        let dst_row = y as usize * out_stride;
+
+        for x in 0..target_w {
+            let src_x = (x as f64 + 0.5) * input.width as f64 / target_w as f64 - 0.5;
+            let ix0 = src_x.floor() as isize;
+
+            let dst_off = dst_row + x as usize * channels;
+            if dst_off + channels > dst_u16.len() {
+                continue;
+            }
+
+            for c in 0..channels {
+                let mut sum = 0.0;
+                let mut weight_sum = 0.0;
+                for j in -2..=3 {
+                    let iy = iy0 + j;
+                    if iy < 0 || iy >= input.height as isize {
+                        continue;
+                    }
+                    let wy = lanczos3_weight((src_y - iy as f64).abs());
+
+                    for i in -2..=3 {
+                        let ix = ix0 + i;
+                        if ix < 0 || ix >= input.width as isize {
+                            continue;
+                        }
+                        let wx = lanczos3_weight((src_x - ix as f64).abs());
+                        let w = wy * wx;
+                        let idx = (iy as usize * in_stride + ix as usize * channels + c)
+                            .min(src_u16.len().saturating_sub(1));
+                        sum += src_u16[idx] as f64 * w;
+                        weight_sum += w;
+                    }
+                }
+                let val = if weight_sum > 0.0 {
+                    (sum / weight_sum).clamp(0.0, 65535.0)
+                } else {
+                    0.0
+                };
+                dst_u16[dst_off + c] = val.round() as u16;
+            }
+        }
+    }
+}
+
+fn lanczos3_resize_f32(
+    input: &PixelBuffer,
+    output: &mut PixelBuffer,
+    target_w: u32,
+    target_h: u32,
+    channels: usize,
+    out_stride: usize,
+) {
+    let in_stride = input.width as usize * channels;
+    let src_f32 = input.data.as_f32_slice();
+    let dst_f32: &mut [f32] = bytemuck::cast_slice_mut(&mut output.data.data);
+
+    for y in 0..target_h {
+        let src_y = (y as f64 + 0.5) * input.height as f64 / target_h as f64 - 0.5;
+        let iy0 = src_y.floor() as isize;
+        let dst_row = y as usize * out_stride;
+
+        for x in 0..target_w {
+            let src_x = (x as f64 + 0.5) * input.width as f64 / target_w as f64 - 0.5;
+            let ix0 = src_x.floor() as isize;
+
+            let dst_off = dst_row + x as usize * channels;
+            if dst_off + channels > dst_f32.len() {
+                continue;
+            }
+
+            for c in 0..channels {
+                let mut sum = 0.0;
+                let mut weight_sum = 0.0;
+                for j in -2..=3 {
+                    let iy = iy0 + j;
+                    if iy < 0 || iy >= input.height as isize {
+                        continue;
+                    }
+                    let wy = lanczos3_weight((src_y - iy as f64).abs());
+
+                    for i in -2..=3 {
+                        let ix = ix0 + i;
+                        if ix < 0 || ix >= input.width as isize {
+                            continue;
+                        }
+                        let wx = lanczos3_weight((src_x - ix as f64).abs());
+                        let w = wy * wx;
+                        let idx = (iy as usize * in_stride + ix as usize * channels + c)
+                            .min(src_f32.len().saturating_sub(1));
+                        sum += src_f32[idx] as f64 * w;
+                        weight_sum += w;
+                    }
+                }
+                dst_f32[dst_off + c] = if weight_sum > 0.0 {
+                    (sum / weight_sum) as f32
+                } else {
+                    0.0
+                };
             }
         }
     }
@@ -919,18 +1231,183 @@ fn flip_buffer(
     flip_h: bool,
     flip_v: bool,
 ) {
+    let bpc = output.format.bytes_per_channel();
+    let _row_bytes = w as usize * channels * bpc;
     let temp = output.data.data.clone();
 
     for y in 0..h as usize {
         for x in 0..w as usize {
             let src_x = if flip_h { w as usize - 1 - x } else { x };
             let src_y = if flip_v { h as usize - 1 - y } else { y };
-            let src_start = src_y * stride + src_x * channels;
-            let dst_start = y * stride + x * channels;
-            for c in 0..channels {
-                output.data.data[dst_start + c] = temp[src_start + c];
+            let src_start = src_y * stride + src_x * channels * bpc;
+            let dst_start = y * stride + x * channels * bpc;
+            if dst_start + channels * bpc <= output.data.data.len()
+                && src_start + channels * bpc <= temp.len()
+            {
+                output.data.data[dst_start..dst_start + channels * bpc]
+                    .copy_from_slice(&temp[src_start..src_start + channels * bpc]);
             }
         }
+    }
+}
+
+fn rotate_bilinear(
+    input: &PixelBuffer,
+    output: &mut PixelBuffer,
+    target_w: u32,
+    target_h: u32,
+    channels: usize,
+    out_stride: usize,
+    angle_deg: f64,
+) {
+    let rad = (-angle_deg).to_radians();
+    let cos_a = rad.cos();
+    let sin_a = rad.sin();
+    let cx_in = input.width as f64 / 2.0;
+    let cy_in = input.height as f64 / 2.0;
+    let cx_out = target_w as f64 / 2.0;
+    let cy_out = target_h as f64 / 2.0;
+
+    match input.format {
+        PixelFormat::U8 => {
+            let in_stride = input.width as usize * channels;
+            let src = &input.data.data;
+            let dst = &mut output.data.data;
+
+            for y in 0..target_h {
+                let dst_row = y as usize * out_stride;
+                for x in 0..target_w {
+                    let src_x = cos_a * (x as f64 - cx_out) + sin_a * (y as f64 - cy_out) + cx_in;
+                    let src_y = -sin_a * (x as f64 - cx_out) + cos_a * (y as f64 - cy_out) + cy_in;
+                    let dst_off = dst_row + x as usize * channels;
+                    if dst_off + channels > dst.len() {
+                        continue;
+                    }
+
+                    if src_x < 0.0
+                        || src_x >= input.width as f64 - 1.0
+                        || src_y < 0.0
+                        || src_y >= input.height as f64 - 1.0
+                    {
+                        for c in 0..channels {
+                            dst[dst_off + c] = 0;
+                        }
+                        continue;
+                    }
+
+                    let sx0 = src_x.floor() as usize;
+                    let sy0 = src_y.floor() as usize;
+                    let sx1 = (sx0 + 1).min(input.width as usize - 1);
+                    let sy1 = (sy0 + 1).min(input.height as usize - 1);
+                    let fx = src_x - sx0 as f64;
+                    let fy = src_y - sy0 as f64;
+
+                    for c in 0..channels {
+                        let v00 = src[sy0 * in_stride + sx0 * channels + c] as f64;
+                        let v10 = src[sy0 * in_stride + sx1 * channels + c] as f64;
+                        let v01 = src[sy1 * in_stride + sx0 * channels + c] as f64;
+                        let v11 = src[sy1 * in_stride + sx1 * channels + c] as f64;
+                        let top = v00 + (v10 - v00) * fx;
+                        let bot = v01 + (v11 - v01) * fx;
+                        let val = (top + (bot - top) * fy).clamp(0.0, 255.0);
+                        dst[dst_off + c] = val.round() as u8;
+                    }
+                }
+            }
+        }
+        PixelFormat::U16 => {
+            let in_stride = input.width as usize * channels;
+            let src = input.data.as_u16_slice();
+            let dst: &mut [u16] = bytemuck::cast_slice_mut(&mut output.data.data);
+
+            for y in 0..target_h {
+                let dst_row = y as usize * out_stride;
+                for x in 0..target_w {
+                    let src_x = cos_a * (x as f64 - cx_out) + sin_a * (y as f64 - cy_out) + cx_in;
+                    let src_y = -sin_a * (x as f64 - cx_out) + cos_a * (y as f64 - cy_out) + cy_in;
+                    let dst_off = dst_row + x as usize * channels;
+                    if dst_off + channels > dst.len() {
+                        continue;
+                    }
+
+                    if src_x < 0.0
+                        || src_x >= input.width as f64 - 1.0
+                        || src_y < 0.0
+                        || src_y >= input.height as f64 - 1.0
+                    {
+                        for c in 0..channels {
+                            dst[dst_off + c] = 0;
+                        }
+                        continue;
+                    }
+
+                    let sx0 = src_x.floor() as usize;
+                    let sy0 = src_y.floor() as usize;
+                    let sx1 = (sx0 + 1).min(input.width as usize - 1);
+                    let sy1 = (sy0 + 1).min(input.height as usize - 1);
+                    let fx = src_x - sx0 as f64;
+                    let fy = src_y - sy0 as f64;
+
+                    for c in 0..channels {
+                        let v00 = src[sy0 * in_stride + sx0 * channels + c] as f64;
+                        let v10 = src[sy0 * in_stride + sx1 * channels + c] as f64;
+                        let v01 = src[sy1 * in_stride + sx0 * channels + c] as f64;
+                        let v11 = src[sy1 * in_stride + sx1 * channels + c] as f64;
+                        let top = v00 + (v10 - v00) * fx;
+                        let bot = v01 + (v11 - v01) * fx;
+                        let val = (top + (bot - top) * fy).clamp(0.0, 65535.0);
+                        dst[dst_off + c] = val.round() as u16;
+                    }
+                }
+            }
+        }
+        PixelFormat::F32 => {
+            let in_stride = input.width as usize * channels;
+            let src = input.data.as_f32_slice();
+            let dst: &mut [f32] = bytemuck::cast_slice_mut(&mut output.data.data);
+
+            for y in 0..target_h {
+                let dst_row = y as usize * out_stride;
+                for x in 0..target_w {
+                    let src_x = cos_a * (x as f64 - cx_out) + sin_a * (y as f64 - cy_out) + cx_in;
+                    let src_y = -sin_a * (x as f64 - cx_out) + cos_a * (y as f64 - cy_out) + cy_in;
+                    let dst_off = dst_row + x as usize * channels;
+                    if dst_off + channels > dst.len() {
+                        continue;
+                    }
+
+                    if src_x < 0.0
+                        || src_x >= input.width as f64 - 1.0
+                        || src_y < 0.0
+                        || src_y >= input.height as f64 - 1.0
+                    {
+                        for c in 0..channels {
+                            dst[dst_off + c] = 0.0;
+                        }
+                        continue;
+                    }
+
+                    let sx0 = src_x.floor() as usize;
+                    let sy0 = src_y.floor() as usize;
+                    let sx1 = (sx0 + 1).min(input.width as usize - 1);
+                    let sy1 = (sy0 + 1).min(input.height as usize - 1);
+                    let fx = (src_x - sx0 as f64) as f32;
+                    let fy = (src_y - sy0 as f64) as f32;
+
+                    for c in 0..channels {
+                        let v00 = src[sy0 * in_stride + sx0 * channels + c];
+                        let v10 = src[sy0 * in_stride + sx1 * channels + c];
+                        let v01 = src[sy1 * in_stride + sx0 * channels + c];
+                        let v11 = src[sy1 * in_stride + sx1 * channels + c];
+                        let top = v00 + (v10 - v00) * fx;
+                        let bot = v01 + (v11 - v01) * fx;
+                        dst[dst_off + c] = top + (bot - top) * fy;
+                    }
+                }
+            }
+        }
+        PixelFormat::U32 => { /* U32 rotation not supported */ }
+        PixelFormat::F16 => { /* F16 rotation delegated to Halide path */ }
     }
 }
 

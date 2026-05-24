@@ -46,6 +46,16 @@ impl Default for MockProgressSink {
     }
 }
 
+/// Zero-overhead progress sink for tests that don't need progress tracking.
+pub struct NoopProgress;
+
+impl ProgressSink for NoopProgress {
+    fn set_progress(&self, _fraction: f32, _message: &str) {}
+    fn is_canceled(&self) -> bool {
+        false
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

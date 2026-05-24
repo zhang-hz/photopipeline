@@ -389,16 +389,50 @@ impl NodeExecutor {
             }
         }
 
-        let stats = processor
-            .process_pixels(
-                input,
-                &mut output,
-                params,
-                Box::new(InlineProgress {
-                    canceled: Arc::new(AtomicBool::new(false)),
-                }),
-            )
-            .await?;
+        let tile_threshold: u64 = 4096 * 2160; // ~8.8M pixels
+
+        let (output, stats) = if input.pixel_count() > tile_threshold {
+            let engine = crate::tile::TileEngine::default();
+            tracing::info!(
+                input_width = input.width,
+                input_height = input.height,
+                pixel_count = input.pixel_count(),
+                "Activating tiled processing for large image {}x{}",
+                input.width,
+                input.height,
+            );
+            let tiled_output = engine
+                .process_tiled(
+                    processor.as_ref(),
+                    input,
+                    params,
+                    &InlineProgress {
+                        canceled: Arc::new(AtomicBool::new(false)),
+                    },
+                )
+                .await?;
+            let stats = ProcessingStats {
+                elapsed_ms: 0,
+                cpu_time_ms: 0,
+                gpu_time_ms: None,
+                peak_memory_mb: 0,
+                input_pixels: input.pixel_count(),
+                output_pixels: tiled_output.pixel_count(),
+            };
+            (tiled_output, stats)
+        } else {
+            let stats = processor
+                .process_pixels(
+                    input,
+                    &mut output,
+                    params,
+                    Box::new(InlineProgress {
+                        canceled: Arc::new(AtomicBool::new(false)),
+                    }),
+                )
+                .await?;
+            (output, stats)
+        };
 
         tracing::debug!(
             output_width = output.width,
@@ -653,5 +687,168 @@ mod tests {
         let executor = NodeExecutor::new(registry, resolver);
         let debug_str = format!("{:?}", executor);
         assert!(debug_str.contains("NodeExecutor"));
+    }
+
+    // ── Execute behavior tests ───────────────────────────────────
+
+    fn empty_registry() -> Arc<photopipeline_plugin::Registry> {
+        Arc::new(photopipeline_plugin::Registry::new())
+    }
+
+    fn empty_resolver() -> Arc<ParameterResolver> {
+        Arc::new(ParameterResolver::new())
+    }
+
+    struct NoopTestProgress;
+    impl photopipeline_plugin::ProgressSink for NoopTestProgress {
+        fn set_progress(&self, _: f32, _: &str) {}
+        fn is_canceled(&self) -> bool {
+            false
+        }
+    }
+
+    struct CancelProgress;
+    impl photopipeline_plugin::ProgressSink for CancelProgress {
+        fn set_progress(&self, _: f32, _: &str) {}
+        fn is_canceled(&self) -> bool {
+            true
+        }
+    }
+
+    #[test]
+    fn execute_empty_graph_returns_ok() {
+        let reg = empty_registry();
+        let resolver = empty_resolver();
+        let executor = NodeExecutor::new(reg, resolver);
+        let graph = PipelineGraph::new();
+        let info = make_test_image_info();
+        let md = Metadata::default();
+        let progress: Box<dyn ProgressSink> = Box::new(CancelProgress);
+
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let result =
+            rt.block_on(async { executor.execute(&graph, &info, None, &md, progress).await });
+        assert!(
+            result.is_ok(),
+            "empty graph should execute successfully: {:?}",
+            result.err()
+        );
+        let exec_result = result.unwrap();
+        assert!(exec_result.node_states.is_empty());
+        assert!(exec_result.buffer.is_none());
+    }
+
+    #[test]
+    fn execute_disabled_node_is_skipped() {
+        let reg = empty_registry();
+        let resolver = empty_resolver();
+        let executor = NodeExecutor::new(reg, resolver);
+
+        let mut graph = PipelineGraph::new();
+        let node_id = graph.add_node("n1".into(), "test.plugin".into());
+        // Disable the node via graph API
+        let node = graph.node_mut(node_id).unwrap();
+        node.enabled = false;
+
+        let info = make_test_image_info();
+        let md = Metadata::default();
+        let progress: Box<dyn ProgressSink> = Box::new(NoopTestProgress);
+
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let result =
+            rt.block_on(async { executor.execute(&graph, &info, None, &md, progress).await });
+
+        // Should be Ok because disabled nodes are skipped, even if plugin is missing
+        assert!(
+            result.is_ok(),
+            "graph with only disabled nodes should succeed: {:?}",
+            result.err()
+        );
+        let exec_result = result.unwrap();
+        let state = exec_result.node_states.get(&node_id).unwrap();
+        assert!(
+            matches!(state.status, NodeStatus::Skipped),
+            "disabled node should be Skipped, got {:?}",
+            state.status
+        );
+    }
+
+    #[test]
+    fn execute_missing_plugin_returns_not_found() {
+        let reg = empty_registry();
+        let resolver = empty_resolver();
+        let executor = NodeExecutor::new(reg, resolver);
+
+        let mut graph = PipelineGraph::new();
+        graph.add_node("n1".into(), "nonexistent.plugin.test".into());
+
+        let info = make_test_image_info();
+        let md = Metadata::default();
+        let progress: Box<dyn ProgressSink> = Box::new(NoopTestProgress);
+
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let result =
+            rt.block_on(async { executor.execute(&graph, &info, None, &md, progress).await });
+
+        assert!(result.is_err(), "missing plugin should return error");
+        assert!(
+            matches!(result, Err(PluginError::NotFound(_))),
+            "expected NotFound error, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn execute_canceled_returns_error() {
+        let reg = empty_registry();
+        let resolver = empty_resolver();
+        let executor = NodeExecutor::new(reg, resolver);
+
+        let mut graph = PipelineGraph::new();
+        graph.add_node("n1".into(), "some.plugin".into());
+
+        let info = make_test_image_info();
+        let md = Metadata::default();
+        // This progress sink always reports canceled
+        let progress: Box<dyn ProgressSink> = Box::new(CancelProgress);
+
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let result =
+            rt.block_on(async { executor.execute(&graph, &info, None, &md, progress).await });
+
+        assert!(result.is_err(), "canceled execution should return error");
+        match result {
+            Err(PluginError::Canceled { .. }) => {}
+            other => panic!("expected Canceled error, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn execute_graph_with_cycle_returns_error() {
+        let reg = empty_registry();
+        let resolver = empty_resolver();
+        let executor = NodeExecutor::new(reg, resolver);
+
+        let mut graph = PipelineGraph::new();
+        let n1 = graph.add_node("a".into(), "p1".into());
+        let n2 = graph.add_node("b".into(), "p2".into());
+        // Create a cycle: a->b, b->a
+        let out_a = graph.node(n1).unwrap().outputs[0];
+        let in_b = graph.node(n2).unwrap().inputs[0];
+        let out_b = graph.node(n2).unwrap().outputs[0];
+        let in_a = graph.node(n1).unwrap().inputs[0];
+        let _ = graph.connect(out_a, in_b);
+        let _ = graph.connect(out_b, in_a);
+
+        let info = make_test_image_info();
+        let md = Metadata::default();
+        let progress: Box<dyn ProgressSink> = Box::new(CancelProgress);
+
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let result =
+            rt.block_on(async { executor.execute(&graph, &info, None, &md, progress).await });
+
+        // Cycle detection may happen in topological_order() or validate_graph()
+        assert!(result.is_err(), "graph with cycle should return error");
     }
 }

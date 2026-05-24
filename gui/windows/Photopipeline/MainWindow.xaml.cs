@@ -1,8 +1,10 @@
+using System.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Photopipeline.Services;
 using Photopipeline.ViewModels;
-using System;
 using WinRT.Interop;
 
 namespace Photopipeline;
@@ -15,13 +17,26 @@ public sealed partial class MainWindow : Window
     {
         this.InitializeComponent();
 
-        _viewModel = new MainViewModel();
+        _viewModel = App.Services.GetRequiredService<MainViewModel>();
         RootGrid.DataContext = _viewModel;
+
+        // Set title bar extension in code-behind (not supported in XAML for WinUI 3)
+        this.ExtendsContentIntoTitleBar = true;
+        this.Activated += OnWindowActivated;
 
         var hWnd = WindowNative.GetWindowHandle(this);
         var windowId = Win32Interop.GetWindowIdFromWindow(hWnd);
         var appWindow = AppWindow.GetFromWindowId(windowId);
         appWindow.Title = "Photopipeline";
+
+        this.Closed += (_, _) =>
+        {
+            var procs = Process.GetProcessesByName("photopipeline-server");
+            foreach (var p in procs)
+            {
+                try { p.Kill(); } catch { }
+            }
+        };
     }
 
     private void OnWindowActivated(object sender, WindowActivatedEventArgs args)

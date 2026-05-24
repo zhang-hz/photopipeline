@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-BINARY="${1:-target/release/photopipeline}"
+BINARY="${1:-target/release/photopipeline-cli}"
 OUTDIR="${2:-release/lib}"
 
 if [ ! -f "$BINARY" ]; then

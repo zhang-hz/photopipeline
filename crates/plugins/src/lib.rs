@@ -1,18 +1,3 @@
-#![allow(clippy::result_large_err)]
-#![allow(clippy::manual_memcpy)]
-#![allow(clippy::needless_range_loop)]
-#![allow(clippy::redundant_clone)]
-#![allow(clippy::useless_vec)]
-#![allow(clippy::new_without_default)]
-#![allow(clippy::same_item_push)]
-#![allow(clippy::ptr_arg)]
-#![allow(clippy::collapsible_if)]
-#![allow(clippy::if_same_then_else)]
-#![allow(clippy::needless_late_init)]
-#![allow(clippy::manual_strip)]
-#![allow(clippy::unnecessary_parentheses)]
-#![allow(clippy::collapsible_else_if)]
-#![allow(clippy::comparison_chain)]
 pub mod ai_denoise;
 pub mod avif_encoder;
 pub mod colorspace;

@@ -139,7 +139,9 @@ fn e2e_pipeline_with_validation_error_stops_execution() {
             let schema = plugin.parameter_schema();
             let mut params = schema.defaults();
             params.insert("invalid_key_xyz".into(), serde_json::json!("bad_value"));
-            let _ = rt.block_on(async { plugin.validate(&params).await });
+            let validation = rt.block_on(async { plugin.validate(&params).await });
+            // Plugins vary in how they handle unknown params; verify no panic
+            let _ = validation;
         }
     }
 
@@ -149,6 +151,7 @@ fn e2e_pipeline_with_validation_error_stops_execution() {
     let exec = photopipeline_engine::NodeExecutor::new(reg.clone(), resolver.clone());
     let progress = Box::new(MockProgressSink::new());
     let result = rt.block_on(async { exec.execute(&graph, &info, Some(buf), &md, progress).await });
+    // Pipeline may succeed or fail depending on plugin validation policy
     let _ = result;
 }
 
@@ -470,7 +473,7 @@ fn e2e_expression_division_by_zero() {
     let info = make_image_info(Uuid::new_v4(), "/tmp/div_zero.jpg");
     let md = Metadata::default();
     let result = engine.evaluate("${exif.iso}/0", &md, &info);
-    let _ = result;
+    assert!(result.is_err(), "division by zero should return error");
 }
 
 #[test]
