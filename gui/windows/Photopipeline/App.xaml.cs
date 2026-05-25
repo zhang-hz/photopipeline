@@ -216,6 +216,7 @@ public partial class App : Application
             "light" => Wpf.Ui.Appearance.ApplicationTheme.Light,
             _ => Wpf.Ui.Appearance.ApplicationTheme.Dark,
         };
-        Wpf.Ui.Appearance.ApplicationThemeManager.Apply(appTheme);
+        Wpf.Ui.Appearance.ApplicationThemeManager.Apply(appTheme,
+            Wpf.Ui.Controls.WindowBackdropType.Mica);
     }
 }

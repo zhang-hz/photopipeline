@@ -1,10 +1,10 @@
 using Photopipeline.ViewModels;
-using System.Windows;
-using System.Windows.Controls;
+using Wpf.Ui.Appearance;
+using Wpf.Ui.Controls;
 
 namespace Photopipeline;
 
-public partial class MainWindow : Window
+public partial class MainWindow : FluentWindow
 {
     private readonly MainViewModel _viewModel;
 
@@ -16,9 +16,12 @@ public partial class MainWindow : Window
         Closing += (_, _) => _viewModel.Shutdown();
     }
 
-    private void OnThemeComboBoxChanged(object sender, SelectionChangedEventArgs e)
+    private void OnThemeToggleClick(object sender, System.Windows.RoutedEventArgs e)
     {
-        if (sender is ComboBox cb && cb.SelectedItem is string theme)
-            App.ApplyTheme(theme);
+        var current = ApplicationThemeManager.GetAppTheme();
+        var next = current == ApplicationTheme.Dark
+            ? ApplicationTheme.Light
+            : ApplicationTheme.Dark;
+        ApplicationThemeManager.Apply(next, WindowBackdropType.Mica);
     }
 }
