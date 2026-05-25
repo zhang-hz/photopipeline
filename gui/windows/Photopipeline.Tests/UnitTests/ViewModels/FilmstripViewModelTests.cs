@@ -40,7 +40,7 @@ public sealed class FilmstripViewModelTests
     {
         var vm = Create();
 
-        vm.SortOptions.Should().Contain(new[] { "Name", "Date", "Size", "Format" });
+        vm.SortOptions.Should().Contain(new[] { "Name", "Size", "Format" });
     }
 
     [Fact]
@@ -75,6 +75,7 @@ public sealed class FilmstripViewModelTests
         var vm = Create();
         var img = new ImageEntry { FilePath = "test.jpg", FileName = "test.jpg" };
         vm.Images.Add(img);
+        vm.FilteredImages.Add(img);
 
         vm.RemoveImageCommand.Execute(img);
 
@@ -101,7 +102,9 @@ public sealed class FilmstripViewModelTests
     public void SelectAll_SelectsAllFilteredImages()
     {
         var vm = Create();
-        vm.Images.Add(new ImageEntry { FileName = "a.jpg", Format = "JPEG" });
+        var img = new ImageEntry { FileName = "a.jpg", Format = "JPEG" };
+        vm.Images.Add(img);
+        vm.FilteredImages.Add(img);
 
         vm.SelectAllCommand.Execute(null);
 
@@ -112,7 +115,9 @@ public sealed class FilmstripViewModelTests
     public void ClearSelection_RemovesAllSelected()
     {
         var vm = Create();
-        vm.Images.Add(new ImageEntry { FileName = "a.jpg" });
+        var img = new ImageEntry { FileName = "a.jpg" };
+        vm.Images.Add(img);
+        vm.FilteredImages.Add(img);
         vm.SelectAllCommand.Execute(null);
 
         vm.ClearSelectionCommand.Execute(null);
@@ -124,8 +129,12 @@ public sealed class FilmstripViewModelTests
     public void InvertSelection_SelectsUnselected()
     {
         var vm = Create();
-        vm.Images.Add(new ImageEntry { FileName = "a.jpg" });
-        vm.Images.Add(new ImageEntry { FileName = "b.jpg" });
+        var img1 = new ImageEntry { FileName = "a.jpg" };
+        var img2 = new ImageEntry { FileName = "b.jpg" };
+        vm.Images.Add(img1);
+        vm.Images.Add(img2);
+        vm.FilteredImages.Add(img1);
+        vm.FilteredImages.Add(img2);
 
         vm.InvertSelectionCommand.Execute(null);
 

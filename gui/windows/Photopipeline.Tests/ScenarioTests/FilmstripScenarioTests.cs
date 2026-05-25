@@ -55,9 +55,15 @@ public sealed class FilmstripScenarioTests
     public void MultiSelect_ThenRemove()
     {
         var vm = Create();
-        vm.Images.Add(new ImageEntry { FileName = "a.dng" });
-        vm.Images.Add(new ImageEntry { FileName = "b.dng" });
-        vm.Images.Add(new ImageEntry { FileName = "c.dng" });
+        var img1 = new ImageEntry { FileName = "a.dng" };
+        var img2 = new ImageEntry { FileName = "b.dng" };
+        var img3 = new ImageEntry { FileName = "c.dng" };
+        vm.Images.Add(img1);
+        vm.Images.Add(img2);
+        vm.Images.Add(img3);
+        vm.FilteredImages.Add(img1);
+        vm.FilteredImages.Add(img2);
+        vm.FilteredImages.Add(img3);
 
         vm.SelectAllCommand.Execute(null);
         vm.SelectedImages.Should().HaveCount(3);

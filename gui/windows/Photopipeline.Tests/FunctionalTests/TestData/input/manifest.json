@@ -1,0 +1,1414 @@
+[
+  {
+    "Id": "pure_black_small",
+    "RelativePath": "solid/pure_black_64x64.png",
+    "Category": "solid",
+    "Format": "PNG",
+    "Width": 64,
+    "Height": 64,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "small",
+      "solid",
+      "rgb8"
+    ],
+    "Description": "solid test image 64x64 8bit"
+  },
+  {
+    "Id": "pure_black_large",
+    "RelativePath": "solid/pure_black_1920x1080.png",
+    "Category": "solid",
+    "Format": "PNG",
+    "Width": 1920,
+    "Height": 1080,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "large",
+      "solid",
+      "rgb8"
+    ],
+    "Description": "solid test image 1920x1080 8bit"
+  },
+  {
+    "Id": "pure_white_small",
+    "RelativePath": "solid/pure_white_64x64.png",
+    "Category": "solid",
+    "Format": "PNG",
+    "Width": 64,
+    "Height": 64,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "small",
+      "solid",
+      "rgb8"
+    ],
+    "Description": "solid test image 64x64 8bit"
+  },
+  {
+    "Id": "pure_white_large",
+    "RelativePath": "solid/pure_white_1920x1080.png",
+    "Category": "solid",
+    "Format": "PNG",
+    "Width": 1920,
+    "Height": 1080,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "large",
+      "solid",
+      "rgb8"
+    ],
+    "Description": "solid test image 1920x1080 8bit"
+  },
+  {
+    "Id": "pure_red_small",
+    "RelativePath": "solid/pure_red_64x64.png",
+    "Category": "solid",
+    "Format": "PNG",
+    "Width": 64,
+    "Height": 64,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "small",
+      "solid",
+      "rgb8"
+    ],
+    "Description": "solid test image 64x64 8bit"
+  },
+  {
+    "Id": "pure_red_large",
+    "RelativePath": "solid/pure_red_1920x1080.png",
+    "Category": "solid",
+    "Format": "PNG",
+    "Width": 1920,
+    "Height": 1080,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "large",
+      "solid",
+      "rgb8"
+    ],
+    "Description": "solid test image 1920x1080 8bit"
+  },
+  {
+    "Id": "pure_green_small",
+    "RelativePath": "solid/pure_green_64x64.png",
+    "Category": "solid",
+    "Format": "PNG",
+    "Width": 64,
+    "Height": 64,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "small",
+      "solid",
+      "rgb8"
+    ],
+    "Description": "solid test image 64x64 8bit"
+  },
+  {
+    "Id": "pure_green_large",
+    "RelativePath": "solid/pure_green_1920x1080.png",
+    "Category": "solid",
+    "Format": "PNG",
+    "Width": 1920,
+    "Height": 1080,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "large",
+      "solid",
+      "rgb8"
+    ],
+    "Description": "solid test image 1920x1080 8bit"
+  },
+  {
+    "Id": "pure_blue_small",
+    "RelativePath": "solid/pure_blue_64x64.png",
+    "Category": "solid",
+    "Format": "PNG",
+    "Width": 64,
+    "Height": 64,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "small",
+      "solid",
+      "rgb8"
+    ],
+    "Description": "solid test image 64x64 8bit"
+  },
+  {
+    "Id": "pure_blue_large",
+    "RelativePath": "solid/pure_blue_1920x1080.png",
+    "Category": "solid",
+    "Format": "PNG",
+    "Width": 1920,
+    "Height": 1080,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "large",
+      "solid",
+      "rgb8"
+    ],
+    "Description": "solid test image 1920x1080 8bit"
+  },
+  {
+    "Id": "mid_gray_128_small",
+    "RelativePath": "solid/mid_gray_128_64x64.png",
+    "Category": "solid",
+    "Format": "PNG",
+    "Width": 64,
+    "Height": 64,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "small",
+      "solid",
+      "rgb8"
+    ],
+    "Description": "solid test image 64x64 8bit"
+  },
+  {
+    "Id": "mid_gray_128_large",
+    "RelativePath": "solid/mid_gray_128_1920x1080.png",
+    "Category": "solid",
+    "Format": "PNG",
+    "Width": 1920,
+    "Height": 1080,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "large",
+      "solid",
+      "rgb8"
+    ],
+    "Description": "solid test image 1920x1080 8bit"
+  },
+  {
+    "Id": "dark_gray_32_small",
+    "RelativePath": "solid/dark_gray_32_64x64.png",
+    "Category": "solid",
+    "Format": "PNG",
+    "Width": 64,
+    "Height": 64,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "small",
+      "solid",
+      "rgb8"
+    ],
+    "Description": "solid test image 64x64 8bit"
+  },
+  {
+    "Id": "dark_gray_32_large",
+    "RelativePath": "solid/dark_gray_32_1920x1080.png",
+    "Category": "solid",
+    "Format": "PNG",
+    "Width": 1920,
+    "Height": 1080,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "large",
+      "solid",
+      "rgb8"
+    ],
+    "Description": "solid test image 1920x1080 8bit"
+  },
+  {
+    "Id": "light_gray_224_small",
+    "RelativePath": "solid/light_gray_224_64x64.png",
+    "Category": "solid",
+    "Format": "PNG",
+    "Width": 64,
+    "Height": 64,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "small",
+      "solid",
+      "rgb8"
+    ],
+    "Description": "solid test image 64x64 8bit"
+  },
+  {
+    "Id": "light_gray_224_large",
+    "RelativePath": "solid/light_gray_224_1920x1080.png",
+    "Category": "solid",
+    "Format": "PNG",
+    "Width": 1920,
+    "Height": 1080,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "large",
+      "solid",
+      "rgb8"
+    ],
+    "Description": "solid test image 1920x1080 8bit"
+  },
+  {
+    "Id": "pure_cyan_small",
+    "RelativePath": "solid/pure_cyan_64x64.png",
+    "Category": "solid",
+    "Format": "PNG",
+    "Width": 64,
+    "Height": 64,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "small",
+      "solid",
+      "rgb8"
+    ],
+    "Description": "solid test image 64x64 8bit"
+  },
+  {
+    "Id": "pure_cyan_large",
+    "RelativePath": "solid/pure_cyan_1920x1080.png",
+    "Category": "solid",
+    "Format": "PNG",
+    "Width": 1920,
+    "Height": 1080,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "large",
+      "solid",
+      "rgb8"
+    ],
+    "Description": "solid test image 1920x1080 8bit"
+  },
+  {
+    "Id": "pure_magenta_small",
+    "RelativePath": "solid/pure_magenta_64x64.png",
+    "Category": "solid",
+    "Format": "PNG",
+    "Width": 64,
+    "Height": 64,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "small",
+      "solid",
+      "rgb8"
+    ],
+    "Description": "solid test image 64x64 8bit"
+  },
+  {
+    "Id": "pure_magenta_large",
+    "RelativePath": "solid/pure_magenta_1920x1080.png",
+    "Category": "solid",
+    "Format": "PNG",
+    "Width": 1920,
+    "Height": 1080,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "large",
+      "solid",
+      "rgb8"
+    ],
+    "Description": "solid test image 1920x1080 8bit"
+  },
+  {
+    "Id": "pure_yellow_small",
+    "RelativePath": "solid/pure_yellow_64x64.png",
+    "Category": "solid",
+    "Format": "PNG",
+    "Width": 64,
+    "Height": 64,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "small",
+      "solid",
+      "rgb8"
+    ],
+    "Description": "solid test image 64x64 8bit"
+  },
+  {
+    "Id": "pure_yellow_large",
+    "RelativePath": "solid/pure_yellow_1920x1080.png",
+    "Category": "solid",
+    "Format": "PNG",
+    "Width": 1920,
+    "Height": 1080,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "large",
+      "solid",
+      "rgb8"
+    ],
+    "Description": "solid test image 1920x1080 8bit"
+  },
+  {
+    "Id": "navy_blue_small",
+    "RelativePath": "solid/navy_blue_64x64.png",
+    "Category": "solid",
+    "Format": "PNG",
+    "Width": 64,
+    "Height": 64,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "small",
+      "solid",
+      "rgb8"
+    ],
+    "Description": "solid test image 64x64 8bit"
+  },
+  {
+    "Id": "navy_blue_large",
+    "RelativePath": "solid/navy_blue_1920x1080.png",
+    "Category": "solid",
+    "Format": "PNG",
+    "Width": 1920,
+    "Height": 1080,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "large",
+      "solid",
+      "rgb8"
+    ],
+    "Description": "solid test image 1920x1080 8bit"
+  },
+  {
+    "Id": "gradient_horiz_rgb",
+    "RelativePath": "gradient/horiz_rgb_512x256.png",
+    "Category": "gradient",
+    "Format": "PNG",
+    "Width": 512,
+    "Height": 256,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "gradient",
+      "rgb",
+      "8bit"
+    ],
+    "Description": "gradient test image 512x256 8bit"
+  },
+  {
+    "Id": "gradient_vert_rgb",
+    "RelativePath": "gradient/vert_rgb_512x256.png",
+    "Category": "gradient",
+    "Format": "PNG",
+    "Width": 512,
+    "Height": 256,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "gradient",
+      "rgb",
+      "8bit"
+    ],
+    "Description": "gradient test image 512x256 8bit"
+  },
+  {
+    "Id": "gradient_radial_rgb",
+    "RelativePath": "gradient/radial_rgb_512x512.png",
+    "Category": "gradient",
+    "Format": "PNG",
+    "Width": 512,
+    "Height": 512,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "gradient",
+      "rgb",
+      "8bit"
+    ],
+    "Description": "gradient test image 512x512 8bit"
+  },
+  {
+    "Id": "gradient_diag_rgb",
+    "RelativePath": "gradient/diag_rgb_512x512.png",
+    "Category": "gradient",
+    "Format": "PNG",
+    "Width": 512,
+    "Height": 512,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "gradient",
+      "rgb",
+      "8bit"
+    ],
+    "Description": "gradient test image 512x512 8bit"
+  },
+  {
+    "Id": "gradient_horiz_gray",
+    "RelativePath": "gradient/horiz_gray_256x128.png",
+    "Category": "gradient",
+    "Format": "PNG",
+    "Width": 256,
+    "Height": 128,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "gradient",
+      "gray",
+      "8bit"
+    ],
+    "Description": "gradient test image 256x128 8bit"
+  },
+  {
+    "Id": "gradient_vert_gray",
+    "RelativePath": "gradient/vert_gray_256x128.png",
+    "Category": "gradient",
+    "Format": "PNG",
+    "Width": 256,
+    "Height": 128,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "gradient",
+      "gray",
+      "8bit"
+    ],
+    "Description": "gradient test image 256x128 8bit"
+  },
+  {
+    "Id": "gradient_radial_gray",
+    "RelativePath": "gradient/radial_gray_512x512.png",
+    "Category": "gradient",
+    "Format": "PNG",
+    "Width": 512,
+    "Height": 512,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "gradient",
+      "gray",
+      "8bit"
+    ],
+    "Description": "gradient test image 512x512 8bit"
+  },
+  {
+    "Id": "gradient_diag_gray",
+    "RelativePath": "gradient/diag_gray_512x512.png",
+    "Category": "gradient",
+    "Format": "PNG",
+    "Width": 512,
+    "Height": 512,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "gradient",
+      "gray",
+      "8bit"
+    ],
+    "Description": "gradient test image 512x512 8bit"
+  },
+  {
+    "Id": "gradient_horiz_rgb_16bit",
+    "RelativePath": "gradient/horiz_rgb_16bit_256x128.png",
+    "Category": "gradient",
+    "Format": "PNG",
+    "Width": 256,
+    "Height": 128,
+    "BitDepth": 16,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "gradient",
+      "rgb",
+      "16bit"
+    ],
+    "Description": "gradient test image 256x128 16bit"
+  },
+  {
+    "Id": "gradient_vert_rgb_16bit",
+    "RelativePath": "gradient/vert_rgb_16bit_256x128.png",
+    "Category": "gradient",
+    "Format": "PNG",
+    "Width": 256,
+    "Height": 128,
+    "BitDepth": 16,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "gradient",
+      "rgb",
+      "16bit"
+    ],
+    "Description": "gradient test image 256x128 16bit"
+  },
+  {
+    "Id": "checkerboard_2x2",
+    "RelativePath": "pattern/checkerboard_2x2_128.png",
+    "Category": "pattern",
+    "Format": "PNG",
+    "Width": 128,
+    "Height": 128,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "checkerboard",
+      "pattern",
+      "rgb8",
+      "grid_2"
+    ],
+    "Description": "pattern test image 128x128 8bit"
+  },
+  {
+    "Id": "checkerboard_4x4",
+    "RelativePath": "pattern/checkerboard_4x4_256.png",
+    "Category": "pattern",
+    "Format": "PNG",
+    "Width": 256,
+    "Height": 256,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "checkerboard",
+      "pattern",
+      "rgb8",
+      "grid_4"
+    ],
+    "Description": "pattern test image 256x256 8bit"
+  },
+  {
+    "Id": "checkerboard_8x8",
+    "RelativePath": "pattern/checkerboard_8x8_256.png",
+    "Category": "pattern",
+    "Format": "PNG",
+    "Width": 256,
+    "Height": 256,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "checkerboard",
+      "pattern",
+      "rgb8",
+      "grid_8"
+    ],
+    "Description": "pattern test image 256x256 8bit"
+  },
+  {
+    "Id": "checkerboard_16x16",
+    "RelativePath": "pattern/checkerboard_16x16_256.png",
+    "Category": "pattern",
+    "Format": "PNG",
+    "Width": 256,
+    "Height": 256,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "checkerboard",
+      "pattern",
+      "rgb8",
+      "grid_16"
+    ],
+    "Description": "pattern test image 256x256 8bit"
+  },
+  {
+    "Id": "checkerboard_32x32",
+    "RelativePath": "pattern/checkerboard_32x32_512.png",
+    "Category": "pattern",
+    "Format": "PNG",
+    "Width": 512,
+    "Height": 512,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "checkerboard",
+      "pattern",
+      "rgb8",
+      "grid_32"
+    ],
+    "Description": "pattern test image 512x512 8bit"
+  },
+  {
+    "Id": "checkerboard_64x64",
+    "RelativePath": "pattern/checkerboard_64x64_512.png",
+    "Category": "pattern",
+    "Format": "PNG",
+    "Width": 512,
+    "Height": 512,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "checkerboard",
+      "pattern",
+      "rgb8",
+      "grid_64"
+    ],
+    "Description": "pattern test image 512x512 8bit"
+  },
+  {
+    "Id": "checkerboard_rgba",
+    "RelativePath": "pattern/checkerboard_rgba_256.png",
+    "Category": "pattern",
+    "Format": "PNG",
+    "Width": 256,
+    "Height": 256,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": true,
+    "Tags": [
+      "checkerboard",
+      "pattern",
+      "rgba"
+    ],
+    "Description": "pattern test image 256x256 8bit"
+  },
+  {
+    "Id": "color_bars_8bit",
+    "RelativePath": "pattern/color_bars_256x128_8bit.png",
+    "Category": "pattern",
+    "Format": "PNG",
+    "Width": 256,
+    "Height": 128,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "color_bars",
+      "pattern",
+      "8bit"
+    ],
+    "Description": "pattern test image 256x128 8bit"
+  },
+  {
+    "Id": "color_bars_8bit",
+    "RelativePath": "pattern/color_bars_512x256_8bit.png",
+    "Category": "pattern",
+    "Format": "PNG",
+    "Width": 512,
+    "Height": 256,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "color_bars",
+      "pattern",
+      "8bit"
+    ],
+    "Description": "pattern test image 512x256 8bit"
+  },
+  {
+    "Id": "color_bars_16bit",
+    "RelativePath": "pattern/color_bars_512x256_16bit.png",
+    "Category": "pattern",
+    "Format": "PNG",
+    "Width": 512,
+    "Height": 256,
+    "BitDepth": 16,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "color_bars",
+      "pattern",
+      "16bit"
+    ],
+    "Description": "pattern test image 512x256 16bit"
+  },
+  {
+    "Id": "grayscale_2steps",
+    "RelativePath": "pattern/grayscale_2steps_8x64.png",
+    "Category": "pattern",
+    "Format": "PNG",
+    "Width": 8,
+    "Height": 64,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "grayscale",
+      "pattern",
+      "steps_2"
+    ],
+    "Description": "pattern test image 8x64 8bit"
+  },
+  {
+    "Id": "grayscale_4steps",
+    "RelativePath": "pattern/grayscale_4steps_16x64.png",
+    "Category": "pattern",
+    "Format": "PNG",
+    "Width": 16,
+    "Height": 64,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "grayscale",
+      "pattern",
+      "steps_4"
+    ],
+    "Description": "pattern test image 16x64 8bit"
+  },
+  {
+    "Id": "grayscale_8steps",
+    "RelativePath": "pattern/grayscale_8steps_32x64.png",
+    "Category": "pattern",
+    "Format": "PNG",
+    "Width": 32,
+    "Height": 64,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "grayscale",
+      "pattern",
+      "steps_8"
+    ],
+    "Description": "pattern test image 32x64 8bit"
+  },
+  {
+    "Id": "grayscale_16steps",
+    "RelativePath": "pattern/grayscale_16steps_64x64.png",
+    "Category": "pattern",
+    "Format": "PNG",
+    "Width": 64,
+    "Height": 64,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "grayscale",
+      "pattern",
+      "steps_16"
+    ],
+    "Description": "pattern test image 64x64 8bit"
+  },
+  {
+    "Id": "grayscale_32steps",
+    "RelativePath": "pattern/grayscale_32steps_128x64.png",
+    "Category": "pattern",
+    "Format": "PNG",
+    "Width": 128,
+    "Height": 64,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "grayscale",
+      "pattern",
+      "steps_32"
+    ],
+    "Description": "pattern test image 128x64 8bit"
+  },
+  {
+    "Id": "grayscale_64steps",
+    "RelativePath": "pattern/grayscale_64steps_256x64.png",
+    "Category": "pattern",
+    "Format": "PNG",
+    "Width": 256,
+    "Height": 64,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "grayscale",
+      "pattern",
+      "steps_64"
+    ],
+    "Description": "pattern test image 256x64 8bit"
+  },
+  {
+    "Id": "grayscale_128steps",
+    "RelativePath": "pattern/grayscale_128steps_512x64.png",
+    "Category": "pattern",
+    "Format": "PNG",
+    "Width": 512,
+    "Height": 64,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "grayscale",
+      "pattern",
+      "steps_128"
+    ],
+    "Description": "pattern test image 512x64 8bit"
+  },
+  {
+    "Id": "grayscale_256steps",
+    "RelativePath": "pattern/grayscale_256steps_1024x64.png",
+    "Category": "pattern",
+    "Format": "PNG",
+    "Width": 1024,
+    "Height": 64,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "grayscale",
+      "pattern",
+      "steps_256"
+    ],
+    "Description": "pattern test image 1024x64 8bit"
+  },
+  {
+    "Id": "grayscale_64steps_16bit",
+    "RelativePath": "pattern/grayscale_64steps_16bit_256x64.png",
+    "Category": "pattern",
+    "Format": "PNG",
+    "Width": 256,
+    "Height": 64,
+    "BitDepth": 16,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "grayscale",
+      "pattern",
+      "16bit",
+      "steps_64"
+    ],
+    "Description": "pattern test image 256x64 16bit"
+  },
+  {
+    "Id": "zone_plate_4hz",
+    "RelativePath": "zone_plate/zone_plate_4hz_128x128.png",
+    "Category": "zone_plate",
+    "Format": "PNG",
+    "Width": 128,
+    "Height": 128,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "zone_plate",
+      "sine",
+      "pattern",
+      "freq_4"
+    ],
+    "Description": "zone_plate test image 128x128 8bit"
+  },
+  {
+    "Id": "zone_plate_8hz",
+    "RelativePath": "zone_plate/zone_plate_8hz_256x256.png",
+    "Category": "zone_plate",
+    "Format": "PNG",
+    "Width": 256,
+    "Height": 256,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "zone_plate",
+      "sine",
+      "pattern",
+      "freq_8"
+    ],
+    "Description": "zone_plate test image 256x256 8bit"
+  },
+  {
+    "Id": "zone_plate_16hz",
+    "RelativePath": "zone_plate/zone_plate_16hz_512x512.png",
+    "Category": "zone_plate",
+    "Format": "PNG",
+    "Width": 512,
+    "Height": 512,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "zone_plate",
+      "sine",
+      "pattern",
+      "freq_16"
+    ],
+    "Description": "zone_plate test image 512x512 8bit"
+  },
+  {
+    "Id": "zone_plate_32hz",
+    "RelativePath": "zone_plate/zone_plate_32hz_1024x1024.png",
+    "Category": "zone_plate",
+    "Format": "PNG",
+    "Width": 1024,
+    "Height": 1024,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "zone_plate",
+      "sine",
+      "pattern",
+      "freq_32"
+    ],
+    "Description": "zone_plate test image 1024x1024 8bit"
+  },
+  {
+    "Id": "noise_grain",
+    "RelativePath": "natural/noise_grain_256x256.png",
+    "Category": "natural",
+    "Format": "PNG",
+    "Width": 256,
+    "Height": 256,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "natural",
+      "noise",
+      "texture"
+    ],
+    "Description": "natural test image 256x256 8bit"
+  },
+  {
+    "Id": "noise_clouds",
+    "RelativePath": "natural/noise_clouds_512x512.png",
+    "Category": "natural",
+    "Format": "PNG",
+    "Width": 512,
+    "Height": 512,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "natural",
+      "noise",
+      "texture"
+    ],
+    "Description": "natural test image 512x512 8bit"
+  },
+  {
+    "Id": "noise_wood",
+    "RelativePath": "natural/noise_wood_256x256.png",
+    "Category": "natural",
+    "Format": "PNG",
+    "Width": 256,
+    "Height": 256,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "natural",
+      "noise",
+      "texture"
+    ],
+    "Description": "natural test image 256x256 8bit"
+  },
+  {
+    "Id": "noise_marble",
+    "RelativePath": "natural/noise_marble_512x512.png",
+    "Category": "natural",
+    "Format": "PNG",
+    "Width": 512,
+    "Height": 512,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "natural",
+      "noise",
+      "texture"
+    ],
+    "Description": "natural test image 512x512 8bit"
+  },
+  {
+    "Id": "noise_fabric",
+    "RelativePath": "natural/noise_fabric_256x256.png",
+    "Category": "natural",
+    "Format": "PNG",
+    "Width": 256,
+    "Height": 256,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "natural",
+      "noise",
+      "texture"
+    ],
+    "Description": "natural test image 256x256 8bit"
+  },
+  {
+    "Id": "noise_terrain",
+    "RelativePath": "natural/noise_terrain_512x256.png",
+    "Category": "natural",
+    "Format": "PNG",
+    "Width": 512,
+    "Height": 256,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "natural",
+      "noise",
+      "texture"
+    ],
+    "Description": "natural test image 512x256 8bit"
+  },
+  {
+    "Id": "alpha_solid_transparent",
+    "RelativePath": "alpha/alpha_solid_transparent_128x128.png",
+    "Category": "alpha",
+    "Format": "PNG",
+    "Width": 128,
+    "Height": 128,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": true,
+    "Tags": [
+      "alpha",
+      "rgba"
+    ],
+    "Description": "alpha test image 128x128 8bit"
+  },
+  {
+    "Id": "alpha_gradient_transparent",
+    "RelativePath": "alpha/alpha_gradient_transparent_256x128.png",
+    "Category": "alpha",
+    "Format": "PNG",
+    "Width": 256,
+    "Height": 128,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": true,
+    "Tags": [
+      "alpha",
+      "rgba"
+    ],
+    "Description": "alpha test image 256x128 8bit"
+  },
+  {
+    "Id": "alpha_checker_transparent",
+    "RelativePath": "alpha/alpha_checker_transparent_256x256.png",
+    "Category": "alpha",
+    "Format": "PNG",
+    "Width": 256,
+    "Height": 256,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": true,
+    "Tags": [
+      "alpha",
+      "rgba"
+    ],
+    "Description": "alpha test image 256x256 8bit"
+  },
+  {
+    "Id": "alpha_circle_opaque",
+    "RelativePath": "alpha/alpha_circle_opaque_256x256.png",
+    "Category": "alpha",
+    "Format": "PNG",
+    "Width": 256,
+    "Height": 256,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": true,
+    "Tags": [
+      "alpha",
+      "rgba"
+    ],
+    "Description": "alpha test image 256x256 8bit"
+  },
+  {
+    "Id": "alpha_text_overlay",
+    "RelativePath": "alpha/alpha_text_overlay_256x128.png",
+    "Category": "alpha",
+    "Format": "PNG",
+    "Width": 256,
+    "Height": 128,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": true,
+    "Tags": [
+      "alpha",
+      "rgba"
+    ],
+    "Description": "alpha test image 256x128 8bit"
+  },
+  {
+    "Id": "alpha_full_opaque",
+    "RelativePath": "alpha/alpha_full_opaque_128x128.png",
+    "Category": "alpha",
+    "Format": "PNG",
+    "Width": 128,
+    "Height": 128,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": true,
+    "Tags": [
+      "alpha",
+      "rgba"
+    ],
+    "Description": "alpha test image 128x128 8bit"
+  },
+  {
+    "Id": "boundary_1x1",
+    "RelativePath": "boundary/boundary_1x1.png",
+    "Category": "boundary",
+    "Format": "PNG",
+    "Width": 1,
+    "Height": 1,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "boundary",
+      "edge_case",
+      "size_1x1"
+    ],
+    "Description": "boundary test image 1x1 8bit"
+  },
+  {
+    "Id": "boundary_1x100",
+    "RelativePath": "boundary/boundary_1x100.png",
+    "Category": "boundary",
+    "Format": "PNG",
+    "Width": 1,
+    "Height": 100,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "boundary",
+      "edge_case",
+      "size_1x100"
+    ],
+    "Description": "boundary test image 1x100 8bit"
+  },
+  {
+    "Id": "boundary_100x1",
+    "RelativePath": "boundary/boundary_100x1.png",
+    "Category": "boundary",
+    "Format": "PNG",
+    "Width": 100,
+    "Height": 1,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "boundary",
+      "edge_case",
+      "size_100x1"
+    ],
+    "Description": "boundary test image 100x1 8bit"
+  },
+  {
+    "Id": "boundary_2x2",
+    "RelativePath": "boundary/boundary_2x2.png",
+    "Category": "boundary",
+    "Format": "PNG",
+    "Width": 2,
+    "Height": 2,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "boundary",
+      "edge_case",
+      "size_2x2"
+    ],
+    "Description": "boundary test image 2x2 8bit"
+  },
+  {
+    "Id": "boundary_3x3",
+    "RelativePath": "boundary/boundary_3x3.png",
+    "Category": "boundary",
+    "Format": "PNG",
+    "Width": 3,
+    "Height": 3,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "boundary",
+      "edge_case",
+      "size_3x3"
+    ],
+    "Description": "boundary test image 3x3 8bit"
+  },
+  {
+    "Id": "boundary_799x601",
+    "RelativePath": "boundary/boundary_799x601.png",
+    "Category": "boundary",
+    "Format": "PNG",
+    "Width": 799,
+    "Height": 601,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "boundary",
+      "edge_case",
+      "size_799x601"
+    ],
+    "Description": "boundary test image 799x601 8bit"
+  },
+  {
+    "Id": "boundary_601x799",
+    "RelativePath": "boundary/boundary_601x799.png",
+    "Category": "boundary",
+    "Format": "PNG",
+    "Width": 601,
+    "Height": 799,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "boundary",
+      "edge_case",
+      "size_601x799"
+    ],
+    "Description": "boundary test image 601x799 8bit"
+  },
+  {
+    "Id": "format_png",
+    "RelativePath": "format_variety/test_256x128.png",
+    "Category": "format_variety",
+    "Format": "PNG",
+    "Width": 256,
+    "Height": 128,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "format",
+      "png"
+    ],
+    "Description": "format_variety test image 256x128 8bit"
+  },
+  {
+    "Id": "format_jpeg",
+    "RelativePath": "format_variety/test_256x128.jpeg",
+    "Category": "format_variety",
+    "Format": "JPEG",
+    "Width": 256,
+    "Height": 128,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "format",
+      "jpeg"
+    ],
+    "Description": "format_variety test image 256x128 8bit"
+  },
+  {
+    "Id": "format_tiff",
+    "RelativePath": "format_variety/test_256x128.tiff",
+    "Category": "format_variety",
+    "Format": "TIFF",
+    "Width": 256,
+    "Height": 128,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "format",
+      "tiff"
+    ],
+    "Description": "format_variety test image 256x128 8bit"
+  },
+  {
+    "Id": "format_webp",
+    "RelativePath": "format_variety/test_256x128.webp",
+    "Category": "format_variety",
+    "Format": "WEBP",
+    "Width": 256,
+    "Height": 128,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "format",
+      "webp"
+    ],
+    "Description": "format_variety test image 256x128 8bit"
+  },
+  {
+    "Id": "format_bmp",
+    "RelativePath": "format_variety/test_256x128.bmp",
+    "Category": "format_variety",
+    "Format": "BMP",
+    "Width": 256,
+    "Height": 128,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "format",
+      "bmp"
+    ],
+    "Description": "format_variety test image 256x128 8bit"
+  },
+  {
+    "Id": "gradient_rgb_16bit",
+    "RelativePath": "high_bitdepth/gradient_rgb_16bit_256x128.png",
+    "Category": "high_bitdepth",
+    "Format": "PNG",
+    "Width": 256,
+    "Height": 128,
+    "BitDepth": 16,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "16bit",
+      "gradient",
+      "rgb"
+    ],
+    "Description": "high_bitdepth test image 256x128 16bit"
+  },
+  {
+    "Id": "gradient_rgb_hdr",
+    "RelativePath": "high_bitdepth/gradient_rgb_hdr_256x128.png",
+    "Category": "high_bitdepth",
+    "Format": "PNG",
+    "Width": 256,
+    "Height": 128,
+    "BitDepth": 16,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "hdr",
+      "gradient",
+      "rgb",
+      "float"
+    ],
+    "Description": "high_bitdepth test image 256x128 16bit"
+  }
+]
