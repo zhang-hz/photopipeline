@@ -31,6 +31,7 @@
                  SelectedItem="{Binding SelectedPlugin}"
                  VirtualizingPanel.ScrollUnit="Pixel"
                  Background="Transparent" BorderThickness="0"
+                 PreviewMouseLeftButtonDown="OnPluginListPreviewMouseLeftButtonDown"
                  PreviewMouseMove="OnPluginListMouseMove"
                  SelectionChanged="OnPluginSelectionChanged">
             <ListBox.ItemTemplate>

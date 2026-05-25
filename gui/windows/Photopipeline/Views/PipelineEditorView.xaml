@@ -27,7 +27,8 @@
                 Background="{DynamicResource ControlFillColorSecondaryBrush}"
                 BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="0,0,0,1">
             <StackPanel Orientation="Horizontal">
-                <ui:Button Content="New" Command="{Binding CreateCommand}" Margin="0,0,2,0" FontSize="11" />
+                <ui:Button Content="New" Command="{Binding NewPipelineCommand}" Margin="0,0,2,0" FontSize="11" />
+                <ui:Button Content="Save" Command="{Binding CreateCommand}" Margin="0,0,2,0" FontSize="11" Appearance="Secondary" />
                 <ui:Button Content="Validate" Command="{Binding ValidateCommand}" Margin="0,0,2,0" FontSize="11" />
 
                 <Separator Margin="4,2" />

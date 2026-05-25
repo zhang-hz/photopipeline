@@ -79,6 +79,8 @@ public sealed class SkiaDAGCanvas : SKElement
     {
         var canvas = (SkiaDAGCanvas)d;
         canvas._nodes = e.NewValue as IReadOnlyList<PipelineNode> ?? Array.Empty<PipelineNode>();
+        canvas._layoutCache.Clear();
+        canvas.InvalidateVisual();
     }
 
     private static void OnEdgesChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -230,8 +232,8 @@ public sealed class SkiaDAGCanvas : SKElement
         for (int i = 0; i < _nodes.Count; i++)
         {
             var node = _nodes[i];
-            float nx = (float)(node.PositionX > 0 || node.PositionY > 0 ? node.PositionX : startX);
-            float ny = (float)(node.PositionX > 0 || node.PositionY > 0 ? node.PositionY : startY + i * spacingY);
+            float nx = (float)(node.PositionX > 0 ? node.PositionX : startX);
+            float ny = (float)(node.PositionY > 0 ? node.PositionY : startY + i * spacingY);
             var worldRect = new SKRect(nx, ny, nx + NodeWidth, ny + NodeHeight);
             var screenRect = new SKRect(
                 WorldToScreen(new SKPoint(worldRect.Left, worldRect.Top)).X,

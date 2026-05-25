@@ -104,7 +104,8 @@ public sealed partial class PreviewViewModel : ViewModelBase
                 PixelData = pixels,
                 Width = (uint)bmp.Width,
                 Height = (uint)bmp.Height,
-                Layout = bmp.ColorType == SKColorType.Rgba8888 ? "RGBA" : "RGB",
+                PixelFormat = DerivePixelFormat(bmp),
+                Layout = DeriveLayout(bmp),
                 OutputPath = dialog.FileName,
                 Format = System.IO.Path.GetExtension(dialog.FileName).TrimStart('.').ToUpperInvariant()
             };
@@ -274,5 +275,30 @@ public sealed partial class PreviewViewModel : ViewModelBase
         "GRAY8" => SKColorType.Gray8,
         "GRAY16" => SKColorType.Alpha16,
         _ => SKColorType.Rgba8888
+    };
+
+    private static string DerivePixelFormat(SKBitmap bmp)
+    {
+        int channels = bmp.ColorType switch
+        {
+            SKColorType.Rgba8888 or SKColorType.Rgba16161616 or SKColorType.Bgra8888 => 4,
+            SKColorType.Gray8 => 1,
+            _ => 3
+        };
+        int bytesPerChannel = bmp.BytesPerPixel / Math.Max(channels, 1);
+        return bytesPerChannel switch
+        {
+            2 => "U16",
+            4 => "F32",
+            _ => "U8"
+        };
+    }
+
+    private static string DeriveLayout(SKBitmap bmp) => bmp.ColorType switch
+    {
+        SKColorType.Rgba8888 or SKColorType.Rgba16161616 => "RGBA",
+        SKColorType.Gray8 or SKColorType.Alpha16 => "Gray",
+        SKColorType.Bgra8888 => "BGRA",
+        _ => "RGB"
     };
 }

@@ -34,10 +34,10 @@ public partial class PluginBrowserView : UserControl
         DragDrop.DoDragDrop(listBox, plugin, DragDropEffects.Copy);
     }
 
-    protected override void OnPreviewMouseLeftButtonDown(MouseButtonEventArgs e)
+    private void OnPluginListPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        base.OnPreviewMouseLeftButtonDown(e);
-        _dragStart = e.GetPosition(this);
+        if (sender is ListBox listBox)
+            _dragStart = e.GetPosition(listBox);
     }
 
     private void OnPluginSelectionChanged(object sender, SelectionChangedEventArgs e)

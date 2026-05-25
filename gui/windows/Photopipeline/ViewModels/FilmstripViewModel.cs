@@ -27,7 +27,7 @@ public sealed partial class FilmstripViewModel : ViewModelBase
     [ObservableProperty] private int _thumbnailSize = 120;
     [ObservableProperty] private bool _isLoading;
 
-    public IReadOnlyList<string> SortOptions { get; } = new[] { "Name", "Date", "Size", "Format" };
+    public IReadOnlyList<string> SortOptions { get; } = new[] { "Name", "Size", "Format" };
     public IReadOnlyList<string> FormatFilters { get; } = new[] { "All", "Raw", "JPEG", "TIFF", "PNG", "HEIF" };
     public IReadOnlyList<int> ThumbnailSizes { get; } = new[] { 80, 120, 180 };
 
@@ -38,7 +38,7 @@ public sealed partial class FilmstripViewModel : ViewModelBase
         : base(logger)
     {
         _imageService = imageService;
-        FilteredImages = Images;
+        FilteredImages = new ObservableCollection<ImageEntry>();
     }
 
     partial void OnSelectedImageChanged(ImageEntry? value) => ImageSelected?.Invoke(value);

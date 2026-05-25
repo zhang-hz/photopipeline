@@ -17,6 +17,8 @@ public static class ParameterControlFactory
         Dictionary<string, object> values,
         Action<string, object> onValueChanged)
     {
+        schema ??= new Dictionary<string, object>();
+        values ??= new Dictionary<string, object>();
         var type = GetString(schema, "type") ?? "string";
         var description = GetString(schema, "description") ?? parameterKey;
 
@@ -200,6 +202,7 @@ public static class ParameterControlFactory
             if (dialog.ShowDialog() == true)
             {
                 textBox.Text = dialog.FileName;
+                UpdateValue(key, dialog.FileName, values, onValueChanged);
             }
         };
 

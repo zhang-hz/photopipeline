@@ -17,7 +17,7 @@ public partial class BatchView : UserControl
         {
             vm.AddToQueueCommand.Execute(entry);
         }
-        else if (e.Data.GetData(typeof(IEnumerable<ImageEntry>)) is IEnumerable<ImageEntry> entries)
+        else if (e.Data.GetData(typeof(ImageEntry[])) is ImageEntry[] entries)
         {
             foreach (var item in entries)
                 vm.AddToQueueCommand.Execute(item);

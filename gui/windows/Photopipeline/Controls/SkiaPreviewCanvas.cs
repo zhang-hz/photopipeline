@@ -147,7 +147,7 @@ public sealed class SkiaPreviewCanvas : SKElement
     {
         var canvas = e.Surface.Canvas;
         var info = e.Info;
-        canvas.Clear(SKColors.Black);
+        canvas.Clear(new SKColor(26, 26, 26));
 
         var before = BeforeBitmap;
         var after = AfterBitmap;
@@ -190,9 +190,13 @@ public sealed class SkiaPreviewCanvas : SKElement
         canvas.DrawText("No Image", info.Width / 2f, info.Height / 2f + 6, textPaint);
     }
 
-    private void DrawSingle(SKCanvas canvas, SKImageInfo info, SKBitmap bitmap)
+    private void DrawSingle(SKCanvas canvas, SKImageInfo info, SKBitmap? bitmap)
     {
-        if (bitmap == null || bitmap.Handle == IntPtr.Zero) return;
+        if (bitmap == null || bitmap.Handle == IntPtr.Zero)
+        {
+            DrawEmptyState(canvas, info);
+            return;
+        }
 
         var matrix = ComputeDisplayMatrix(info, bitmap.Width, bitmap.Height);
         canvas.SetMatrix(matrix);
@@ -347,7 +351,9 @@ public sealed class SkiaPreviewCanvas : SKElement
         if (DateTime.UtcNow - _lastSampleTime >= SampleThrottle)
         {
             _lastSampleTime = DateTime.UtcNow;
-            var bmp = IsSplitView ? BeforeBitmap : (AfterBitmap ?? BeforeBitmap);
+            var bmp = IsSplitView
+                ? (mx < ActualWidth * SplitPosition ? BeforeBitmap : AfterBitmap)
+                : (AfterBitmap ?? BeforeBitmap);
             if (bmp != null && bmp.Handle != IntPtr.Zero)
             {
                 var info = new SKImageInfo((int)ActualWidth, (int)ActualHeight);

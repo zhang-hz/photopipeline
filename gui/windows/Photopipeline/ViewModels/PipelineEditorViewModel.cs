@@ -40,6 +40,17 @@ public sealed partial class PipelineEditorViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    private void NewPipeline()
+    {
+        CurrentPipeline = new PipelineSpec { Name = "New Pipeline" };
+        Nodes = new ObservableCollection<PipelineNode>();
+        Edges = new ObservableCollection<PipelineEdge>();
+        PipelineId = null;
+        IsPipelineValid = false;
+        ValidationMessage = string.Empty;
+    }
+
+    [RelayCommand]
     private void AddNode(PluginInfo plugin)
     {
         AddNodeAt(plugin, 80 + Nodes.Count * 30, 60 + Nodes.Count * 86);
