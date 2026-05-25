@@ -73,6 +73,11 @@ public sealed class GrpcClientService : IDisposable
         catch { /* reconnection best-effort */ }
     }
 
+    /// <summary>
+    /// Invoke a gRPC call with automatic retry-on-reconnect for transient failures.
+    /// NOTE: Currently most services bypass this and call <see cref="GetChannelAsync"/> directly.
+    /// This method is retained for future centralized retry logic.
+    /// </summary>
     public async Task<TResponse> CallAsync<TResponse>(
         Func<GrpcChannel, Task<TResponse>> call,
         CancellationToken ct = default)

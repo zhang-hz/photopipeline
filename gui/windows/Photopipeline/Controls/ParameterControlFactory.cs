@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Threading;
 using Wpf.Ui.Controls;
 using TextBox = System.Windows.Controls.TextBox;
 using Button = System.Windows.Controls.Button;
@@ -168,7 +169,8 @@ public static class ParameterControlFactory
         };
         if (currentValue != null) textBox.Text = currentValue.ToString();
 
-        textBox.TextChanged += (_, _) =>
+        // Use LostFocus instead of TextChanged to avoid firing on every keystroke
+        textBox.LostFocus += (_, _) =>
             UpdateValue(key, textBox.Text ?? string.Empty, values, onValueChanged);
 
         return textBox;
@@ -183,7 +185,8 @@ public static class ParameterControlFactory
         var textBox = new TextBox { Width = 200, Margin = new Thickness(0, 0, 4, 0) };
         if (currentValue is string path) textBox.Text = path;
 
-        textBox.TextChanged += (_, _) =>
+        // Path picker: commit on LostFocus to avoid firing on every keystroke
+        textBox.LostFocus += (_, _) =>
             UpdateValue(key, textBox.Text ?? string.Empty, values, onValueChanged);
 
         var browseBtn = new Button { Content = "...", Width = 32, Padding = new Thickness(0) };

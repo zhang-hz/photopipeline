@@ -29,6 +29,10 @@ public sealed partial class PreviewViewModel : ViewModelBase
 
     private const double MinZoom = 0.0625;
     private const double MaxZoom = 32.0;
+    /// <summary>
+    /// Discrete zoom steps used by ZoomIn/ZoomOut for predictable magnification jumps.
+    /// Steps are power-of-2 based with 0.33/0.67 filling the gaps for finer control.
+    /// </summary>
     private static readonly double[] ZoomSteps = { 0.25, 0.33, 0.5, 0.67, 1.0, 1.5, 2.0, 3.0, 4.0, 8.0 };
 
     public PreviewViewModel(
@@ -83,6 +87,7 @@ public sealed partial class PreviewViewModel : ViewModelBase
             return;
         }
 
+        // TODO: File dialogs should be abstracted behind a service interface to avoid violating MVVM
         var dialog = new Microsoft.Win32.SaveFileDialog
         {
             Title = "Export Image",
@@ -174,9 +179,10 @@ public sealed partial class PreviewViewModel : ViewModelBase
         _processCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var token = _processCts.Token;
 
+        string? tempOut = null;
         try
         {
-            var tempOut = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"pp_preview_{Guid.NewGuid():N}.tif");
+            tempOut = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"pp_preview_{Guid.NewGuid():N}.tif");
             var pid = pipelineId;
 
             if (string.IsNullOrEmpty(pid) && spec.Nodes.Count > 0)
@@ -224,6 +230,12 @@ public sealed partial class PreviewViewModel : ViewModelBase
         {
             Logger.LogWarning(ex, "Preview processing failed");
             ErrorMessage = $"Processing failed: {ex.Message}";
+        }
+        finally
+        {
+            // Clean up temp file used for pipeline output
+            try { if (tempOut != null && System.IO.File.Exists(tempOut)) System.IO.File.Delete(tempOut); }
+            catch { /* best-effort cleanup */ }
         }
     }
 

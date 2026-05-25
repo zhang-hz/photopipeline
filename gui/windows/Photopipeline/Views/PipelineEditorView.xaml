@@ -9,10 +9,7 @@
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=ViewModels.PipelineEditorViewModel}">
 
-    <UserControl.Resources>
-        <converters:BoolToVisibilityConverter x:Key="BoolToVisibility" />
-        <converters:NullToVisibilityConverter x:Key="NullToVisibility" />
-    </UserControl.Resources>
+    <!-- Converters registered in App.xaml -->
 
     <Grid>
         <Grid.RowDefinitions>
@@ -33,16 +30,17 @@
                 <ui:Button Content="New" Command="{Binding CreateCommand}" Margin="0,0,2,0" FontSize="11" />
                 <ui:Button Content="Validate" Command="{Binding ValidateCommand}" Margin="0,0,2,0" FontSize="11" />
 
-                <Separator Style="{StaticResource Separator}" Margin="4,2" />
+                <Separator Margin="4,2" />
 
                 <!-- Execute / Cancel -->
                 <ui:Button x:Name="ExecuteBtn" Content="Run" Command="{Binding ExecuteCommand}"
+                           IsEnabled="{Binding IsPipelineValid}"
                            Margin="0,0,2,0" FontSize="11" />
                 <ui:Button Content="Cancel" Command="{Binding CancelExecuteCommand}"
                            Margin="0,0,2,0" FontSize="11" Appearance="Transparent"
                            Visibility="{Binding IsExecuting, Converter={StaticResource BoolToVisibility}}" />
 
-                <Separator Style="{StaticResource Separator}" Margin="4,2" />
+                <Separator Margin="4,2" />
 
                 <ui:Button Icon="{ui:SymbolIcon ZoomIn24}" ToolTip="Zoom In"
                            Command="{Binding ZoomCanvasCommand}" CommandParameter="0.2"

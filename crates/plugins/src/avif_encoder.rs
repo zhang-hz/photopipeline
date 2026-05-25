@@ -393,7 +393,7 @@ impl FormatProcessor for AvifEncoderPlugin {
                     "ravif 0.11 only supports 8-bit; downconverting U16 → U8 for AVIF encoding"
                 );
                 let data_u16: &[u16] = bytemuck::cast_slice(&image.data.data);
-                let data_u8: Vec<u8> = data_u16.iter().map(|&v| (v >> 8) as u8).collect();
+                let data_u8: Vec<u8> = data_u16.iter().map(|&v| ((v + 128) >> 8) as u8).collect();
                 let pixels = data_u8.as_rgb();
                 let img = Img::new(pixels, image.width as usize, image.height as usize);
                 AvifEncoder::new()
@@ -406,7 +406,7 @@ impl FormatProcessor for AvifEncoderPlugin {
                     "ravif 0.11 only supports 8-bit; downconverting U16 → U8 for AVIF encoding"
                 );
                 let data_u16: &[u16] = bytemuck::cast_slice(&image.data.data);
-                let data_u8: Vec<u8> = data_u16.iter().map(|&v| (v >> 8) as u8).collect();
+                let data_u8: Vec<u8> = data_u16.iter().map(|&v| ((v + 128) >> 8) as u8).collect();
                 let pixels = data_u8.as_rgba();
                 let img = Img::new(pixels, image.width as usize, image.height as usize);
                 AvifEncoder::new()

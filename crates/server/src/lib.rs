@@ -36,6 +36,8 @@ pub struct BatchJobState {
     pub failed_files: i32,
     pub current_file: String,
     pub status: i32,
+    #[allow(clippy::type_complexity)]
+    pub cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 }
 
 impl SharedState {
@@ -116,6 +118,38 @@ pub fn schema_to_prost_struct(
     match json_to_prost_value(&json).kind {
         Some(Kind::StructValue(s)) => s,
         _ => prost_types::Struct::default(),
+    }
+}
+
+pub fn detect_format_from_ext(path: &str) -> photopipeline_core::ImageFormat {
+    use photopipeline_core::ImageFormat;
+    let lower = path.to_lowercase();
+    if lower.ends_with(".arw")
+        || lower.ends_with(".cr2")
+        || lower.ends_with(".nef")
+        || lower.ends_with(".dng")
+    {
+        ImageFormat::RAW
+    } else if lower.ends_with(".heif") || lower.ends_with(".heic") {
+        ImageFormat::HEIF
+    } else if lower.ends_with(".avif") {
+        ImageFormat::AVIF
+    } else if lower.ends_with(".jxl") {
+        ImageFormat::JXL
+    } else if lower.ends_with(".png") {
+        ImageFormat::PNG
+    } else if lower.ends_with(".tiff") || lower.ends_with(".tif") {
+        ImageFormat::TIFF
+    } else if lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
+        ImageFormat::JPEG
+    } else if lower.ends_with(".webp") {
+        ImageFormat::WEBP
+    } else if lower.ends_with(".exr") {
+        ImageFormat::OpenEXR
+    } else if lower.ends_with(".bmp") {
+        ImageFormat::BMP
+    } else {
+        ImageFormat::Unknown("unknown".to_string())
     }
 }
 

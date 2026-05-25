@@ -248,9 +248,30 @@ impl Plugin for TiffEncoderPlugin {
         Ok(())
     }
 
-    async fn validate(&self, _params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>> {
-        tracing::debug!("tiff_encoder: validating parameters (always ok)");
-        Ok(vec![])
+    async fn validate(&self, params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>> {
+        tracing::debug!("tiff_encoder: validating parameters");
+        let mut issues = Vec::new();
+        if let Some(bd) = params.get("bit_depth").and_then(|v| v.as_u64()) {
+            if bd != 8 && bd != 16 {
+                issues.push(ValidationIssue::Warning {
+                    param: "bit_depth".into(),
+                    message: format!("bit_depth {} not supported (8 or 16), will use 8", bd),
+                });
+            }
+        }
+        if let Some(comp) = params.get("compression").and_then(|v| v.as_str()) {
+            let valid = matches!(
+                comp.to_lowercase().as_str(),
+                "none" | "lzw" | "deflate" | "packbits"
+            );
+            if !valid {
+                issues.push(ValidationIssue::Warning {
+                    param: "compression".into(),
+                    message: format!("unknown compression '{}', using lzw", comp),
+                });
+            }
+        }
+        Ok(issues)
     }
 }
 

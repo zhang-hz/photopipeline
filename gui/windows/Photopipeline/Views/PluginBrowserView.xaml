@@ -9,9 +9,7 @@
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=ViewModels.PluginBrowserViewModel}">
 
-    <UserControl.Resources>
-        <converters:NullToVisibilityConverter x:Key="NullToVisibility" />
-    </UserControl.Resources>
+    <!-- Converters registered in App.xaml -->
 
     <Grid>
         <Grid.RowDefinitions>

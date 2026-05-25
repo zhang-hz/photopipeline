@@ -258,9 +258,25 @@ impl Plugin for PngEncoderPlugin {
     }
 
     async fn validate(&self, params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>> {
-        tracing::debug!("png_encoder: validating parameters (always ok)");
-        let _ = params;
-        Ok(vec![])
+        tracing::debug!("png_encoder: validating parameters");
+        let mut issues = Vec::new();
+        if let Some(level) = params.get("compression_level").and_then(|v| v.as_u64()) {
+            if level > 9 {
+                issues.push(ValidationIssue::Warning {
+                    param: "compression_level".into(),
+                    message: format!("compression_level {} out of range [0, 9], clamped", level),
+                });
+            }
+        }
+        if let Some(bd) = params.get("bit_depth").and_then(|v| v.as_u64()) {
+            if bd != 8 && bd != 16 {
+                issues.push(ValidationIssue::Warning {
+                    param: "bit_depth".into(),
+                    message: format!("bit_depth {} not supported (8 or 16), will use 8", bd),
+                });
+            }
+        }
+        Ok(issues)
     }
 }
 
@@ -309,7 +325,7 @@ impl FormatProcessor for PngEncoderPlugin {
         &self,
         image: &PixelBuffer,
         metadata: &Metadata,
-        _options: &EncodeOptions,
+        options: &EncodeOptions,
     ) -> PluginResult<Vec<u8>> {
         let _timer = PerfTimer::with_target("encode_png", &format!("plugins.{}", self.id()));
 
@@ -377,7 +393,13 @@ impl FormatProcessor for PngEncoderPlugin {
             let mut encoder = Encoder::new(&mut output_buf, width, height);
             encoder.set_color(color_type);
             encoder.set_depth(bit_depth);
-            encoder.set_compression(Compression::Default);
+            let compression = match options.compression.as_deref() {
+                Some("fast") => Compression::Fast,
+                Some("best") => Compression::Best,
+                Some("rle") => Compression::Fast, // Rle deprecated, use Fast
+                _ => Compression::Default,
+            };
+            encoder.set_compression(compression);
 
             if let Some(ref exif) = metadata.exif {
                 let mut exif_text = String::new();

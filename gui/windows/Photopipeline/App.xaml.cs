@@ -14,6 +14,7 @@ namespace Photopipeline;
 public partial class App : Application
 {
     private readonly IHost _host;
+    private MainWindow? _mainWindow;
 
     public static new App Current => (App)Application.Current;
     public static IServiceProvider Services => Current._host.Services;
@@ -26,6 +27,7 @@ public partial class App : Application
                 var appData = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                     "Photopipeline");
+                Directory.CreateDirectory(appData);
                 config.SetBasePath(appData);
                 config.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
                 config.AddEnvironmentVariables("PHOTOPIPELINE_");
@@ -45,7 +47,7 @@ public partial class App : Application
             .ConfigureServices((ctx, services) =>
             {
                 // Infrastructure
-                services.AddSingleton<DispatcherHelper>();
+                services.AddSingleton<DispatcherHelper>(_ => new DispatcherHelper(Application.Current.Dispatcher));
 
                 // gRPC channel
                 services.AddSingleton<GrpcClientService>(sp =>
@@ -67,6 +69,12 @@ public partial class App : Application
                     var grpc = sp.GetRequiredService<GrpcClientService>();
                     var logger = sp.GetRequiredService<ILogger<ImageService>>();
                     return new ImageService(grpc, logger);
+                });
+                services.AddSingleton<IBatchService>(sp =>
+                {
+                    var grpc = sp.GetRequiredService<GrpcClientService>();
+                    var logger = sp.GetRequiredService<ILogger<BatchService>>();
+                    return new BatchService(grpc, logger);
                 });
                 services.AddSingleton<IPluginService, PluginService>();
                 services.AddSingleton<ISettingsService, SettingsService>();
@@ -109,12 +117,33 @@ public partial class App : Application
             var settings = _host.Services.GetRequiredService<ISettingsService>();
             await settings.LoadAsync();
 
-            ApplyTheme(settings.Current.Theme);
+            try { ApplyTheme(settings.Current.Theme); }
+            catch (Exception ex)
+            {
+                var logger = _host.Services.GetRequiredService<ILogger<App>>();
+                logger.LogWarning(ex, "Theme application failed; continuing with defaults");
+            }
 
-            await _host.StartAsync();
+            _mainWindow = _host.Services.GetRequiredService<MainWindow>();
 
-            var mainWindow = _host.Services.GetRequiredService<MainWindow>();
-            mainWindow.Show();
+            if (!double.IsNaN(settings.Current.WindowLeft) && !double.IsNaN(settings.Current.WindowTop))
+            {
+                _mainWindow.Left = settings.Current.WindowLeft;
+                _mainWindow.Top = settings.Current.WindowTop;
+            }
+            if (settings.Current.WindowWidth > 0 && settings.Current.WindowHeight > 0)
+            {
+                _mainWindow.Width = settings.Current.WindowWidth;
+                _mainWindow.Height = settings.Current.WindowHeight;
+            }
+            if (settings.Current.IsMaximized)
+                _mainWindow.WindowState = WindowState.Maximized;
+
+            _mainWindow.Show();
+
+#pragma warning disable CS4014
+            _ = StartHostWithErrorLogging();
+#pragma warning restore CS4014
         }
         catch (Exception ex)
         {
@@ -126,6 +155,28 @@ public partial class App : Application
         }
     }
 
+#pragma warning disable CS4014
+    private async Task StartHostWithErrorLogging()
+    {
+        try
+        {
+            await _host.StartAsync();
+        }
+        catch (Exception ex)
+        {
+            var logger = _host.Services.GetRequiredService<ILogger<App>>();
+            logger.LogCritical(ex, "Host startup failed (backend may be unavailable)");
+            Dispatcher.InvokeAsync(() =>
+            {
+                MessageBox.Show(
+                    $"Backend failed to start: {ex.Message}\n\nThe application will continue but backend features will be unavailable.",
+                    "Photopipeline - Backend Error",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            });
+        }
+    }
+#pragma warning restore CS4014
+
     protected override async void OnExit(ExitEventArgs e)
     {
         base.OnExit(e);
@@ -133,13 +184,16 @@ public partial class App : Application
         try
         {
             var settings = _host.Services.GetRequiredService<ISettingsService>();
-            var mainWindow = _host.Services.GetRequiredService<MainWindow>();
-            settings.Current.WindowWidth = mainWindow.Width;
-            settings.Current.WindowHeight = mainWindow.Height;
-            settings.Current.WindowLeft = mainWindow.Left;
-            settings.Current.WindowTop = mainWindow.Top;
-            settings.Current.IsMaximized = mainWindow.WindowState == WindowState.Maximized;
-            await settings.SaveAsync(settings.Current);
+
+            if (_mainWindow is not null)
+            {
+                settings.Current.WindowWidth = SafeDouble(_mainWindow.Width, 1440);
+                settings.Current.WindowHeight = SafeDouble(_mainWindow.Height, 900);
+                settings.Current.WindowLeft = SafeDouble(_mainWindow.Left, 0);
+                settings.Current.WindowTop = SafeDouble(_mainWindow.Top, 0);
+                settings.Current.IsMaximized = _mainWindow.WindowState == WindowState.Maximized;
+                await settings.SaveAsync(settings.Current);
+            }
         }
         catch (Exception ex)
         {
@@ -151,6 +205,9 @@ public partial class App : Application
         await _host.StopAsync(cts.Token);
         _host.Dispose();
     }
+
+    private static double SafeDouble(double value, double fallback)
+        => double.IsNaN(value) || double.IsInfinity(value) ? fallback : value;
 
     public static void ApplyTheme(string theme)
     {

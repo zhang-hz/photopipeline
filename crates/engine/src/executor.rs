@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use photopipeline_core::{
     ImageInfo, Metadata, NodeId, PixelBuffer, PluginError, PluginResult, ProcessingStats,
@@ -243,7 +242,7 @@ impl NodeExecutor {
                     "Executing pixel-processing node '{}'",
                     node.label,
                 );
-                match self.process_pixel_node(&mut ctx, node, &final_params).await {
+                match self.process_pixel_node(&mut ctx, node, &final_params, progress.as_ref()).await {
                     Ok(s) => s,
                     Err(e) => {
                         tracing::error!(
@@ -350,6 +349,7 @@ impl NodeExecutor {
         ctx: &mut ExecutionContext,
         node: &crate::graph::PipelineNode,
         params: &photopipeline_plugin::ParameterSet,
+        progress: &dyn photopipeline_plugin::ProgressSink,
     ) -> PluginResult<ProcessingStats> {
         let input = ctx
             .buffer
@@ -380,14 +380,20 @@ impl NodeExecutor {
             .ok_or_else(|| PluginError::NotFound(node.plugin_id.clone()))?;
 
         struct InlineProgress {
-            canceled: Arc<AtomicBool>,
+            canceled: std::sync::Arc<std::sync::atomic::AtomicBool>,
         }
         impl photopipeline_plugin::ProgressSink for InlineProgress {
             fn set_progress(&self, _fraction: f32, _message: &str) {}
             fn is_canceled(&self) -> bool {
+                use std::sync::atomic::Ordering;
                 self.canceled.load(Ordering::Relaxed)
             }
         }
+
+        // Create a cancel flag that syncs with the caller's progress sink
+        let cancel_state = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
+            progress.is_canceled(),
+        ));
 
         let tile_threshold: u64 = 4096 * 2160; // ~8.8M pixels
 
@@ -407,7 +413,7 @@ impl NodeExecutor {
                     input,
                     params,
                     &InlineProgress {
-                        canceled: Arc::new(AtomicBool::new(false)),
+                        canceled: cancel_state.clone(),
                     },
                 )
                 .await?;
@@ -427,7 +433,7 @@ impl NodeExecutor {
                     &mut output,
                     params,
                     Box::new(InlineProgress {
-                        canceled: Arc::new(AtomicBool::new(false)),
+                        canceled: cancel_state.clone(),
                     }),
                 )
                 .await?;

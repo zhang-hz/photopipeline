@@ -251,9 +251,26 @@ impl Plugin for JxlEncoderPlugin {
         Ok(())
     }
 
-    async fn validate(&self, _params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>> {
+    async fn validate(&self, params: &ParameterSet) -> PluginResult<Vec<ValidationIssue>> {
         tracing::debug!("jxl_encoder: validating parameters");
-        Ok(Vec::new())
+        let mut issues = Vec::new();
+        if let Some(q) = params.get("quality").and_then(|v| v.as_f64()) {
+            if q < 0.0 || q > 100.0 {
+                issues.push(ValidationIssue::Warning {
+                    param: "quality".into(),
+                    message: format!("quality {} out of range [0, 100], clamped", q),
+                });
+            }
+        }
+        if let Some(e) = params.get("effort").and_then(|v| v.as_u64()) {
+            if e < 1 || e > 9 {
+                issues.push(ValidationIssue::Warning {
+                    param: "effort".into(),
+                    message: format!("effort {} out of range [1, 9], clamped", e),
+                });
+            }
+        }
+        Ok(issues)
     }
 }
 

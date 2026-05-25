@@ -73,7 +73,8 @@
                                            Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                                 <ComboBox ItemsSource="{Binding Settings.Themes}"
                                           SelectedItem="{Binding Settings.Theme}"
-                                          FontSize="12" Margin="0,0,0,10" />
+                                          FontSize="12" Margin="0,0,0,10"
+                                          SelectionChanged="OnThemeComboBoxChanged" />
 
                                 <TextBlock Text="Default Output Format" FontSize="11" Margin="0,0,0,2"
                                            Foreground="{DynamicResource TextFillColorSecondaryBrush}" />

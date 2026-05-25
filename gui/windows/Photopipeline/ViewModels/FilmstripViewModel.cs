@@ -15,7 +15,7 @@ namespace Photopipeline.ViewModels;
 public sealed partial class FilmstripViewModel : ViewModelBase
 {
     private readonly IImageService _imageService;
-    private static readonly SemaphoreSlim ThumbnailSemaphore = new(4);
+    private readonly SemaphoreSlim _thumbnailSemaphore = new(4);
 
     [ObservableProperty] private ObservableCollection<ImageEntry> _images = new();
     [ObservableProperty] private ObservableCollection<ImageEntry> _filteredImages = new();
@@ -49,6 +49,7 @@ public sealed partial class FilmstripViewModel : ViewModelBase
     [RelayCommand]
     private async Task AddImages(CancellationToken ct)
     {
+        // TODO: File dialogs should be abstracted behind a service interface to avoid violating MVVM
         await ExecuteAsync(async ct2 =>
         {
             var dialog = new Microsoft.Win32.OpenFileDialog
@@ -62,6 +63,8 @@ public sealed partial class FilmstripViewModel : ViewModelBase
                 foreach (var path in dialog.FileNames)
                 {
                     ct2.ThrowIfCancellationRequested();
+                    if (Images.Any(i => string.Equals(i.FilePath, path, StringComparison.OrdinalIgnoreCase)))
+                        continue;
                     try
                     {
                         var info = await _imageService.LoadImageInfoAsync(path, ct2);
@@ -74,7 +77,11 @@ public sealed partial class FilmstripViewModel : ViewModelBase
                 }
                 ApplyFilter();
                 StatusMessage = $"{Images.Count} images loaded";
-                _ = RefreshThumbnailsAsync();
+                _ = RefreshThumbnailsAsync().ContinueWith(t =>
+                {
+                    if (t.IsFaulted && t.Exception != null)
+                        Logger.LogWarning(t.Exception, "Background thumbnail refresh failed");
+                }, TaskScheduler.Default);
             }
         }, "AddImages", ct);
     }
@@ -157,7 +164,7 @@ public sealed partial class FilmstripViewModel : ViewModelBase
             .Where(img => img.ThumbnailData is null)
             .Select(async img =>
             {
-                await ThumbnailSemaphore.WaitAsync();
+                await _thumbnailSemaphore.WaitAsync();
                 try
                 {
                     img.ThumbnailData = await _imageService.GetThumbnailAsync(img.FilePath, size);
@@ -168,7 +175,7 @@ public sealed partial class FilmstripViewModel : ViewModelBase
                 }
                 finally
                 {
-                    ThumbnailSemaphore.Release();
+                    _thumbnailSemaphore.Release();
                 }
             });
 
@@ -200,8 +207,8 @@ public sealed partial class FilmstripViewModel : ViewModelBase
             _ => source.OrderBy(i => i.FileName)
         };
 
-        SelectedImages.Clear();
         FilteredImages = new ObservableCollection<ImageEntry>(source);
+        SelectedImages.Clear();
     }
 
     private static bool TryParseInt(object? value, out int result)
@@ -210,5 +217,11 @@ public sealed partial class FilmstripViewModel : ViewModelBase
         if (value is string s && int.TryParse(s, out var parsed)) { result = parsed; return true; }
         result = 0;
         return false;
+    }
+
+    public override void Shutdown()
+    {
+        base.Shutdown();
+        try { _thumbnailSemaphore.Dispose(); } catch { }
     }
 }

@@ -137,8 +137,45 @@ pub struct AlignedBuffer {
 }
 
 impl AlignedBuffer {
+    /// Creates a new aligned buffer. On most platforms, the system allocator
+    /// returns memory aligned to at least 16 bytes (often 32/64). If stricter
+    /// alignment is needed, link with an aligned allocator (e.g., jemalloc, mimalloc).
+    /// A debug assertion verifies the alignment requirement is met.
     pub fn new(size: usize, alignment: usize) -> Self {
         let data = vec![0u8; size];
+        let ptr = data.as_ptr() as usize;
+        debug_assert!(
+            ptr % alignment == 0,
+            "AlignedBuffer: allocator returned ptr {:p} which does not meet {}-byte alignment. \
+             Consider using an aligned allocator (jemalloc, mimalloc).",
+            data.as_ptr(),
+            alignment,
+        );
+        if ptr % alignment != 0 {
+            tracing::warn!(
+                ptr = ?data.as_ptr(),
+                alignment,
+                "AlignedBuffer: allocator returned unaligned memory; reallocating with manual alignment"
+            );
+            // Fallback: overallocate and find an aligned offset within the larger buffer
+            let padded_size = size + alignment - 1;
+            let padded = vec![0u8; padded_size];
+            let padded_ptr = padded.as_ptr() as usize;
+            let offset = alignment - (padded_ptr % alignment);
+            if offset < alignment {
+                // We have aligned memory within the padded buffer starting at `offset`.
+                // Return just the aligned portion. The original padded vec is leaked
+                // conceptually, but since Vec manages the heap memory, we need to keep
+                // the full capacity around. We use a slice-offset approach:
+                let mut full = padded;
+                let _ = full.drain(..offset); // drop leading unaligned bytes
+                full.truncate(size); // keep only the aligned size_bytes
+                return Self {
+                    data: full,
+                    alignment,
+                };
+            }
+        }
         Self { data, alignment }
     }
 

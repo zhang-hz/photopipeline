@@ -525,7 +525,8 @@ impl MetadataProcessor for TimeShiftPlugin {
             "time_shift: invoking exiftool to shift timestamp",
         );
 
-        let mut cmd = Command::new("exiftool");
+        let exiftool_path = crate::exif_rw::find_exiftool_path().unwrap_or_else(|| "exiftool".to_string());
+        let mut cmd = Command::new(&exiftool_path);
         for arg in &exiftool_args {
             cmd.arg(arg);
         }

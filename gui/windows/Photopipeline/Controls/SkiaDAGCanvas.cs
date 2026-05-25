@@ -61,21 +61,49 @@ public sealed class SkiaDAGCanvas : SKElement
         set => SetValue(OffsetYProperty, value);
     }
 
-    // ── Settable collections (not DP — updated externally) ──
+    // ── Dependency Properties for collections ──
+
+    public static readonly DependencyProperty NodesProperty =
+        DependencyProperty.Register(nameof(Nodes), typeof(IReadOnlyList<PipelineNode>), typeof(SkiaDAGCanvas),
+            new FrameworkPropertyMetadata(Array.Empty<PipelineNode>(), FrameworkPropertyMetadataOptions.AffectsRender, OnNodesChanged));
+
+    public static readonly DependencyProperty EdgesProperty =
+        DependencyProperty.Register(nameof(Edges), typeof(IReadOnlyList<PipelineEdge>), typeof(SkiaDAGCanvas),
+            new FrameworkPropertyMetadata(Array.Empty<PipelineEdge>(), FrameworkPropertyMetadataOptions.AffectsRender, OnEdgesChanged));
+
+    public static readonly DependencyProperty SelectedNodeProperty =
+        DependencyProperty.Register(nameof(SelectedNode), typeof(PipelineNode), typeof(SkiaDAGCanvas),
+            new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    private static void OnNodesChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var canvas = (SkiaDAGCanvas)d;
+        canvas._nodes = e.NewValue as IReadOnlyList<PipelineNode> ?? Array.Empty<PipelineNode>();
+    }
+
+    private static void OnEdgesChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var canvas = (SkiaDAGCanvas)d;
+        canvas._edges = e.NewValue as IReadOnlyList<PipelineEdge> ?? Array.Empty<PipelineEdge>();
+    }
 
     public IReadOnlyList<PipelineNode> Nodes
     {
-        get => _nodes;
-        set { _nodes = value ?? Array.Empty<PipelineNode>(); InvalidateVisual(); }
+        get => (IReadOnlyList<PipelineNode>)GetValue(NodesProperty);
+        set => SetValue(NodesProperty, value ?? Array.Empty<PipelineNode>());
     }
 
     public IReadOnlyList<PipelineEdge> Edges
     {
-        get => _edges;
-        set { _edges = value ?? Array.Empty<PipelineEdge>(); InvalidateVisual(); }
+        get => (IReadOnlyList<PipelineEdge>)GetValue(EdgesProperty);
+        set => SetValue(EdgesProperty, value ?? Array.Empty<PipelineEdge>());
     }
 
-    public PipelineNode? SelectedNode { get; set; }
+    public PipelineNode? SelectedNode
+    {
+        get => (PipelineNode?)GetValue(SelectedNodeProperty);
+        set => SetValue(SelectedNodeProperty, value);
+    }
 
     // ── Events ──
 
@@ -507,6 +535,7 @@ public sealed class SkiaDAGCanvas : SKElement
 
             default:
                 SelectedNode = null;
+                NodeSelected?.Invoke(null!);
                 _state = InteractionState.Panning;
                 CaptureMouse();
                 break;
@@ -534,7 +563,10 @@ public sealed class SkiaDAGCanvas : SKElement
                 var worldPt = ScreenToWorld(screenPt);
                 var nodeData = _nodes.FirstOrDefault(n => n.Id == _dragNodeId);
                 if (nodeData != null)
+                {
                     NodeMoved?.Invoke(nodeData, new SKPoint(worldPt.X - _dragOffset.X, worldPt.Y - _dragOffset.Y));
+                    InvalidateVisual();
+                }
                 break;
 
             case InteractionState.ConnectingPort:
@@ -567,6 +599,8 @@ public sealed class SkiaDAGCanvas : SKElement
 
             if (hit.Target == HitTarget.InputPort && hit.NodeId != null && hit.NodeId != _connectFromNodeId)
                 PortsConnected?.Invoke(_connectFromNodeId, hit.NodeId);
+            // else: released over empty space — tentative connection is silently discarded.
+            // The dashed line is cleared on the next render pass (DrawTempConnection skips when state != ConnectingPort).
         }
 
         _state = InteractionState.Idle;

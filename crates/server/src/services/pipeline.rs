@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
@@ -70,7 +71,7 @@ fn build_image_info(path: &str) -> ImageInfo {
         .map(|f| f.to_string_lossy().to_string())
         .unwrap_or_default();
 
-    let format = detect_format_from_ext(path);
+    let format = crate::detect_format_from_ext(path);
 
     let file_size_bytes = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
 
@@ -87,43 +88,13 @@ fn build_image_info(path: &str) -> ImageInfo {
     }
 }
 
-fn detect_format_from_ext(path: &str) -> photopipeline_core::ImageFormat {
-    use photopipeline_core::ImageFormat;
-    let lower = path.to_lowercase();
-    if lower.ends_with(".arw")
-        || lower.ends_with(".cr2")
-        || lower.ends_with(".nef")
-        || lower.ends_with(".dng")
-    {
-        ImageFormat::RAW
-    } else if lower.ends_with(".heif") || lower.ends_with(".heic") {
-        ImageFormat::HEIF
-    } else if lower.ends_with(".avif") {
-        ImageFormat::AVIF
-    } else if lower.ends_with(".jxl") {
-        ImageFormat::JXL
-    } else if lower.ends_with(".png") {
-        ImageFormat::PNG
-    } else if lower.ends_with(".tiff") || lower.ends_with(".tif") {
-        ImageFormat::TIFF
-    } else if lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
-        ImageFormat::JPEG
-    } else if lower.ends_with(".webp") {
-        ImageFormat::WEBP
-    } else if lower.ends_with(".exr") {
-        ImageFormat::OpenEXR
-    } else if lower.ends_with(".bmp") {
-        ImageFormat::BMP
-    } else {
-        ImageFormat::Unknown("unknown".to_string())
-    }
-}
 
 struct ChannelProgressSink {
     sender: mpsc::Sender<Result<ExecuteProgress, Status>>,
     node_id: String,
     node_label: String,
     start: std::time::Instant,
+    canceled: Option<Arc<AtomicBool>>,
 }
 
 impl ProgressSink for ChannelProgressSink {
@@ -139,7 +110,9 @@ impl ProgressSink for ChannelProgressSink {
     }
 
     fn is_canceled(&self) -> bool {
-        false
+        self.canceled
+            .as_ref()
+            .is_some_and(|c| c.load(Ordering::Relaxed))
     }
 }
 
@@ -204,11 +177,13 @@ impl PipelineService for PipelineServiceImpl {
         let (tx, rx) = mpsc::channel::<Result<ExecuteProgress, Status>>(256);
         let start = std::time::Instant::now();
 
+        let cancel_flag = Arc::new(AtomicBool::new(false));
         let progress = ChannelProgressSink {
             sender: tx.clone(),
             node_id: String::new(),
             node_label: String::new(),
             start,
+            canceled: Some(cancel_flag.clone()),
         };
 
         let _ = tx.send(Ok(ExecuteProgress {

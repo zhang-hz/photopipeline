@@ -2,6 +2,10 @@ using Photopipeline.Models;
 
 namespace Photopipeline.Services;
 
+/// <summary>
+/// Local plugin catalog used as a fallback. In production, plugin data should be fetched
+/// from the gRPC backend service for consistency with the server-side registry.
+/// </summary>
 public sealed class PluginService : IPluginService
 {
     private readonly List<PluginInfo> _plugins;

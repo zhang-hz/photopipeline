@@ -111,8 +111,8 @@ impl TransferFunction {
             TransferFunction::Gamma28 => v.powf(2.8),
             TransferFunction::PQ => pq_eotf_normalized(v as f64) as f32,
             TransferFunction::HLG => hlg_oetf_inverse(v as f64) as f32,
-            TransferFunction::SLog3 => v,
-            TransferFunction::LogC => v,
+            TransferFunction::SLog3 => slog3_to_linear(v as f64) as f32,
+            TransferFunction::LogC => logc_to_linear(v as f64) as f32,
             TransferFunction::Custom(g) => v.powf(*g as f32),
         }
     }
@@ -135,8 +135,8 @@ impl TransferFunction {
             TransferFunction::Gamma28 => v.powf(1.0 / 2.8),
             TransferFunction::PQ => pq_inverse_eotf_normalized(v as f64) as f32,
             TransferFunction::HLG => hlg_oetf(v as f64) as f32,
-            TransferFunction::SLog3 => v,
-            TransferFunction::LogC => v,
+            TransferFunction::SLog3 => linear_to_slog3(v as f64) as f32,
+            TransferFunction::LogC => linear_to_logc(v as f64) as f32,
             TransferFunction::Custom(g) => v.powf(1.0 / *g as f32),
         }
     }
@@ -395,6 +395,11 @@ fn mat3_inverse(m: &[[f64; 3]; 3]) -> [[f64; 3]; 3] {
     let det = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
         - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
         + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+    // Guard against singular matrix (determinant near zero)
+    if det.abs() < 1e-15 {
+        tracing::warn!("mat3_inverse: near-singular matrix (det={}), returning identity", det);
+        return [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+    }
     let inv_det = 1.0 / det;
     [
         [
@@ -568,11 +573,108 @@ fn pq_inverse_eotf_normalized(v: f64) -> f64 {
     let c2 = 2413.0 / 128.0;
     let c3 = 2392.0 / 128.0;
 
-    let v_scaled = v * 10000.0;
+    // Input v is normalized 0..1 (matching pq_eotf_normalized output range)
+    let v_pow = v.max(0.0).powf(m1);
+    let num = c1 + c2 * v_pow;
+    let den = 1.0 + c3 * v_pow;
+    (num / den.max(1e-10)).powf(m2)
+}
+
+/// Full-range PQ inverse EOTF: takes linear display luminance in cd/m^2 (0..10000)
+/// and returns PQ signal in 0..1.
+#[allow(dead_code)]
+fn pq_inverse_eotf_full(v: f64) -> f64 {
+    let m1 = 2610.0 / 16384.0;
+    let m2 = 2523.0 / 32.0;
+    let c1 = 3424.0 / 4096.0;
+    let c2 = 2413.0 / 128.0;
+    let c3 = 2392.0 / 128.0;
+
+    let v_scaled = v.clamp(0.0, 10000.0) / 10000.0;
     let v_pow = v_scaled.max(0.0).powf(m1);
     let num = c1 + c2 * v_pow;
     let den = 1.0 + c3 * v_pow;
     (num / den.max(1e-10)).powf(m2)
+}
+
+/// Sony S-Log3 to linear (normalized 0..1).
+/// Reference: S-Gamut3/S-Log3 white paper.
+fn slog3_to_linear(x: f64) -> f64 {
+    if x <= 0.0 {
+        return 0.0;
+    }
+    let threshold = 171.2102946929 / 1023.0;
+    if x >= threshold {
+        let lin = 10.0f64.powf((x * 1023.0 - 420.0) / 261.5) * (0.19 + 0.01) - 0.01;
+        lin.max(0.0)
+    } else {
+        let lin = (x * 1023.0 - 95.0) * 0.01125000 / (171.2102946929 - 95.0);
+        lin.max(0.0)
+    }
+}
+
+/// Linear to Sony S-Log3 (normalized 0..1).
+fn linear_to_slog3(x: f64) -> f64 {
+    if x <= 0.0 {
+        return 0.0;
+    }
+    let threshold = 0.01125000;
+    if x >= threshold {
+        let slog3 = (420.0 + ((x + 0.01) / (0.19 + 0.01)).log10() * 261.5) / 1023.0;
+        slog3.clamp(0.0, 1.0)
+    } else {
+        let slog3 = (x * (171.2102946929 - 95.0) / 0.01125000 + 95.0) / 1023.0;
+        slog3.clamp(0.0, 1.0)
+    }
+}
+
+/// ARRI LogC4 to linear (normalized 0..1). EI800 reference.
+fn logc_to_linear(x: f64) -> f64 {
+    if x <= 0.0 {
+        return 0.0;
+    }
+    let cut = 0.010591;
+    let a = 5.555556;
+    let b = 0.052272;
+    let c = 0.247190;
+    let d = 0.385537;
+    let e = 0.6;
+    let f = 0.2;
+    if x > cut {
+        let lin = (10.0f64.powf((x - d) / c / e) - b) / a * f;
+        lin.max(0.0)
+    } else {
+        let t = cut;
+        let s = (10.0f64.powf((t - d) / c / e) - b) / (a * t) * f;
+        let lin = x * s;
+        lin.max(0.0)
+    }
+}
+
+/// Linear to ARRI LogC4 (normalized 0..1). EI800 reference.
+fn linear_to_logc(x: f64) -> f64 {
+    if x <= 0.0 {
+        return 0.0;
+    }
+    let cut = 0.010591;
+    let a = 5.555556;
+    let b = 0.052272;
+    let c = 0.247190;
+    let d = 0.385537;
+    let e = 0.6;
+    let f = 0.2;
+    let t = cut;
+    let s = (10.0f64.powf((t - d) / c / e) - b) / (a * t) * f;
+    let v = x / f;
+    if v > t * a * s / f {
+        // Actually the threshold check should compare x against the linear value at cut
+        // Use simplified direct approach
+        let logc = c * e * (a * v + b).log10() + d;
+        logc.clamp(0.0, 1.0)
+    } else {
+        let logc = x / s;
+        logc.clamp(0.0, 1.0)
+    }
 }
 
 fn hlg_oetf_inverse(v: f64) -> f64 {

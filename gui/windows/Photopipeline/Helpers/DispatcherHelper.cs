@@ -5,9 +5,10 @@ namespace Photopipeline.Helpers;
 
 public sealed class DispatcherHelper
 {
-    private readonly Dispatcher _dispatcher;
+    private static DispatcherHelper? _current;
+    public static DispatcherHelper Current => _current ??= CreateCurrent();
 
-    public DispatcherHelper() : this(Application.Current.Dispatcher) { }
+    private readonly Dispatcher _dispatcher;
 
     public DispatcherHelper(Dispatcher dispatcher)
     {
@@ -40,4 +41,12 @@ public sealed class DispatcherHelper
     }
 
     public bool IsOnUIThread => _dispatcher.CheckAccess();
+
+    private static DispatcherHelper CreateCurrent()
+    {
+        var app = Application.Current;
+        if (app is null)
+            return new DispatcherHelper(Dispatcher.CurrentDispatcher);
+        return new DispatcherHelper(app.Dispatcher);
+    }
 }

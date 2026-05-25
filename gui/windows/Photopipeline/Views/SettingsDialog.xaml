@@ -100,7 +100,7 @@
         <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
             <ui:Button x:Name="CancelBtn" Content="Cancel" Appearance="Secondary"
                        Margin="0,0,8,0" FontSize="12" Width="80" />
-            <ui:Button Content="Reset" Command="{Binding ResetCommand}" Appearance="Secondary"
+            <ui:Button x:Name="ResetBtn" Content="Reset" Appearance="Secondary"
                        Margin="0,0,8,0" FontSize="12" Width="80" />
             <ui:Button x:Name="SaveBtn" Content="Save" Appearance="Accent"
                        FontSize="12" Width="80" />

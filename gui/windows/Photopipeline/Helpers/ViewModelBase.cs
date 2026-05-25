@@ -15,13 +15,15 @@ public abstract partial class ViewModelBase : ObservableObject
     private string _statusMessage = "Ready";
 
     protected readonly ILogger Logger;
+    protected readonly DispatcherHelper Dispatcher;
 
     private readonly CancellationTokenSource _shutdownCts = new();
     protected CancellationToken ShutdownToken => _shutdownCts.Token;
 
-    protected ViewModelBase(ILogger logger)
+    protected ViewModelBase(ILogger logger, DispatcherHelper? dispatcher = null)
     {
         Logger = logger;
+        Dispatcher = dispatcher ?? DispatcherHelper.Current;
     }
 
     protected async Task ExecuteAsync(Func<CancellationToken, Task> operation,
@@ -63,6 +65,13 @@ public abstract partial class ViewModelBase : ObservableObject
 
     public virtual void Shutdown()
     {
-        _shutdownCts.Cancel();
+        try
+        {
+            _shutdownCts.Cancel();
+        }
+        finally
+        {
+            _shutdownCts.Dispose();
+        }
     }
 }

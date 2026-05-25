@@ -68,6 +68,7 @@ async fn process_batch_files(
     files: Vec<String>,
     output_dir: String,
     template_str: String,
+    cancel_flag: Arc<AtomicBool>,
 ) {
     let template: PipelineTemplate = match toml::from_str(&template_str) {
         Ok(t) => t,
@@ -104,6 +105,16 @@ async fn process_batch_files(
     tracing::info!("batch {}: processing {} files", batch_id, total);
 
     for (i, file_path) in files.iter().enumerate() {
+        // Check cancellation
+        if cancel_flag.load(Ordering::Relaxed) {
+            tracing::warn!("batch {}: canceled at file {}/{}", batch_id, i + 1, total);
+            let mut jobs = state.batch_jobs.write();
+            if let Some(job) = jobs.get_mut(&batch_id) {
+                job.status = ProtoStatus::Canceled as i32;
+            }
+            return;
+        }
+
         // Update current file
         {
             let mut jobs = state.batch_jobs.write();
@@ -155,6 +166,31 @@ async fn process_batch_files(
     }
 }
 
+fn output_format_from_input(input_format: &photopipeline_core::ImageFormat) -> photopipeline_core::ImageFormat {
+    use photopipeline_core::ImageFormat;
+    match input_format {
+        ImageFormat::RAW | ImageFormat::Unknown(_) => ImageFormat::TIFF,
+        ImageFormat::HEIF | ImageFormat::AVIF => ImageFormat::TIFF,
+        other => other.clone(),
+    }
+}
+
+fn extension_for_format(format: &photopipeline_core::ImageFormat) -> &'static str {
+    use photopipeline_core::ImageFormat;
+    match format {
+        ImageFormat::TIFF => "tiff",
+        ImageFormat::PNG => "png",
+        ImageFormat::JPEG => "jpg",
+        ImageFormat::WEBP => "webp",
+        ImageFormat::JXL => "jxl",
+        ImageFormat::AVIF => "avif",
+        ImageFormat::HEIF => "heic",
+        ImageFormat::OpenEXR => "exr",
+        ImageFormat::BMP => "bmp",
+        _ => "tiff",
+    }
+}
+
 async fn process_single_file(
     executor: &NodeExecutor,
     registry: &photopipeline_plugin::Registry,
@@ -194,7 +230,7 @@ async fn process_single_file(
         id: Uuid::new_v4(),
         path: input_path.to_string(),
         filename,
-        format: decoded.format,
+        format: decoded.format.clone(),
         width: decoded.buffer.width,
         height: decoded.buffer.height,
         file_size_bytes: input_bytes.len() as u64,
@@ -218,19 +254,22 @@ async fn process_single_file(
         .await
         .map_err(|e| format!("Execute {}: {}", input_path, e))?;
 
+    // Derive output format from input format (default to TIFF for RAW/unknown)
+    let output_format = output_format_from_input(&decoded.format);
+    let output_ext = extension_for_format(&output_format);
+
     // Encode output
     let output_path = {
         let stem = std::path::Path::new(input_path)
             .file_stem()
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_else(|| "output".to_string());
-        std::path::Path::new(output_dir).join(format!("{}.tiff", stem))
+        std::path::Path::new(output_dir).join(format!("{}.{}", stem, output_ext))
     };
 
     if let Some(exec_result) = result.buffer {
-        let output_format = photopipeline_core::ImageFormat::TIFF;
         let encoder = find_encoder(registry, &output_format)
-            .ok_or_else(|| "No TIFF encoder found".to_string())?;
+            .ok_or_else(|| format!("No {:?} encoder found", output_format))?;
 
         let encode_opts = EncodeOptions {
             format: output_format,
@@ -332,6 +371,8 @@ impl BatchService for BatchServiceImpl {
 
         tracing::info!("submit_batch: id={}, found {} files", batch_id, total);
 
+        let cancel_flag = Arc::new(AtomicBool::new(false));
+
         self.state.batch_jobs.write().insert(
             batch_id,
             crate::BatchJobState {
@@ -341,6 +382,7 @@ impl BatchService for BatchServiceImpl {
                 failed_files: 0,
                 current_file: String::new(),
                 status: ProtoStatus::Pending as i32,
+                cancel_flag: Some(cancel_flag.clone()),
             },
         );
 
@@ -348,7 +390,7 @@ impl BatchService for BatchServiceImpl {
         let state = self.state.clone();
         let output_dir_clone = output_dir.clone();
         tokio::spawn(async move {
-            process_batch_files(state, batch_id, files, output_dir_clone, template_str).await;
+            process_batch_files(state, batch_id, files, output_dir_clone, template_str, cancel_flag).await;
         });
 
         tracing::info!("submit_batch: batch {} started in background", batch_id);
@@ -427,6 +469,9 @@ impl BatchService for BatchServiceImpl {
         match jobs.get_mut(&batch_id) {
             Some(state) => {
                 state.status = ProtoStatus::Canceled as i32;
+                if let Some(ref flag) = state.cancel_flag {
+                    flag.store(true, Ordering::Relaxed);
+                }
                 tracing::info!("Batch {} canceled", bid);
                 Ok(Response::new(()))
             }

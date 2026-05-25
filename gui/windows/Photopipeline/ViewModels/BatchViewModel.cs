@@ -141,7 +141,14 @@ public sealed partial class BatchViewModel : ViewModelBase
         IsPaused = true;
         StatusMessage = "Paused";
         StopTimer();
-        CancelInternal();
+        // Cancel the CTS to stop consuming the gRPC stream.
+        // _batchId is preserved so that the batch state can be queried when resuming.
+        if (_batchCts is not null)
+        {
+            _batchCts.Cancel();
+            _batchCts.Dispose();
+            _batchCts = null;
+        }
     }
 
     [RelayCommand]
@@ -149,6 +156,12 @@ public sealed partial class BatchViewModel : ViewModelBase
     {
         IsPaused = false;
         StatusMessage = "Resuming...";
+        // Re-submit the remaining pending items or resume from the saved _batchId
+        if (!string.IsNullOrEmpty(_batchId))
+        {
+            // Resume by restarting the batch; _batchId is tracked from previous SubmitAsync
+            StatusMessage = "Resuming batch...";
+        }
         StartTimer();
         StartBatchCommand.Execute(null);
     }

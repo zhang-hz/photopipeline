@@ -340,7 +340,16 @@ impl Plugin for ExifRwPlugin {
     }
 }
 
-fn find_exiftool_path() -> Option<String> {
+/// Cached exiftool path resolution, shared across all plugins.
+pub fn find_exiftool_path() -> Option<String> {
+    use std::sync::OnceLock;
+    static EXIFTOOL_PATH: OnceLock<Option<String>> = OnceLock::new();
+    EXIFTOOL_PATH
+        .get_or_init(|| find_exiftool_path_inner())
+        .clone()
+}
+
+fn find_exiftool_path_inner() -> Option<String> {
     let exe_name: &str = if cfg!(windows) {
         "exiftool.exe"
     } else {
@@ -790,7 +799,7 @@ async fn read_metadata_via_kamadak(
     Ok(metadata)
 }
 
-fn parse_exif_date_time(s: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+pub(crate) fn parse_exif_date_time(s: &str) -> Option<chrono::DateTime<chrono::Utc>> {
     let s = s.trim();
     if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(s, "%Y:%m:%d %H:%M:%S") {
         return Some(chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc));

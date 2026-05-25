@@ -415,18 +415,16 @@ impl FormatProcessor for HeifEncoderPlugin {
         );
 
         if photopipeline_oiio::OiioContext::available() {
+            let tmp_path = std::env::temp_dir()
+                .join(format!("pp_oiio_out_{}.heic", std::process::id()));
+            let tmp_str = tmp_path.to_string_lossy().to_string();
             if let Ok(()) = photopipeline_oiio::OiioContext::write_image(
-                &format!("/tmp/pp_oiio_out_{}.heic", std::process::id()),
+                &tmp_str,
                 image,
                 metadata,
             ) {
-                if let Ok(data) =
-                    std::fs::read(format!("/tmp/pp_oiio_out_{}.heic", std::process::id()))
-                {
-                    let _ = std::fs::remove_file(format!(
-                        "/tmp/pp_oiio_out_{}.heic",
-                        std::process::id()
-                    ));
+                if let Ok(data) = std::fs::read(&tmp_str) {
+                    let _ = std::fs::remove_file(&tmp_str);
                     return Ok(data);
                 }
             }
@@ -477,7 +475,7 @@ fn encode_via_libheif(
     #[cfg(feature = "libheif-native")]
     {
         use libheif_ffi::*;
-        use std::ffi::c_int;
+        use std::ffi::{c_int, CString};
         unsafe {
             let ctx = heif_context_alloc();
             if ctx.is_null() {
@@ -577,11 +575,12 @@ fn encode_via_libheif(
                 heif_encoder_set_lossy_quality(encoder, quality as c_int);
             }
 
-            let effort_str = format!("{}", effort);
+            let effort_cstr = CString::new(format!("{}", effort)).unwrap_or_default();
+            let effort_key = CString::new("effort").unwrap_or_default();
             heif_encoder_set_parameter_string(
                 encoder,
-                b"effort\0".as_ptr(),
-                effort_str.as_bytes().as_ptr(),
+                effort_key.as_ptr(),
+                effort_cstr.as_ptr(),
             );
 
             let mut output_ptr: *mut u8 = std::ptr::null_mut();

@@ -8,21 +8,61 @@ namespace Photopipeline.Views;
 
 public partial class PipelineEditorView : UserControl
 {
-    public PipelineEditorView() => InitializeComponent();
+    private PipelineEditorViewModel? _vm;
 
-    private PipelineEditorViewModel? Vm => DataContext as PipelineEditorViewModel;
+    public PipelineEditorView()
+    {
+        InitializeComponent();
+        DataContextChanged += OnDataContextChanged;
+    }
+
+    private void OnDataContextChanged(object sender, System.Windows.DependencyPropertyChangedEventArgs e)
+    {
+        if (e.OldValue is PipelineEditorViewModel oldVm)
+            oldVm.PreviewUpdateRequested -= OnPreviewUpdateRequested;
+        if (e.NewValue is PipelineEditorViewModel newVm)
+        {
+            _vm = newVm;
+            newVm.PreviewUpdateRequested += OnPreviewUpdateRequested;
+            // Watch for SelectedNode changes that may come from outside (e.g., DAG canvas click)
+            newVm.PropertyChanged += (s, args) =>
+            {
+                if (args.PropertyName == nameof(PipelineEditorViewModel.SelectedNode) &&
+                    newVm.SelectedNode is { } node)
+                {
+                    RegenerateParameterControls(node);
+                }
+            };
+        }
+    }
+
+    private PipelineEditorViewModel? Vm => _vm ?? DataContext as PipelineEditorViewModel;
+
+    private void OnPreviewUpdateRequested()
+    {
+        // Forward to MainViewModel so it can reload the preview
+        if (System.Windows.Application.Current.MainWindow is MainWindow mw &&
+            mw.DataContext is MainViewModel mvm)
+        {
+            var img = mvm.Filmstrip.SelectedImage;
+            if (img != null && Vm != null && Vm.IsPipelineValid)
+                _ = mvm.Preview.ProcessPreviewAsync(img, Vm.CurrentPipeline, Vm.PipelineId);
+        }
+    }
 
     private void OnNodeDropped(PluginInfo plugin, SKPoint worldPos)
     {
         Vm?.AddNodeAt(plugin, worldPos.X, worldPos.Y);
     }
 
-    private void OnNodeSelected(PipelineNode node)
+    private void OnNodeSelected(PipelineNode? node)
     {
         if (Vm is not null)
         {
             Vm.SelectedNode = node;
-            RegenerateParameterControls(node);
+            ParameterPanel.Children.Clear();
+            if (node is not null)
+                RegenerateParameterControls(node);
         }
     }
 

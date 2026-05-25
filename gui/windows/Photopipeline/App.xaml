@@ -13,6 +13,7 @@
 
             <!-- Converters -->
             <converters:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+            <converters:NullToVisibilityConverter x:Key="NullToVisibility" />
             <converters:FileSizeConverter x:Key="FileSize" />
             <converters:StatusToColorConverter x:Key="StatusToColor" />
             <converters:ProgressToColorConverter x:Key="ProgressToColor" />

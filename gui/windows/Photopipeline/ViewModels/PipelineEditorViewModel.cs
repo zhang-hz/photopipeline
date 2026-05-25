@@ -1,3 +1,5 @@
+// NOTE: File dialogs used in FilmstripVM, PreviewVM, and other VMs should be abstracted
+// behind a service interface (e.g., IDialogService) to avoid violating MVVM.
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -28,6 +30,8 @@ public sealed partial class PipelineEditorViewModel : ViewModelBase
     [ObservableProperty] private string _executionStatus = string.Empty;
     [ObservableProperty] private ObservableCollection<ExecuteProgress> _progressHistory = new();
 
+    public event Action? PreviewUpdateRequested;
+
     public PipelineEditorViewModel(ILogger<PipelineEditorViewModel> logger, IPipelineService pipelineService)
         : base(logger)
     {
@@ -57,10 +61,16 @@ public sealed partial class PipelineEditorViewModel : ViewModelBase
         IsPipelineValid = false;
     }
 
+    public event Func<PipelineNode?, bool>? ConfirmRemoveNode;
+
     [RelayCommand]
     private void RemoveNode(PipelineNode? node)
     {
         if (node is null || IsExecuting) return;
+
+        if (ConfirmRemoveNode != null && !ConfirmRemoveNode(node))
+            return;
+
         Nodes.Remove(node);
         CurrentPipeline.Nodes.Remove(node);
         var relatedEdges = Edges.Where(e => e.From == node.Id || e.To == node.Id).ToList();
@@ -187,6 +197,7 @@ public sealed partial class PipelineEditorViewModel : ViewModelBase
 
             ExecutionStatus = "Completed";
             StatusMessage = "Pipeline execution completed";
+            PreviewUpdateRequested?.Invoke();
         }
         catch (OperationCanceledException)
         {
@@ -224,7 +235,19 @@ public sealed partial class PipelineEditorViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void ZoomCanvas(double delta) => Scale = Math.Clamp(Scale + delta, 0.1, 5.0);
+    private void ZoomCanvas(object delta)
+    {
+        if (TryParseDouble(delta, out var d))
+            Scale = Math.Clamp(Scale + d, 0.1, 5.0);
+    }
+
+    private static bool TryParseDouble(object? value, out double result)
+    {
+        if (value is double d) { result = d; return true; }
+        if (value is string s && double.TryParse(s, out var parsed)) { result = parsed; return true; }
+        result = 0;
+        return false;
+    }
 
     [RelayCommand]
     private void ResetCanvas() { Scale = 1.0; OffsetX = 0; OffsetY = 0; }

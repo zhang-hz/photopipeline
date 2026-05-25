@@ -9,9 +9,7 @@
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=ViewModels.PreviewViewModel}">
 
-    <UserControl.Resources>
-        <converters:BoolToVisibilityConverter x:Key="BoolToVisibility" />
-    </UserControl.Resources>
+    <!-- Converters registered in App.xaml -->
 
     <Grid>
         <Grid.RowDefinitions>
@@ -33,13 +31,13 @@
                 <ui:Button Content="1:1" Command="{Binding OneToOneCommand}"
                            Margin="0,0,2,0" Appearance="Transparent" FontSize="11" Width="36" />
 
-                <Separator Style="{StaticResource Separator}" Margin="4,2" />
+                <Separator Margin="4,2" />
 
                 <ui:Button Content="{Binding ZoomLevel, StringFormat={}{0:P0}}"
                            Command="{Binding ResetZoomCommand}" Appearance="Transparent"
                            FontSize="11" Width="50" ToolTip="Click to reset zoom" />
 
-                <Separator Style="{StaticResource Separator}" Margin="4,2" />
+                <Separator Margin="4,2" />
 
                 <ui:Button Content="Split" Command="{Binding ToggleSplitCommand}"
                            Appearance="Transparent" FontSize="11" Width="44" />

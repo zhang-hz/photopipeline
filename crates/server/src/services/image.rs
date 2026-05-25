@@ -24,37 +24,6 @@ impl ImageServiceImpl {
     }
 }
 
-fn detect_format_from_ext(path: &str) -> ImageFormat {
-    let lower = path.to_lowercase();
-    if lower.ends_with(".arw")
-        || lower.ends_with(".cr2")
-        || lower.ends_with(".nef")
-        || lower.ends_with(".dng")
-    {
-        ImageFormat::RAW
-    } else if lower.ends_with(".heif") || lower.ends_with(".heic") {
-        ImageFormat::HEIF
-    } else if lower.ends_with(".avif") {
-        ImageFormat::AVIF
-    } else if lower.ends_with(".jxl") {
-        ImageFormat::JXL
-    } else if lower.ends_with(".png") {
-        ImageFormat::PNG
-    } else if lower.ends_with(".tiff") || lower.ends_with(".tif") {
-        ImageFormat::TIFF
-    } else if lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
-        ImageFormat::JPEG
-    } else if lower.ends_with(".webp") {
-        ImageFormat::WEBP
-    } else if lower.ends_with(".exr") {
-        ImageFormat::OpenEXR
-    } else if lower.ends_with(".bmp") {
-        ImageFormat::BMP
-    } else {
-        ImageFormat::Unknown("unknown".to_string())
-    }
-}
-
 fn parse_pixel_format(s: &str) -> PixelFormat {
     match s.to_lowercase().as_str() {
         "u8" => PixelFormat::U8,
@@ -112,7 +81,7 @@ impl ImageService for ImageServiceImpl {
             .map(|f| f.to_string_lossy().to_string())
             .unwrap_or_default();
 
-        let format = detect_format_from_ext(&path);
+        let format = crate::detect_format_from_ext(&path);
         let format_str = format.to_string();
 
         let file_size_bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);

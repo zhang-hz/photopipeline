@@ -14,6 +14,7 @@ public sealed class BackendService : IBackendService, IHostedService
     private bool _isRunning;
     private bool _isHealthy;
     private CancellationTokenSource? _healthCts;
+    private Grpc.Net.Client.GrpcChannel? _healthChannel;
 
     public bool IsRunning => _isRunning;
     public bool IsHealthy => _isHealthy;
@@ -26,12 +27,12 @@ public sealed class BackendService : IBackendService, IHostedService
         _serverPort = serverPort;
     }
 
-    async Task IHostedService.StartAsync(CancellationToken ct)
+    Task IHostedService.StartAsync(CancellationToken ct)
     {
         if (!File.Exists(_serverPath))
         {
             _logger.LogWarning("Server executable not found at {Path}", _serverPath);
-            return;
+            return Task.CompletedTask;
         }
 
         var psi = new ProcessStartInfo
@@ -50,28 +51,53 @@ public sealed class BackendService : IBackendService, IHostedService
             SetHealth(false);
         };
 
-        _process.Start();
-        _isRunning = true;
-        _logger.LogInformation("Backend process started (PID {Pid})", _process.Id);
-
-        for (int i = 0; i < 30 && !ct.IsCancellationRequested; i++)
+        try
         {
-            if (await CheckHealthAsync(ct))
-            {
-                SetHealth(true);
-                StartHealthMonitor();
-                return;
-            }
-            await Task.Delay(500, ct);
+            _process.Start();
+            _isRunning = true;
+            _logger.LogInformation("Backend process started (PID {Pid})", _process.Id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to start backend process at {Path}", _serverPath);
+            return Task.CompletedTask;
         }
 
-        _logger.LogError("Backend did not become healthy within 15 seconds");
+        _ = WaitForHealthyAndMonitor(ct);
+        return Task.CompletedTask;
+    }
+
+    private async Task WaitForHealthyAndMonitor(CancellationToken ct)
+    {
+        try
+        {
+            for (int i = 0; i < 30 && !ct.IsCancellationRequested; i++)
+            {
+                if (await CheckHealthAsync(ct))
+                {
+                    SetHealth(true);
+                    StartHealthMonitor();
+                    return;
+                }
+                await Task.Delay(500, ct);
+            }
+            _logger.LogError("Backend did not become healthy within 15 seconds");
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Health check error during backend startup");
+        }
     }
 
     async Task IHostedService.StopAsync(CancellationToken ct)
     {
-        _healthCts?.Cancel();
         await StopAsync();
+        _healthCts?.Cancel();
+        _healthCts?.Dispose();
+        _healthCts = null;
+        _healthChannel?.Dispose();
+        _healthChannel = null;
     }
 
     public Task StartAsync(CancellationToken ct = default)
@@ -79,14 +105,15 @@ public sealed class BackendService : IBackendService, IHostedService
 
     public async Task StopAsync()
     {
-        if (_process is { HasExited: false })
+        if (_process is { HasExited: false } process)
         {
+            process.EnableRaisingEvents = false;
             _logger.LogInformation("Shutting down backend process...");
-            _process.Kill(true);
-            await Task.Run(() => _process.WaitForExit(5000));
-            _process.Dispose();
-            _process = null;
+            process.Kill(true);
+            await Task.Run(() => process.WaitForExit(5000));
         }
+        _process?.Dispose();
+        _process = null;
         _isRunning = false;
         SetHealth(false);
     }
@@ -95,13 +122,16 @@ public sealed class BackendService : IBackendService, IHostedService
     {
         try
         {
-            using var channel = Grpc.Net.Client.GrpcChannel.ForAddress(
+            _healthChannel ??= Grpc.Net.Client.GrpcChannel.ForAddress(
                 $"http://localhost:{_serverPort}");
-            await channel.ConnectAsync(ct);
+            await _healthChannel.ConnectAsync(ct);
             return true;
         }
         catch
         {
+            // Dispose and recreate the channel on failure to refresh the connection
+            _healthChannel?.Dispose();
+            _healthChannel = null;
             return false;
         }
     }

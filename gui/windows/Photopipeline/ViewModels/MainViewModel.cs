@@ -60,6 +60,9 @@ public sealed partial class MainViewModel : ViewModelBase
 
         Filmstrip.ImageSelected += OnImageSelected;
         Filmstrip.SendToBatchRequested += OnSendToBatch;
+
+        // Subscribe to child VMs' PropertyChanged for StatusMessage forwarding
+        SubscribeChildStatusMessages();
     }
 
     [RelayCommand]
@@ -94,12 +97,46 @@ public sealed partial class MainViewModel : ViewModelBase
     public override void Shutdown()
     {
         base.Shutdown();
+        UnsubscribeAll();
         Filmstrip.Shutdown();
         Preview.Shutdown();
         PipelineEditor.Shutdown();
         PluginBrowser.Shutdown();
         Batch.Shutdown();
         Settings.Shutdown();
+    }
+
+    private void UnsubscribeAll()
+    {
+        _backend.HealthChanged -= OnBackendHealthChanged;
+        Filmstrip.ImageSelected -= OnImageSelected;
+        Filmstrip.SendToBatchRequested -= OnSendToBatch;
+        Filmstrip.PropertyChanged -= OnChildVmPropertyChanged;
+        Preview.PropertyChanged -= OnChildVmPropertyChanged;
+        PipelineEditor.PropertyChanged -= OnChildVmPropertyChanged;
+        PluginBrowser.PropertyChanged -= OnChildVmPropertyChanged;
+        Batch.PropertyChanged -= OnChildVmPropertyChanged;
+        Settings.PropertyChanged -= OnChildVmPropertyChanged;
+    }
+
+    private void SubscribeChildStatusMessages()
+    {
+        Filmstrip.PropertyChanged += OnChildVmPropertyChanged;
+        Preview.PropertyChanged += OnChildVmPropertyChanged;
+        PipelineEditor.PropertyChanged += OnChildVmPropertyChanged;
+        PluginBrowser.PropertyChanged += OnChildVmPropertyChanged;
+        Batch.PropertyChanged += OnChildVmPropertyChanged;
+        Settings.PropertyChanged += OnChildVmPropertyChanged;
+    }
+
+    private void OnChildVmPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ViewModelBase.StatusMessage) &&
+            sender is ViewModelBase childVm &&
+            !string.IsNullOrEmpty(childVm.StatusMessage))
+        {
+            StatusMessage = childVm.StatusMessage;
+        }
     }
 
     private async void OnImageSelected(Models.ImageEntry? image)

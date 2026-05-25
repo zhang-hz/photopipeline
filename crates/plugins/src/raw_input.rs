@@ -2,11 +2,18 @@ use async_trait::async_trait;
 use std::process::Command;
 use std::sync::LazyLock;
 
+use crate::exif_rw::parse_exif_date_time;
+use exif::{Reader, Tag, Value};
+
 use photopipeline_core::{
-    AlignedBuffer, ChannelLayout, ColorSpace, DecodeOptions, DecodedImage, EncodeOptions,
-    FormatProbe, HardwareRequirement, ImageFormat, Metadata, PerfTimer, PixelBuffer, PixelFormat,
-    PluginCategory, PluginError, PluginId, PluginResult, PluginVersion, ValidationIssue,
+    DecodeOptions, DecodedImage, EncodeOptions, ExifData,
+    FormatProbe, GpsData, HardwareRequirement, ImageFormat, Metadata, PerfTimer, PixelBuffer,
+    PluginCategory, PluginError, PluginId, PluginResult, PluginVersion,
+    ValidationIssue,
 };
+
+#[cfg(feature = "libraw-native")]
+use photopipeline_core::{AlignedBuffer, ChannelLayout, ColorSpace, PixelFormat};
 use photopipeline_plugin::{
     EnumOption, FormatProcessor, GuiLayout, GuiSchema, GuiSection, ParameterField, ParameterSchema,
     ParameterSection, ParameterSet, ParameterType, Plugin, PreviewMode, SectionStyle,
@@ -336,10 +343,112 @@ impl Plugin for RawInputPlugin {
     }
 }
 
-fn decode_via_libraw(_data: &[u8], _options: &DecodeOptions) -> PluginResult<DecodedImage> {
+#[allow(dead_code)]
+fn extract_exif_metadata(data: &[u8]) -> Metadata {
+    let mut metadata = Metadata::default();
+    let cursor = std::io::Cursor::new(data);
+    let reader = Reader::new();
+    if let Ok(exif) = reader.read_from_container(&mut cursor.clone()) {
+        let mut exif_data = ExifData::default();
+        let mut gps = GpsData::default();
+        for field in exif.fields() {
+            match field.tag {
+                Tag::Make => exif_data.make = Some(field.display_value().to_string()),
+                Tag::Model => exif_data.model = Some(field.display_value().to_string()),
+                Tag::ISOSpeed => {
+                    if let Some(v) = field.value.get_uint(0) {
+                        exif_data.iso = Some(v);
+                    }
+                }
+                Tag::ExposureTime => {
+                    if let Value::Rational(ref v) = field.value {
+                        if let Some(et) = v.first() {
+                            exif_data.exposure_time = Some(format!("{}/{}", et.num, et.denom));
+                        }
+                    }
+                }
+                Tag::FNumber => {
+                    if let Value::Rational(ref v) = field.value {
+                        if let Some(fn_val) = v.first() {
+                            exif_data.f_number =
+                                Some(format!("{:.1}", fn_val.num as f64 / fn_val.denom as f64));
+                        }
+                    }
+                }
+                Tag::FocalLength => {
+                    if let Value::Rational(ref v) = field.value {
+                        if let Some(fl) = v.first() {
+                            exif_data.focal_length =
+                                Some(format!("{:.1}", fl.num as f64 / fl.denom as f64));
+                        }
+                    }
+                }
+                Tag::LensModel => exif_data.lens_model = Some(field.display_value().to_string()),
+                Tag::Artist => exif_data.artist = Some(field.display_value().to_string()),
+                Tag::Copyright => exif_data.copyright = Some(field.display_value().to_string()),
+                Tag::ImageDescription => {
+                    exif_data.image_description = Some(field.display_value().to_string())
+                }
+                Tag::Orientation => {
+                    if let Some(v) = field.value.get_uint(0) {
+                        exif_data.orientation = Some(v as u16);
+                    }
+                }
+                Tag::Software => exif_data.software = Some(field.display_value().to_string()),
+                Tag::DateTimeOriginal => {
+                    // Parse EXIF date-time string via chrono
+                    let s = field.display_value().to_string();
+                    exif_data.date_time_original = parse_exif_date_time(&s);
+                }
+                Tag::DateTimeDigitized => {
+                    let s = field.display_value().to_string();
+                    exif_data.date_time_digitized = parse_exif_date_time(&s);
+                }
+                Tag::GPSLatitudeRef => {
+                    gps.latitude_ref = Some(field.display_value().to_string());
+                }
+                Tag::GPSLatitude => {
+                    if let Value::Rational(ref v) = field.value {
+                        if v.len() >= 1 {
+                            gps.latitude = Some(v[0].num as f64 / v[0].denom as f64);
+                        }
+                    }
+                }
+                Tag::GPSLongitudeRef => {
+                    gps.longitude_ref = Some(field.display_value().to_string());
+                }
+                Tag::GPSLongitude => {
+                    if let Value::Rational(ref v) = field.value {
+                        if v.len() >= 1 {
+                            gps.longitude = Some(v[0].num as f64 / v[0].denom as f64);
+                        }
+                    }
+                }
+                Tag::GPSAltitudeRef => {
+                    if let Some(v) = field.value.get_uint(0) {
+                        gps.altitude_ref = Some(v as i8);
+                    }
+                }
+                Tag::GPSAltitude => {
+                    if let Value::Rational(ref v) = field.value {
+                        if let Some(alt) = v.first() {
+                            gps.altitude = Some(alt.num as f64 / alt.denom as f64);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        metadata.exif = Some(exif_data);
+        metadata.gps = Some(gps);
+    }
+    metadata
+}
+
+fn decode_via_libraw(data: &[u8], _options: &DecodeOptions) -> PluginResult<DecodedImage> {
     #[cfg(not(feature = "libraw-native"))]
     {
-        let _ = (_data, _options);
+        let _ = (data, _options);
         Err(PluginError::Internal {
             plugin: "raw_input".into(),
             message: "LibRaw native not compiled".into(),
@@ -359,7 +468,7 @@ fn decode_via_libraw(_data: &[u8], _options: &DecodeOptions) -> PluginResult<Dec
             });
         }
 
-        let ret = libraw_open_buffer(lr, _data.as_ptr() as *const c_void, _data.len());
+        let ret = libraw_open_buffer(lr, data.as_ptr() as *const c_void, data.len());
         if ret != 0 {
             libraw_close(lr);
             return Err(PluginError::DecodingFailed(
@@ -417,7 +526,7 @@ fn decode_via_libraw(_data: &[u8], _options: &DecodeOptions) -> PluginResult<Dec
 
         Ok(DecodedImage {
             buffer,
-            metadata: Metadata::default(),
+            metadata: extract_exif_metadata(data),
             format: ImageFormat::RAW,
         })
     }

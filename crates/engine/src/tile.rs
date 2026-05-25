@@ -5,7 +5,7 @@ use photopipeline_plugin::{ParameterSet, PixelProcessor, ProgressSink};
 pub struct TileEngine {
     pub default_tile_size: u32,
     pub overlap: u32,
-    pub max_parallel: usize,
+    pub max_parallel: usize, // TODO: Use for parallel tile processing
 }
 
 struct TileResult {
@@ -203,6 +203,8 @@ impl ProgressSink for TileProgressSink {
     fn set_progress(&self, _fraction: f32, _message: &str) {}
 
     fn is_canceled(&self) -> bool {
+        // Cancellation is checked between tiles in the main loop;
+        // individual tile processing runs to completion quickly.
         false
     }
 }

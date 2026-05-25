@@ -9,9 +9,7 @@
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=ViewModels.BatchViewModel}">
 
-    <UserControl.Resources>
-        <converters:BoolToVisibilityConverter x:Key="BoolToVisibility" />
-    </UserControl.Resources>
+    <!-- Converters registered in App.xaml -->
 
     <Grid>
         <Grid.RowDefinitions>

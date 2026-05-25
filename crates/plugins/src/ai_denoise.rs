@@ -379,6 +379,17 @@ impl AiDenoisePlugin {
                     }
                 }
             }
+            PixelFormat::F16 => {
+                let u16s: &[u16] = bytemuck::cast_slice(src);
+                for y in 0..h {
+                    for x in 0..w {
+                        let pixel_off = (y * w + x) * c;
+                        for ch in 0..c {
+                            flat[ch * h * w + y * w + x] = f16_to_f32(u16s[pixel_off + ch]);
+                        }
+                    }
+                }
+            }
             _ => {
                 // Generic: copy byte-by-byte, treat as float if possible
                 for y in 0..h {
@@ -398,7 +409,7 @@ impl AiDenoisePlugin {
             }
         }
 
-        let array = ndarray::Array3::from_shape_vec((1, c, h * w), flat).map_err(|e| {
+        let array = ndarray::Array4::from_shape_vec((1, c, h, w), flat).map_err(|e| {
             PluginError::Internal {
                 plugin: self.id.clone(),
                 message: format!("Failed to create input array: {}", e),
@@ -650,14 +661,16 @@ impl PixelProcessor for AiDenoisePlugin {
             .get("denoise_strength")
             .and_then(|v| v.as_f64())
             .unwrap_or(50.0);
-        let _detail = params
+        let detail = params
             .get("detail_preservation")
             .and_then(|v| v.as_f64())
             .unwrap_or(50.0);
-        let _color = params
+        let color = params
             .get("color_noise_reduction")
             .and_then(|v| v.as_f64())
             .unwrap_or(75.0);
+        // Reserved for future ONNX model parameter tuning
+        let _ = (detail, color);
 
         if strength < 1.0 {
             output.data.data.copy_from_slice(&input.data.data);
@@ -887,6 +900,29 @@ impl AiProcessor for AiDenoisePlugin {
                 message: "ONNX inference not available. Rebuild with --features onnx.".into(),
             })
         }
+    }
+}
+
+/// IEEE 754 half-precision (f16) to single-precision (f32) conversion.
+#[allow(dead_code)]
+fn f16_to_f32(h: u16) -> f32 {
+    let sign = ((h >> 15) & 1) as u32;
+    let exp = ((h >> 10) & 0x1F) as u32;
+    let mant = (h & 0x3FF) as u32;
+    if exp == 0 {
+        // Zero or subnormal
+        f32::from_bits((sign << 31) | (mant as f32 / 1024.0).to_bits())
+    } else if exp == 31 {
+        // Infinity or NaN
+        if mant == 0 {
+            f32::from_bits((sign << 31) | 0x7F80_0000)
+        } else {
+            f32::NAN
+        }
+    } else {
+        let e = (exp as i32 - 15) + 127;
+        let m = mant << 13;
+        f32::from_bits((sign << 31) | ((e as u32) << 23) | m)
     }
 }
 

@@ -679,6 +679,9 @@ mod lcms2_ffi {
     pub const TYPE_GRAY_8: c_uint = 0x1901;
     pub const TYPE_GRAY_16: c_uint = 0x1A01;
     pub const TYPE_RGB_FLT: c_uint = 0x1606;
+    pub const TYPE_RGBA_FLT: c_uint = 0x1608;
+    pub const TYPE_GRAY_FLT: c_uint = 0x1601;
+    pub const TYPE_BGR_FLT: c_uint = 0x1607;
 
     pub const INTENT_PERCEPTUAL: c_uint = 0;
     pub const INTENT_RELATIVE_COLORIMETRIC: c_uint = 1;
@@ -775,7 +778,10 @@ fn convert_via_lcms2(
             (PixelFormat::U16, ChannelLayout::RGBA) => (TYPE_RGBA_16, 4),
             (PixelFormat::U8, ChannelLayout::Gray) => (TYPE_GRAY_8, 1),
             (PixelFormat::U16, ChannelLayout::Gray) => (TYPE_GRAY_16, 1),
-            (PixelFormat::F32, _) => (TYPE_RGB_FLT, 3),
+            (PixelFormat::F32, ChannelLayout::RGB) => (TYPE_RGB_FLT, 3),
+            (PixelFormat::F32, ChannelLayout::RGBA) => (TYPE_RGBA_FLT, 4),
+            (PixelFormat::F32, ChannelLayout::Gray) => (TYPE_GRAY_FLT, 1),
+            (PixelFormat::F32, ChannelLayout::BGR) => (TYPE_BGR_FLT, 3),
             _ => (TYPE_RGB_8, 3),
         };
 

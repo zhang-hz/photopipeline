@@ -471,7 +471,8 @@ impl MetadataProcessor for GpsSetPlugin {
             tool = "exiftool",
             "gps_set: invoking exiftool to write GPS data"
         );
-        let mut cmd = std::process::Command::new("exiftool");
+        let exiftool_path = crate::exif_rw::find_exiftool_path().unwrap_or_else(|| "exiftool".to_string());
+        let mut cmd = std::process::Command::new(&exiftool_path);
         cmd.arg("-overwrite_original");
 
         if let Some(lat) = gps.latitude {
