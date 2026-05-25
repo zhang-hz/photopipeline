@@ -29,6 +29,7 @@ public sealed partial class PipelineEditorViewModel : ViewModelBase
     [ObservableProperty] private bool _isExecuting;
     [ObservableProperty] private string _executionStatus = string.Empty;
     [ObservableProperty] private ObservableCollection<ExecuteProgress> _progressHistory = new();
+    [ObservableProperty] private string? _selectedImagePath;
 
     public event Action? PreviewUpdateRequested;
 
@@ -172,6 +173,11 @@ public sealed partial class PipelineEditorViewModel : ViewModelBase
             ErrorMessage = "Add at least one node to the pipeline";
             return;
         }
+        if (string.IsNullOrEmpty(SelectedImagePath))
+        {
+            ErrorMessage = "Select an image in the Filmstrip first";
+            return;
+        }
 
         CancelExecute();
         _executeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -188,7 +194,10 @@ public sealed partial class PipelineEditorViewModel : ViewModelBase
             if (string.IsNullOrEmpty(pid))
                 pid = await _pipelineService.CreatePipelineAsync(CurrentPipeline, token);
 
-            await foreach (var progress in _pipelineService.ExecuteAsync(pid, "preview", "preview.tif", token))
+            var outputPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                $"photopipeline_preview_{Guid.NewGuid():N}.tif");
+
+            await foreach (var progress in _pipelineService.ExecuteAsync(pid, SelectedImagePath, outputPath, token))
             {
                 token.ThrowIfCancellationRequested();
                 ProgressHistory.Add(progress);

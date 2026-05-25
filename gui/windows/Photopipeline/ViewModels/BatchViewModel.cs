@@ -33,6 +33,7 @@ public sealed partial class BatchViewModel : ViewModelBase
     [ObservableProperty] private int _jpegQuality = 95;
     [ObservableProperty] private bool _embedMetadata = true;
     [ObservableProperty] private int _parallelCount = Math.Max(1, Environment.ProcessorCount - 1);
+    [ObservableProperty] private string? _pipelineConfigPath;
 
     private DispatcherTimer? _timer;
     private DateTime _startTime;
@@ -53,6 +54,11 @@ public sealed partial class BatchViewModel : ViewModelBase
         if (string.IsNullOrWhiteSpace(OutputDirectory))
         {
             ErrorMessage = "Select an output directory";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(PipelineConfigPath))
+        {
+            ErrorMessage = "Create a pipeline in the Pipeline Editor first";
             return;
         }
 
@@ -90,6 +96,7 @@ public sealed partial class BatchViewModel : ViewModelBase
                 OutputDir = OutputDirectory,
                 Parallel = ParallelCount,
                 Resume = false,
+                PipelineConfigPath = PipelineConfigPath,
                 FilePattern = string.Join(";", pending.Select(i => i.FilePath))
             };
             _batchId = await _batchService.SubmitAsync(spec, token);

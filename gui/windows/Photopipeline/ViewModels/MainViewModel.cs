@@ -60,6 +60,10 @@ public sealed partial class MainViewModel : ViewModelBase
 
         Filmstrip.ImageSelected += OnImageSelected;
         Filmstrip.SendToBatchRequested += OnSendToBatch;
+        PluginBrowser.PluginAdded += OnPluginAdded;
+
+        // Wire PipelineEditor.PipelineId → Batch.PipelineConfigPath
+        PipelineEditor.PropertyChanged += OnPipelineEditorPropertyChanged;
 
         // Subscribe to child VMs' PropertyChanged for StatusMessage forwarding
         SubscribeChildStatusMessages();
@@ -94,6 +98,17 @@ public sealed partial class MainViewModel : ViewModelBase
             Batch.AddToQueueCommand.Execute(img);
     }
 
+    private void OnPluginAdded(Models.PluginInfo plugin)
+    {
+        PipelineEditor.AddNodeCommand.Execute(plugin);
+    }
+
+    private void OnPipelineEditorPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(PipelineEditorViewModel.PipelineId))
+            Batch.PipelineConfigPath = PipelineEditor.PipelineId;
+    }
+
     public override void Shutdown()
     {
         base.Shutdown();
@@ -111,6 +126,8 @@ public sealed partial class MainViewModel : ViewModelBase
         _backend.HealthChanged -= OnBackendHealthChanged;
         Filmstrip.ImageSelected -= OnImageSelected;
         Filmstrip.SendToBatchRequested -= OnSendToBatch;
+        PluginBrowser.PluginAdded -= OnPluginAdded;
+        PipelineEditor.PropertyChanged -= OnPipelineEditorPropertyChanged;
         Filmstrip.PropertyChanged -= OnChildVmPropertyChanged;
         Preview.PropertyChanged -= OnChildVmPropertyChanged;
         PipelineEditor.PropertyChanged -= OnChildVmPropertyChanged;
@@ -145,6 +162,8 @@ public sealed partial class MainViewModel : ViewModelBase
             ? $"Selected: {image.FileName} ({image.Width}x{image.Height})"
             : "Ready";
         ImageSelected?.Invoke(image);
+
+        PipelineEditor.SelectedImagePath = image?.FilePath;
 
         if (image is null) return;
 

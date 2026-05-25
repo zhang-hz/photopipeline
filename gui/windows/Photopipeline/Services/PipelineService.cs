@@ -110,6 +110,8 @@ public sealed class PipelineService : IPipelineService
     private static global::Photopipeline.Pipeline.PipelineSpec ToProtoSpec(PipelineSpec spec)
     {
         var proto = new global::Photopipeline.Pipeline.PipelineSpec { Name = spec.Name };
+        foreach (var (key, value) in spec.Params)
+            proto.Params[key] = ConvertToProtoStruct(value);
         foreach (var node in spec.Nodes)
         {
             proto.Nodes.Add(new global::Photopipeline.Pipeline.PipelineNode
@@ -117,7 +119,8 @@ public sealed class PipelineService : IPipelineService
                 Id = node.Id,
                 PluginId = node.PluginId,
                 Label = node.Label,
-                Enabled = node.Enabled
+                Enabled = node.Enabled,
+                Params = DictToProtoStruct(node.Params)
             });
         }
         foreach (var edge in spec.Edges)
@@ -130,6 +133,37 @@ public sealed class PipelineService : IPipelineService
         }
         return proto;
     }
+
+    private static Google.Protobuf.WellKnownTypes.Struct DictToProtoStruct(
+        Dictionary<string, object>? dict)
+    {
+        var s = new Google.Protobuf.WellKnownTypes.Struct();
+        if (dict is null) return s;
+        foreach (var (key, value) in dict)
+            s.Fields[key] = ValueToProtoValue(value);
+        return s;
+    }
+
+    private static Google.Protobuf.WellKnownTypes.Struct ConvertToProtoStruct(object v)
+    {
+        if (v is Dictionary<string, object> d)
+            return DictToProtoStruct(d);
+        var s = new Google.Protobuf.WellKnownTypes.Struct();
+        s.Fields["_value"] = ValueToProtoValue(v);
+        return s;
+    }
+
+    private static Google.Protobuf.WellKnownTypes.Value ValueToProtoValue(object? v) => v switch
+    {
+        string s => new Google.Protobuf.WellKnownTypes.Value { StringValue = s },
+        double d => new Google.Protobuf.WellKnownTypes.Value { NumberValue = d },
+        float f => new Google.Protobuf.WellKnownTypes.Value { NumberValue = f },
+        int i => new Google.Protobuf.WellKnownTypes.Value { NumberValue = i },
+        long l => new Google.Protobuf.WellKnownTypes.Value { NumberValue = l },
+        bool b => new Google.Protobuf.WellKnownTypes.Value { BoolValue = b },
+        null => new Google.Protobuf.WellKnownTypes.Value { NullValue = Google.Protobuf.WellKnownTypes.NullValue.NullValue },
+        _ => new Google.Protobuf.WellKnownTypes.Value { StringValue = v.ToString() }
+    };
 
     private static Dictionary<string, object> ConvertStruct(Google.Protobuf.WellKnownTypes.Struct? s)
     {
