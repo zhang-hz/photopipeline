@@ -1,37 +1,75 @@
-using System.Windows;
 using System.Windows.Controls;
+using Photopipeline.Controls;
 using Photopipeline.Models;
 using Photopipeline.ViewModels;
+using SkiaSharp;
 
 namespace Photopipeline.Views;
 
 public partial class PipelineEditorView : UserControl
 {
-    public PipelineEditorView()
+    public PipelineEditorView() => InitializeComponent();
+
+    private PipelineEditorViewModel? Vm => DataContext as PipelineEditorViewModel;
+
+    private void OnNodeDropped(PluginInfo plugin, SKPoint worldPos)
     {
-        InitializeComponent();
+        Vm?.AddNodeAt(plugin, worldPos.X, worldPos.Y);
     }
 
-    private void OnAddNodeClick(object sender, RoutedEventArgs e)
+    private void OnNodeSelected(PipelineNode node)
     {
-        if (DataContext is not PipelineEditorViewModel pipelineVm)
-            return;
-
-        var window = Window.GetWindow(this);
-        if (window?.DataContext is not MainViewModel mainVm)
-            return;
-
-        if (mainVm.AvailablePlugins.Count == 0)
-            return;
-
-        var menu = new ContextMenu();
-        foreach (var plugin in mainVm.AvailablePlugins)
+        if (Vm is not null)
         {
-            var item = new MenuItem { Header = $"{plugin.Name} ({plugin.Category})" };
-            var captured = plugin;
-            item.Click += (_, _) => pipelineVm.AddNodeCommand.Execute(captured);
-            menu.Items.Add(item);
+            Vm.SelectedNode = node;
+            RegenerateParameterControls(node);
         }
-        menu.IsOpen = true;
+    }
+
+    private void OnPortsConnected(string fromId, string toId)
+    {
+        Vm?.ConnectNodesCommand.Execute((fromId, toId));
+    }
+
+    private void OnNodeMoved(PipelineNode node, SKPoint pos)
+    {
+        Vm?.UpdateNodePosition(node.Id, pos.X, pos.Y);
+    }
+
+    private void RegenerateParameterControls(PipelineNode node)
+    {
+        ParameterPanel.Children.Clear();
+
+        if (node.Params.Count == 0)
+        {
+            ParameterPanel.Children.Add(new TextBlock
+            {
+                Text = "No parameters",
+                FontSize = 11,
+                Foreground = System.Windows.Media.Brushes.Gray
+            });
+            return;
+        }
+
+        foreach (var kvp in node.Params)
+        {
+            var schema = new Dictionary<string, object>
+            {
+                ["type"] = kvp.Value switch
+                {
+                    bool => "bool",
+                    int or long => "int",
+                    float or double => "float",
+                    _ => "string"
+                }
+            };
+            var values = new Dictionary<string, object> { [kvp.Key] = kvp.Value };
+            var control = ParameterControlFactory.CreateControl(kvp.Key, schema, values,
+                (key, val) =>
+                {
+                    Vm?.UpdateNodeParameterCommand.Execute((node.Id, key, val));
+                });
+            ParameterPanel.Children.Add(control);
+        }
     }
 }

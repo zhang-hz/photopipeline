@@ -1,9 +1,17 @@
-<?xml version="1.0" encoding="utf-8"?>
-<UserControl
-    x:Class="Photopipeline.Views.PreviewView"
-    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="clr-namespace:Photopipeline.Controls">
+<UserControl x:Class="Photopipeline.Views.PreviewView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:controls="clr-namespace:Photopipeline.Controls"
+             xmlns:converters="clr-namespace:Photopipeline.Converters"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=ViewModels.PreviewViewModel}">
+
+    <UserControl.Resources>
+        <converters:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+    </UserControl.Resources>
 
     <Grid>
         <Grid.RowDefinitions>
@@ -12,81 +20,60 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- ToolBar -->
-        <ToolBar Grid.Row="0" Background="Transparent">
-            <Button ToolTip="Zoom In"
-                    Command="{Binding ZoomInCommand}">
-                <TextBlock Text="&#xE8A3;" FontFamily="Segoe MDL2 Assets" FontSize="16" />
-            </Button>
-            <Button ToolTip="Zoom Out"
-                    Command="{Binding ZoomOutCommand}">
-                <TextBlock Text="&#xE71F;" FontFamily="Segoe MDL2 Assets" FontSize="16" />
-            </Button>
-            <Separator />
-            <ToggleButton x:Name="SplitViewBtn" ToolTip="Split View"
-                          IsChecked="{Binding IsSplitView}">
-                <TextBlock Text="&#xE890;" FontFamily="Segoe MDL2 Assets" FontSize="16" />
-            </ToggleButton>
-            <ToggleButton x:Name="SideBySideBtn" ToolTip="Side by Side"
-                          IsChecked="{Binding IsSideBySide}">
-                <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="16" />
-            </ToggleButton>
-            <Separator />
-            <Button ToolTip="Fit"
-                    Command="{Binding FitToWindowCommand}">
-                <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="16" />
-            </Button>
-            <Button ToolTip="1:1"
-                    Command="{Binding ResetZoomCommand}">
-                <TextBlock Text="&#xE8A3;" FontFamily="Segoe MDL2 Assets" FontSize="16" />
-            </Button>
-            <Separator />
-            <Button ToolTip="Export"
-                    Command="{Binding ExportImageCommand}">
-                <TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" FontSize="16" />
-            </Button>
-        </ToolBar>
+        <!-- Toolbar -->
+        <Border Grid.Row="0" Padding="4" Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="0,0,0,1">
+            <StackPanel Orientation="Horizontal">
+                <ui:Button Icon="{ui:SymbolIcon ZoomIn24}" ToolTip="Zoom In"
+                           Command="{Binding ZoomInCommand}" Margin="0,0,2,0" Appearance="Transparent" />
+                <ui:Button Icon="{ui:SymbolIcon ZoomOut24}" ToolTip="Zoom Out"
+                           Command="{Binding ZoomOutCommand}" Margin="0,0,2,0" Appearance="Transparent" />
+                <ui:Button Content="{Binding FitLabel}" Command="{Binding FitToWindowCommand}"
+                           Margin="0,0,2,0" Appearance="Transparent" FontSize="11" Width="36" />
+                <ui:Button Content="1:1" Command="{Binding OneToOneCommand}"
+                           Margin="0,0,2,0" Appearance="Transparent" FontSize="11" Width="36" />
 
-        <Border Grid.Row="1" Margin="4"
-                BorderBrush="Gray" BorderThickness="1" CornerRadius="8"
-                Background="#F8F8F8">
-            <Grid x:Name="PreviewContainer">
-                <controls:BeforeAfterView x:Name="BeforeAfterControl"
-                                          HorizontalAlignment="Stretch"
-                                          VerticalAlignment="Stretch" />
+                <Separator Style="{StaticResource Separator}" Margin="4,2" />
 
-                <StackPanel x:Name="NoPreviewPanel"
-                            HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <TextBlock Text="&#xE8B9;" FontFamily="Segoe MDL2 Assets"
-                               FontSize="48" Foreground="#888"
-                               HorizontalAlignment="Center" />
-                    <TextBlock Text="No image selected"
-                               Style="{StaticResource SubtitleTextBlockStyle}"
-                               Foreground="#888" Margin="0,8,0,0"
-                               HorizontalAlignment="Center" />
-                    <TextBlock Text="Select an image from the filmstrip to preview"
-                               Style="{StaticResource CaptionTextBlockStyle}"
-                               Foreground="#AAA"
-                               HorizontalAlignment="Center" />
+                <ui:Button Content="{Binding ZoomLevel, StringFormat={}{0:P0}}"
+                           Command="{Binding ResetZoomCommand}" Appearance="Transparent"
+                           FontSize="11" Width="50" ToolTip="Click to reset zoom" />
+
+                <Separator Style="{StaticResource Separator}" Margin="4,2" />
+
+                <ui:Button Content="Split" Command="{Binding ToggleSplitCommand}"
+                           Appearance="Transparent" FontSize="11" Width="44" />
+                <ui:Button Content="Export" Command="{Binding ExportCommand}"
+                           Appearance="Transparent" FontSize="11" Width="52" />
+            </StackPanel>
+        </Border>
+
+        <!-- SkiaSharp Preview Canvas -->
+        <controls:SkiaPreviewCanvas Grid.Row="1" x:Name="PreviewCanvas"
+            BeforeBitmap="{Binding BeforeBitmap}"
+            AfterBitmap="{Binding AfterBitmap}"
+            ZoomLevel="{Binding ZoomLevel, Mode=TwoWay}"
+            SplitPosition="{Binding SplitPosition}"
+            IsSplitView="{Binding IsSplitView}"
+            IsFitToWindow="{Binding IsFitToWindow}"
+            PanOffset="{Binding PanOffset, Mode=TwoWay}"
+            PixelInfoChanged="OnPixelInfoChanged" />
+
+        <!-- Status bar: pixel info + loading indicator -->
+        <Border Grid.Row="2" Padding="6,2" Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,0,0">
+            <Grid>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                    <TextBlock Text="{Binding PixelInfo}" FontSize="12" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
+                            Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibility}}">
+                    <ui:ProgressRing Width="16" Height="16" IsIndeterminate="True" Margin="0,0,6,0" />
+                    <TextBlock Text="Loading..." FontSize="12" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
             </Grid>
         </Border>
-
-        <!-- Status Bar -->
-        <Grid Grid.Row="2" Margin="8,2" Height="20">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-
-            <TextBlock Grid.Column="0" Text="Before"
-                       FontSize="11" VerticalAlignment="Center"
-                       Foreground="Gray" />
-            <TextBlock Grid.Column="2" Text="After"
-                       FontSize="11" VerticalAlignment="Center"
-                       Foreground="Gray" Margin="16,0,0,0" />
-        </Grid>
     </Grid>
 </UserControl>

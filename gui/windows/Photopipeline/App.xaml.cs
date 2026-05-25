@@ -1,186 +1,164 @@
-using System.Diagnostics;
-using System.IO;
-using System.Windows;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Photopipeline.Helpers;
 using Photopipeline.Services;
 using Photopipeline.ViewModels;
+using Serilog;
+using System.IO;
+using System.Windows;
 
 namespace Photopipeline;
 
 public partial class App : Application
 {
-    private Process? _serverProcess;
-    private const string ServerExe = "photopipeline-server.exe";
+    private readonly IHost _host;
 
-    public static IServiceProvider Services { get; private set; } = null!;
-
-    private static readonly string TraceLogDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Photopipeline", "logs");
-
-    private static void WriteTrace(string msg)
-    {
-        try
-        {
-            Directory.CreateDirectory(TraceLogDir);
-            File.AppendAllText(Path.Combine(TraceLogDir, "trace.log"),
-                $"{DateTime.Now:HH:mm:ss.fff} [{Environment.CurrentManagedThreadId}] {msg}\n");
-        }
-        catch { }
-    }
-
-    static App()
-    {
-        WriteTrace("App static constructor");
-    }
+    public static new App Current => (App)Application.Current;
+    public static IServiceProvider Services => Current._host.Services;
 
     public App()
     {
-        WriteTrace("App instance constructor");
-        Services = ConfigureServices();
-        WriteTrace("App: DI configured");
-
-        DispatcherUnhandledException += (_, e) =>
-        {
-            WriteTrace($"DUE: {e.Exception.GetType().Name}: {e.Exception.Message}\n{e.Exception.StackTrace}");
-            LogException(e.Exception);
-            e.Handled = true;
-        };
-        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
-        {
-            if (e.ExceptionObject is Exception ex)
-                LogException(ex);
-        };
-        TaskScheduler.UnobservedTaskException += (_, e) =>
-        {
-            LogException(e.Exception);
-            e.SetObserved();
-        };
-        WriteTrace("App instance constructor: handlers registered - DONE");
-    }
-
-    private static void LogException(Exception ex)
-    {
-        try
-        {
-            Directory.CreateDirectory(TraceLogDir);
-            var logFile = Path.Combine(TraceLogDir,
-                $"crash_{DateTime.Now:yyyyMMdd_HHmmss}.log");
-            File.WriteAllText(logFile, ex.ToString());
-            Debug.WriteLine($"Unhandled exception logged to {logFile}: {ex}");
-        }
-        catch
-        {
-            Debug.WriteLine($"Unhandled exception (could not log): {ex}");
-        }
-    }
-
-    private static IServiceProvider ConfigureServices()
-    {
-        var services = new ServiceCollection();
-
-        services.AddSingleton<GrpcClientService>();
-        services.AddSingleton<IPipelineService, PipelineService>();
-        services.AddSingleton<IImageService, ImageService>();
-        services.AddSingleton<MainViewModel>();
-        services.AddTransient<PluginPanelViewModel>();
-        services.AddTransient<PipelineEditorViewModel>();
-        services.AddTransient<BatchViewModel>();
-
-        return services.BuildServiceProvider();
-    }
-
-    protected override void OnStartup(StartupEventArgs e)
-    {
-        WriteTrace("OnStartup: begin");
-        base.OnStartup(e);
-        WriteTrace("OnStartup: base.OnStartup done, window should be loaded");
-        _ = InitializeServerAsync();
-        WriteTrace("OnStartup: end");
-    }
-
-    protected override void OnExit(ExitEventArgs e)
-    {
-        WriteTrace("OnExit: shutting down");
-        try { _serverProcess?.Kill(); } catch { }
-        base.OnExit(e);
-    }
-
-    private async Task InitializeServerAsync()
-    {
-        try
-        {
-            StartServer();
-            await WaitForServerAsync();
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Server initialization failed: {ex}");
-            try
+        _host = Host.CreateDefaultBuilder()
+            .ConfigureAppConfiguration((ctx, config) =>
             {
-                var vm = Services.GetRequiredService<MainViewModel>();
-                vm.StatusMessage = "Server unavailable - offline mode";
-            }
-            catch { }
-        }
-    }
-
-    private void StartServer()
-    {
-        var baseDir = AppContext.BaseDirectory;
-        var exePath = Path.Combine(baseDir, ServerExe);
-
-        var customPath = Environment.GetEnvironmentVariable("PHOTOPIPELINE_SERVER_PATH");
-        if (!string.IsNullOrEmpty(customPath))
-            exePath = customPath;
-
-        if (!File.Exists(exePath))
-        {
-            Debug.WriteLine($"Server not found: {exePath}");
-            return;
-        }
-
-        try
-        {
-            _serverProcess = new Process
+                var appData = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "Photopipeline");
+                config.SetBasePath(appData);
+                config.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
+                config.AddEnvironmentVariables("PHOTOPIPELINE_");
+            })
+            .UseSerilog((ctx, loggerConfig) =>
             {
-                StartInfo = new ProcessStartInfo
+                loggerConfig
+                    .MinimumLevel.Information()
+                    .WriteTo.Console()
+                    .WriteTo.File(
+                        Path.Combine(
+                            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                            "Photopipeline", "logs", "photopipeline-.log"),
+                        rollingInterval: RollingInterval.Day,
+                        retainedFileCountLimit: 7);
+            })
+            .ConfigureServices((ctx, services) =>
+            {
+                // Infrastructure
+                services.AddSingleton<DispatcherHelper>();
+
+                // gRPC channel
+                services.AddSingleton<GrpcClientService>(sp =>
                 {
-                    FileName = exePath,
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true,
-                    WorkingDirectory = baseDir,
-                },
-                EnableRaisingEvents = true,
-            };
+                    var config = sp.GetRequiredService<IConfiguration>();
+                    var port = config.GetValue<int>("Server:Port", 50051);
+                    return new GrpcClientService($"http://localhost:{port}");
+                });
 
-            _serverProcess.Exited += (_, _) => Debug.WriteLine("Server process exited");
-            _serverProcess.Start();
+                // Services
+                services.AddSingleton<IPipelineService>(sp =>
+                {
+                    var grpc = sp.GetRequiredService<GrpcClientService>();
+                    var logger = sp.GetRequiredService<ILogger<PipelineService>>();
+                    return new PipelineService(grpc, logger);
+                });
+                services.AddSingleton<IImageService>(sp =>
+                {
+                    var grpc = sp.GetRequiredService<GrpcClientService>();
+                    var logger = sp.GetRequiredService<ILogger<ImageService>>();
+                    return new ImageService(grpc, logger);
+                });
+                services.AddSingleton<IPluginService, PluginService>();
+                services.AddSingleton<ISettingsService, SettingsService>();
+                services.AddSingleton<IBackendService>(sp =>
+                {
+                    var logger = sp.GetRequiredService<ILogger<BackendService>>();
+                    var config = sp.GetRequiredService<IConfiguration>();
+                    var serverPath = config.GetValue<string>("Server:Path", "photopipeline-server.exe")
+                        ?? "photopipeline-server.exe";
+                    var port = config.GetValue<int>("Server:Port", 50051);
+                    return new BackendService(logger, serverPath, port);
+                });
+
+                // Hosted service for backend lifecycle
+                services.AddHostedService(sp => sp.GetRequiredService<IBackendService>() as BackendService
+                    ?? throw new InvalidOperationException("IBackendService must be BackendService"));
+
+                // ViewModels
+                services.AddSingleton<MainViewModel>();
+                services.AddTransient<FilmstripViewModel>();
+                services.AddTransient<PreviewViewModel>();
+                services.AddTransient<PipelineEditorViewModel>();
+                services.AddTransient<PluginBrowserViewModel>();
+                services.AddTransient<BatchViewModel>();
+                services.AddTransient<SettingsViewModel>();
+
+                // Views
+                services.AddTransient<MainWindow>();
+                services.AddTransient<Views.SettingsDialog>();
+            })
+            .Build();
+    }
+
+    protected override async void OnStartup(StartupEventArgs e)
+    {
+        base.OnStartup(e);
+
+        try
+        {
+            var settings = _host.Services.GetRequiredService<ISettingsService>();
+            await settings.LoadAsync();
+
+            ApplyTheme(settings.Current.Theme);
+
+            await _host.StartAsync();
+
+            var mainWindow = _host.Services.GetRequiredService<MainWindow>();
+            mainWindow.Show();
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Failed to start server: {ex}");
+            var logger = _host.Services.GetRequiredService<ILogger<App>>();
+            logger.LogCritical(ex, "Application startup failed");
+            MessageBox.Show($"Startup failed: {ex.Message}", "Photopipeline Error",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown(1);
         }
     }
 
-    private async Task WaitForServerAsync(int timeoutMs = 10000)
+    protected override async void OnExit(ExitEventArgs e)
     {
-        var sw = Stopwatch.StartNew();
-        while (sw.ElapsedMilliseconds < timeoutMs)
+        base.OnExit(e);
+
+        try
         {
-            try
-            {
-                using var cts = new CancellationTokenSource(500);
-                var svc = App.Services.GetRequiredService<GrpcClientService>();
-                await svc.ConnectAsync(cts.Token);
-                return;
-            }
-            catch
-            {
-                await Task.Delay(200);
-            }
+            var settings = _host.Services.GetRequiredService<ISettingsService>();
+            var mainWindow = _host.Services.GetRequiredService<MainWindow>();
+            settings.Current.WindowWidth = mainWindow.Width;
+            settings.Current.WindowHeight = mainWindow.Height;
+            settings.Current.WindowLeft = mainWindow.Left;
+            settings.Current.WindowTop = mainWindow.Top;
+            settings.Current.IsMaximized = mainWindow.WindowState == WindowState.Maximized;
+            await settings.SaveAsync(settings.Current);
         }
+        catch (Exception ex)
+        {
+            var logger = _host.Services.GetRequiredService<ILogger<App>>();
+            logger.LogWarning(ex, "Failed to persist window state on exit");
+        }
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await _host.StopAsync(cts.Token);
+        _host.Dispose();
+    }
+
+    public static void ApplyTheme(string theme)
+    {
+        var appTheme = theme.ToLowerInvariant() switch
+        {
+            "light" => Wpf.Ui.Appearance.ApplicationTheme.Light,
+            _ => Wpf.Ui.Appearance.ApplicationTheme.Dark,
+        };
+        Wpf.Ui.Appearance.ApplicationThemeManager.Apply(appTheme);
     }
 }

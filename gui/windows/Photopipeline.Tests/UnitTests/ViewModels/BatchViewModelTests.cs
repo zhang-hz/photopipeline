@@ -1,11 +1,21 @@
+using Microsoft.Extensions.Logging;
+using Moq;
+
 namespace Photopipeline.Tests.UnitTests.ViewModels;
 
 public sealed class BatchViewModelTests
 {
-    [Fact]
-    public void BatchViewModel_Creation_Defaults()
+    private static BatchViewModel Create(Mock<IBatchService>? batchServiceMock = null)
     {
-        var vm = new BatchViewModel();
+        var logger = Mock.Of<ILogger<BatchViewModel>>();
+        var batchService = batchServiceMock?.Object ?? Mock.Of<IBatchService>();
+        return new BatchViewModel(logger, batchService);
+    }
+
+    [Fact]
+    public void InitialState_Defaults()
+    {
+        var vm = Create();
 
         vm.BatchQueue.Should().BeEmpty();
         vm.TotalItems.Should().Be(0);
@@ -14,7 +24,6 @@ public sealed class BatchViewModelTests
         vm.OverallProgress.Should().Be(0);
         vm.IsRunning.Should().BeFalse();
         vm.IsPaused.Should().BeFalse();
-        vm.StatusText.Should().Be("Idle");
         vm.ElapsedTime.Should().Be("00:00:00");
         vm.EstimatedRemaining.Should().Be("--:--:--");
         vm.SelectedOutputFormat.Should().Be("TIFF");
@@ -25,298 +34,142 @@ public sealed class BatchViewModelTests
     [Fact]
     public void OutputFormats_ContainsExpectedFormats()
     {
-        var vm = new BatchViewModel();
+        var vm = Create();
 
-        vm.OutputFormats.Should().Contain(new[] { "TIFF", "JPEG", "PNG", "WebP", "HEIF" });
+        vm.OutputFormats.Should().Contain(new[] { "TIFF", "JPEG", "PNG", "WebP", "HEIF", "AVIF", "JPEG XL" });
+    }
+
+    [Fact]
+    public void StartBatch_EmptyQueue_ShowsError()
+    {
+        var vm = Create();
+
+        vm.StartBatchCommand.Execute(null);
+
+        vm.IsRunning.Should().BeFalse();
+        vm.ErrorMessage.Should().Contain("No items");
+    }
+
+    [Fact]
+    public void StartBatch_NoOutputDir_ShowsError()
+    {
+        var vm = Create();
+        vm.AddToQueueCommand.Execute(new ImageEntry { FileName = "test.jpg" });
+
+        vm.StartBatchCommand.Execute(null);
+
+        vm.IsRunning.Should().BeFalse();
+        vm.ErrorMessage.Should().Contain("output directory");
     }
 
     [Fact]
     public void AddToQueue_AddsImage()
     {
-        var vm = new BatchViewModel();
-        var image = new ImageEntry { FileName = "test.jpg" };
+        var vm = Create();
+        var img = new ImageEntry { FileName = "test.jpg" };
 
-        vm.AddToQueueCommand.Execute(image);
+        vm.AddToQueueCommand.Execute(img);
 
         vm.BatchQueue.Should().HaveCount(1);
-        vm.TotalItems.Should().Be(1);
     }
 
     [Fact]
-    public void AddToQueue_DoesNotDuplicate()
+    public void AddToQueue_Null_Noop()
     {
-        var vm = new BatchViewModel();
-        var image = new ImageEntry { FileName = "test.jpg" };
+        var vm = Create();
 
-        vm.AddToQueueCommand.Execute(image);
-        vm.AddToQueueCommand.Execute(image);
+        vm.AddToQueueCommand.Execute(null);
 
-        vm.BatchQueue.Should().HaveCount(1);
-        vm.TotalItems.Should().Be(1);
+        vm.BatchQueue.Should().BeEmpty();
     }
 
     [Fact]
-    public void AddToQueue_MultipleImages()
+    public void AddToQueue_NoDuplicates()
     {
-        var vm = new BatchViewModel();
-        var img1 = new ImageEntry { FileName = "a.jpg" };
-        var img2 = new ImageEntry { FileName = "b.jpg" };
-        var img3 = new ImageEntry { FileName = "c.jpg" };
+        var vm = Create();
+        var img = new ImageEntry { FileName = "test.jpg" };
+        vm.AddToQueueCommand.Execute(img);
 
-        vm.AddToQueueCommand.Execute(img1);
-        vm.AddToQueueCommand.Execute(img2);
-        vm.AddToQueueCommand.Execute(img3);
+        vm.AddToQueueCommand.Execute(img);
 
-        vm.BatchQueue.Should().HaveCount(3);
-        vm.TotalItems.Should().Be(3);
+        vm.BatchQueue.Should().HaveCount(1);
     }
 
     [Fact]
     public void RemoveFromQueue_RemovesImage()
     {
-        var vm = new BatchViewModel();
-        var img1 = new ImageEntry { FileName = "a.jpg" };
-        var img2 = new ImageEntry { FileName = "b.jpg" };
-        vm.AddToQueueCommand.Execute(img1);
-        vm.AddToQueueCommand.Execute(img2);
-
-        vm.RemoveFromQueueCommand.Execute(img1);
-
-        vm.BatchQueue.Should().HaveCount(1);
-        vm.TotalItems.Should().Be(1);
-        vm.BatchQueue[0].Should().Be(img2);
-    }
-
-    [Fact]
-    public void RemoveFromQueue_UpdatesTotalItems()
-    {
-        var vm = new BatchViewModel();
+        var vm = Create();
         var img = new ImageEntry { FileName = "test.jpg" };
         vm.AddToQueueCommand.Execute(img);
 
         vm.RemoveFromQueueCommand.Execute(img);
 
         vm.BatchQueue.Should().BeEmpty();
-        vm.TotalItems.Should().Be(0);
     }
 
     [Fact]
-    public void StartBatch_SetsRunningState()
+    public void RemoveFromQueue_NotInQueue_Noop()
     {
-        var vm = new BatchViewModel();
-        var img = new ImageEntry { FileName = "test.jpg" };
-        vm.AddToQueueCommand.Execute(img);
+        var vm = Create();
 
-        vm.StartBatchCommand.Execute(null);
+        vm.RemoveFromQueueCommand.Execute(new ImageEntry { FileName = "unknown.jpg" });
 
-        vm.IsRunning.Should().BeTrue();
-        vm.IsPaused.Should().BeFalse();
-        vm.CompletedItems.Should().Be(0);
-        vm.FailedItems.Should().Be(0);
-        vm.OverallProgress.Should().Be(0);
-        vm.StatusText.Should().Be("Processing...");
+        vm.BatchQueue.Should().BeEmpty();
     }
 
     [Fact]
-    public void StartBatch_EmptyQueue_DoesNotStart()
+    public void StopBatch_ResetsRunningState()
     {
-        var vm = new BatchViewModel();
-
-        vm.StartBatchCommand.Execute(null);
-
-        vm.IsRunning.Should().BeFalse();
-        vm.StatusText.Should().Be("Idle");
-    }
-
-    [Fact]
-    public void PauseBatch_SetsPausedState()
-    {
-        var vm = new BatchViewModel();
-        var img = new ImageEntry { FileName = "test.jpg" };
-        vm.AddToQueueCommand.Execute(img);
-        vm.StartBatchCommand.Execute(null);
-
-        vm.PauseBatchCommand.Execute(null);
-
-        vm.IsRunning.Should().BeTrue();
-        vm.IsPaused.Should().BeTrue();
-        vm.StatusText.Should().Be("Paused");
-    }
-
-    [Fact]
-    public void ResumeBatch_ClearsPausedState()
-    {
-        var vm = new BatchViewModel();
-        var img = new ImageEntry { FileName = "test.jpg" };
-        vm.AddToQueueCommand.Execute(img);
-        vm.StartBatchCommand.Execute(null);
-        vm.PauseBatchCommand.Execute(null);
-
-        vm.ResumeBatchCommand.Execute(null);
-
-        vm.IsPaused.Should().BeFalse();
-        vm.StatusText.Should().Be("Processing...");
-    }
-
-    [Fact]
-    public void StopBatch_SetsStoppedState()
-    {
-        var vm = new BatchViewModel();
-        var img = new ImageEntry { FileName = "test.jpg" };
-        vm.AddToQueueCommand.Execute(img);
-        vm.StartBatchCommand.Execute(null);
+        var vm = Create();
 
         vm.StopBatchCommand.Execute(null);
 
         vm.IsRunning.Should().BeFalse();
         vm.IsPaused.Should().BeFalse();
-        vm.StatusText.Should().Be("Stopped");
     }
 
     [Fact]
-    public void ClearCompleted_RemovesFullyProcessedItems()
+    public void ClearCompleted_RemovesProcessedItems()
     {
-        var vm = new BatchViewModel();
-        var img1 = new ImageEntry { FileName = "a.jpg", ProcessingProgress = 1.0 };
-        var img2 = new ImageEntry { FileName = "b.jpg", ProcessingProgress = 0.5 };
-        var img3 = new ImageEntry { FileName = "c.jpg", ProcessingProgress = 1.0 };
-        vm.AddToQueueCommand.Execute(img1);
-        vm.AddToQueueCommand.Execute(img2);
-        vm.AddToQueueCommand.Execute(img3);
+        var vm = Create();
+        vm.AddToQueueCommand.Execute(new ImageEntry { FileName = "done.jpg", Status = ImageStatus.Overridden });
+        vm.AddToQueueCommand.Execute(new ImageEntry { FileName = "pending.jpg", Status = ImageStatus.None });
 
         vm.ClearCompletedCommand.Execute(null);
 
         vm.BatchQueue.Should().HaveCount(1);
-        vm.BatchQueue[0].Should().Be(img2);
-        vm.TotalItems.Should().Be(1);
+        vm.BatchQueue[0].FileName.Should().Be("pending.jpg");
     }
 
     [Fact]
-    public void ExportFormat_Selection_UpdatesOutputFormat()
+    public void PauseBatch_SetsPausedState()
     {
-        var vm = new BatchViewModel();
+        var vm = Create();
 
-        vm.SelectedOutputFormat = "JPEG";
+        vm.PauseBatchCommand.Execute(null);
 
-        vm.SelectedOutputFormat.Should().Be("JPEG");
+        vm.IsPaused.Should().BeTrue();
     }
 
     [Fact]
-    public void JpegQuality_Range_AcceptsValidValues()
+    public void JpegQuality_AcceptsValidValues()
     {
-        var vm = new BatchViewModel();
+        var vm = Create();
 
         vm.JpegQuality = 100;
         vm.JpegQuality.Should().Be(100);
 
         vm.JpegQuality = 1;
         vm.JpegQuality.Should().Be(1);
-
-        vm.JpegQuality = 85;
-        vm.JpegQuality.Should().Be(85);
-    }
-
-    [Fact]
-    public void EmbedMetadata_TogglesCorrectly()
-    {
-        var vm = new BatchViewModel();
-
-        vm.EmbedMetadata.Should().BeTrue();
-
-        vm.EmbedMetadata = false;
-        vm.EmbedMetadata.Should().BeFalse();
-
-        vm.EmbedMetadata = true;
-        vm.EmbedMetadata.Should().BeTrue();
     }
 
     [Fact]
     public void OutputDirectory_CanBeSet()
     {
-        var vm = new BatchViewModel();
+        var vm = Create();
 
-        vm.OutputDirectory = @"C:\Exports\Processed";
+        vm.OutputDirectory = @"C:\Export\Processed";
 
-        vm.OutputDirectory.Should().Be(@"C:\Exports\Processed");
-    }
-
-    [Fact]
-    public void Progress_UpdatesDuringProcessing()
-    {
-        var vm = new BatchViewModel();
-        var img = new ImageEntry { FileName = "test.jpg" };
-        vm.AddToQueueCommand.Execute(img);
-        vm.StartBatchCommand.Execute(null);
-
-        vm.OverallProgress = 0.5;
-        vm.CompletedItems = 3;
-        vm.FailedItems = 1;
-
-        vm.OverallProgress.Should().Be(0.5);
-        vm.CompletedItems.Should().Be(3);
-        vm.FailedItems.Should().Be(1);
-    }
-
-    [Fact]
-    public void ElapsedTime_UpdatesWhileRunning()
-    {
-        var vm = new BatchViewModel();
-        var img = new ImageEntry { FileName = "test.jpg" };
-        vm.AddToQueueCommand.Execute(img);
-        vm.StartBatchCommand.Execute(null);
-
-        vm.ElapsedTime = "00:01:23";
-
-        vm.ElapsedTime.Should().Be("00:01:23");
-    }
-
-    [Fact]
-    public void EstimatedRemaining_ShowsDashWhenIdle()
-    {
-        var vm = new BatchViewModel();
-
-        vm.EstimatedRemaining.Should().Be("--:--:--");
-    }
-
-    [Fact]
-    public void StopBatch_ElapsedTime_Retained()
-    {
-        var vm = new BatchViewModel();
-        var img = new ImageEntry { FileName = "test.jpg" };
-        vm.AddToQueueCommand.Execute(img);
-        vm.StartBatchCommand.Execute(null);
-
-        vm.StopBatchCommand.Execute(null);
-
-        vm.ElapsedTime.Should().NotBeNullOrEmpty();
-    }
-
-    [Fact]
-    public void ErrorHandling_FailedItemsIncremented()
-    {
-        var vm = new BatchViewModel();
-        var img1 = new ImageEntry { FileName = "ok.jpg" };
-        var img2 = new ImageEntry { FileName = "fail.jpg", HasError = true, ErrorMessage = "Decode error" };
-        vm.AddToQueueCommand.Execute(img1);
-        vm.AddToQueueCommand.Execute(img2);
-        vm.StartBatchCommand.Execute(null);
-
-        vm.FailedItems = 1;
-        vm.CompletedItems = 1;
-        vm.TotalItems = 2;
-
-        vm.FailedItems.Should().Be(1);
-        vm.CompletedItems.Should().Be(1);
-    }
-
-    [Fact]
-    public void RemoveFromQueue_ImageNotInQueue_Noop()
-    {
-        var vm = new BatchViewModel();
-        var image = new ImageEntry { FileName = "not_in_queue.jpg" };
-
-        vm.RemoveFromQueueCommand.Execute(image);
-
-        vm.TotalItems.Should().Be(0);
+        vm.OutputDirectory.Should().Be(@"C:\Export\Processed");
     }
 }

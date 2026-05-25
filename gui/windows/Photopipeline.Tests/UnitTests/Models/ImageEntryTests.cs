@@ -1,169 +1,72 @@
-using System.ComponentModel;
-
 namespace Photopipeline.Tests.UnitTests.Models;
 
 public sealed class ImageEntryTests
 {
     [Fact]
-    public void ImageEntry_Creation_SetsDefaultValues()
+    public void ImageEntry_Creation_HasDefaultValues()
     {
         var entry = new ImageEntry();
 
-        entry.Id.Should().NotBeNullOrEmpty();
         entry.FilePath.Should().BeEmpty();
         entry.FileName.Should().BeEmpty();
-        entry.ThumbnailPath.Should().BeNull();
-        entry.FileSize.Should().Be(0);
-        entry.Width.Should().Be(0);
-        entry.Height.Should().Be(0);
-        entry.ColorSpace.Should().Be("sRGB");
-        entry.BitDepth.Should().Be("8");
-        entry.HasMetadataModified.Should().BeFalse();
-        entry.OverrideStatus.Should().Be(ImageOverrideStatus.None);
-        entry.IsSelected.Should().BeFalse();
-        entry.IsProcessing.Should().BeFalse();
-        entry.HasError.Should().BeFalse();
-        entry.ErrorMessage.Should().BeEmpty();
+        entry.Format.Should().BeEmpty();
+        entry.Width.Should().Be(0u);
+        entry.Height.Should().Be(0u);
+        entry.FileSizeBytes.Should().Be(0uL);
+        entry.PixelFormat.Should().BeEmpty();
+        entry.ColorSpace.Should().BeEmpty();
+        entry.ThumbnailData.Should().BeNull();
+        entry.Metadata.Should().BeNull();
+        entry.Status.Should().Be(ImageStatus.None);
+        entry.StatusMessage.Should().BeEmpty();
     }
 
     [Fact]
-    public void ImageEntry_CreationFromFilePath_SetsPathAndName()
+    public void FromImageInfo_MapsAllProperties()
     {
-        var entry = new ImageEntry
+        var info = new ImageInfo
         {
-            FilePath = @"C:\Photos\test_image.dng",
-            FileName = "test_image.dng"
+            Path = @"C:\Photos\test.dng",
+            FileName = "test.dng",
+            Format = "DNG",
+            Width = 6000,
+            Height = 4000,
+            FileSizeBytes = 50_000_000,
+            PixelFormat = "RGB16",
+            ColorSpace = "Linear Raw",
+            Metadata = new ImageMetadata { Make = "Canon", Model = "EOS R5" }
         };
 
-        entry.FilePath.Should().Be(@"C:\Photos\test_image.dng");
-        entry.FileName.Should().Be("test_image.dng");
+        var entry = ImageEntry.FromImageInfo(info);
+
+        entry.FilePath.Should().Be(@"C:\Photos\test.dng");
+        entry.FileName.Should().Be("test.dng");
+        entry.Format.Should().Be("DNG");
+        entry.Width.Should().Be(6000u);
+        entry.Height.Should().Be(4000u);
+        entry.FileSizeBytes.Should().Be(50_000_000uL);
+        entry.PixelFormat.Should().Be("RGB16");
+        entry.ColorSpace.Should().Be("Linear Raw");
+        entry.Metadata.Should().NotBeNull();
+        entry.Metadata!.Make.Should().Be("Canon");
     }
 
     [Fact]
-    public void ImageEntry_OverrideStatus_None()
-    {
-        var entry = new ImageEntry { OverrideStatus = ImageOverrideStatus.None };
-
-        entry.OverrideStatus.Should().Be(ImageOverrideStatus.None);
-    }
-
-    [Fact]
-    public void ImageEntry_OverrideStatus_Original()
-    {
-        var entry = new ImageEntry { OverrideStatus = ImageOverrideStatus.Original };
-
-        entry.OverrideStatus.Should().Be(ImageOverrideStatus.Original);
-    }
-
-    [Fact]
-    public void ImageEntry_OverrideStatus_Overridden()
-    {
-        var entry = new ImageEntry { OverrideStatus = ImageOverrideStatus.Overridden };
-
-        entry.OverrideStatus.Should().Be(ImageOverrideStatus.Overridden);
-    }
-
-    [Fact]
-    public void ImageEntry_OverrideStatus_Error()
-    {
-        var entry = new ImageEntry { OverrideStatus = ImageOverrideStatus.Error };
-
-        entry.OverrideStatus.Should().Be(ImageOverrideStatus.Error);
-    }
-
-    [Fact]
-    public void ImageEntry_OverrideStatusChange_RaisesPropertyChanged()
+    public void ImageEntry_RaisesPropertyChanged()
     {
         var entry = new ImageEntry();
-        var eventRaised = false;
-        string? changedProperty = null;
+        var raised = false;
+        entry.PropertyChanged += (_, _) => raised = true;
 
-        entry.PropertyChanged += (_, e) =>
-        {
-            eventRaised = true;
-            changedProperty = e.PropertyName;
-        };
+        entry.FilePath = @"C:\test.jpg";
 
-        entry.OverrideStatus = ImageOverrideStatus.Overridden;
-
-        eventRaised.Should().BeTrue();
-        changedProperty.Should().Be(nameof(ImageEntry.OverrideStatus));
+        raised.Should().BeTrue();
     }
 
     [Fact]
-    public void ImageEntry_ThumbnailPath_Generation()
+    public void ImageStatus_EnumValues()
     {
-        var entry = new ImageEntry
-        {
-            FilePath = @"C:\Photos\test_image.dng",
-            FileName = "test_image.dng"
-        };
-
-        var expectedThumbnailPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Photopipeline", "thumbnails",
-            $"thumb_{entry.Id}_test_image.jpg");
-
-        entry.ThumbnailPath = expectedThumbnailPath;
-        entry.ThumbnailPath.Should().Contain($"thumb_{entry.Id}_test_image.jpg");
-    }
-
-    [Fact]
-    public void ImageEntry_ProcessingProgress_RangesZeroToOne()
-    {
-        var entry = new ImageEntry();
-
-        entry.ProcessingProgress = 0.0;
-        entry.ProcessingProgress.Should().Be(0.0);
-
-        entry.ProcessingProgress = 0.5;
-        entry.ProcessingProgress.Should().Be(0.5);
-
-        entry.ProcessingProgress = 1.0;
-        entry.ProcessingProgress.Should().Be(1.0);
-    }
-
-    [Fact]
-    public void ImageEntry_ErrorState_SetsMessageAndFlag()
-    {
-        var entry = new ImageEntry();
-
-        entry.HasError = true;
-        entry.ErrorMessage = "Failed to decode raw data";
-
-        entry.HasError.Should().BeTrue();
-        entry.ErrorMessage.Should().Be("Failed to decode raw data");
-    }
-
-    [Fact]
-    public void ImageEntry_FileSize_PropertyChangedNotification()
-    {
-        var entry = new ImageEntry();
-        var eventRaised = false;
-
-        entry.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(ImageEntry.FileSize))
-                eventRaised = true;
-        };
-
-        entry.FileSize = 1048576;
-
-        eventRaised.Should().BeTrue();
-    }
-
-    [Fact]
-    public void ImageEntry_ColorSpace_DetectsRawFormat()
-    {
-        var entry = new ImageEntry { FileName = "photo.cr2" };
-
-        var ext = Path.GetExtension(entry.FileName).ToLowerInvariant();
-        var space = ext switch
-        {
-            ".dng" or ".nef" or ".cr2" or ".arw" or ".orf" => "Linear Raw",
-            _ => "sRGB"
-        };
-
-        space.Should().Be("Linear Raw");
+        Enum.GetValues<ImageStatus>().Should().Contain(new[] {
+            ImageStatus.None, ImageStatus.Original, ImageStatus.Overridden, ImageStatus.Error });
     }
 }

@@ -15,7 +15,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "8.0.x"
+          dotnet-version: "9.0.x"
       - name: Setup vcpkg
         run: |
           $vcpkgPath = "$env:VCPKG_INSTALLATION_ROOT"
@@ -51,8 +51,7 @@ jobs:
         run: |
           dotnet publish gui/windows/Photopipeline/Photopipeline.csproj `
             -c Release -p:Platform=x64 -r win-x64 `
-            -o publish/win-x64 --self-contained `
-            -p:WindowsAppSDKSelfContained=true
+            -o publish/win-x64 --self-contained
       - name: Stage package
         run: powershell -File scripts/stage.ps1
       - name: Install Inno Setup

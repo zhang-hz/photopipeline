@@ -1,24 +1,17 @@
-using Microsoft.Extensions.DependencyInjection;
-using System.Diagnostics;
-using System.Windows;
 using Photopipeline.ViewModels;
+using System.Windows;
 
 namespace Photopipeline;
 
 public partial class MainWindow : Window
 {
-    public MainWindow()
-    {
-        InitializeComponent();
+    private readonly MainViewModel _viewModel;
 
-        // Set DataContext from DI
-        try
-        {
-            DataContext = App.Services.GetRequiredService<MainViewModel>();
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[MainWindow] DI failed: {ex}");
-        }
+    public MainWindow(MainViewModel viewModel)
+    {
+        _viewModel = viewModel;
+        DataContext = viewModel;
+        InitializeComponent();
+        Closing += (_, _) => _viewModel.Shutdown();
     }
 }

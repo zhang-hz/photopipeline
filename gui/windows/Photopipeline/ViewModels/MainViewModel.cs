@@ -1,221 +1,127 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.DependencyInjection;
-using Photopipeline.Models;
+using Microsoft.Extensions.Logging;
+using Photopipeline.Helpers;
 using Photopipeline.Services;
-using System.Collections.ObjectModel;
 
 namespace Photopipeline.ViewModels;
 
-public sealed partial class MainViewModel : ObservableObject
+public sealed partial class MainViewModel : ViewModelBase
 {
-    private readonly IPipelineService _pipelineService;
-    private readonly IImageService _imageService;
+    private readonly ISettingsService _settings;
+    private readonly IBackendService _backend;
 
-    [ObservableProperty]
-    private ObservableCollection<ImageEntry> _images = new();
-
-    [ObservableProperty]
-    private ImageEntry? _selectedImage;
-
-    partial void OnSelectedImageChanged(ImageEntry? value)
-    {
-        BeforeImage = value;
-    }
-
-    [ObservableProperty]
-    private PipelineModel _currentPipeline = new() { Name = "Default Pipeline" };
-
-    [ObservableProperty]
-    private ImageEntry? _beforeImage;
-
-    [ObservableProperty]
-    private ImageEntry? _afterImage;
-
-    [ObservableProperty]
-    private double _splitPosition = 0.5;
-
-    [ObservableProperty]
-    private bool _isProcessing;
-
-    [ObservableProperty]
-    private string _statusMessage = "Ready";
-
-    [ObservableProperty]
-    private double _zoomLevel = 1.0;
-
-    [ObservableProperty]
-    private ObservableCollection<PluginInfo> _availablePlugins = new();
-
-    [ObservableProperty]
-    private PluginInfo? _selectedPlugin;
-
-    [ObservableProperty]
-    private ObservableCollection<string> _logMessages = new();
-
-    [ObservableProperty]
-    private bool _isSplitView = true;
-
-    [ObservableProperty]
-    private bool _isSideBySide;
-
+    // ── Child ViewModels ──
+    public FilmstripViewModel Filmstrip { get; }
+    public PreviewViewModel Preview { get; }
     public PipelineEditorViewModel PipelineEditor { get; }
-    public PluginPanelViewModel PluginPanel { get; }
+    public PluginBrowserViewModel PluginBrowser { get; }
     public BatchViewModel Batch { get; }
+    public SettingsViewModel Settings { get; }
+
+    // ── Window state ──
+    [ObservableProperty] private string _windowTitle = "Photopipeline";
+    [ObservableProperty] private double _windowWidth = 1440;
+    [ObservableProperty] private double _windowHeight = 900;
+    [ObservableProperty] private bool _isBackendHealthy;
+    [ObservableProperty] private string _backendStatus = "Unknown";
+
+    // ── Mediator events ──
+    public event Action<Models.ImageEntry?>? ImageSelected;
 
     public MainViewModel(
-        IPipelineService pipelineService,
-        IImageService imageService,
+        ILogger<MainViewModel> logger,
+        ISettingsService settings,
+        IBackendService backend,
+        FilmstripViewModel filmstrip,
+        PreviewViewModel preview,
         PipelineEditorViewModel pipelineEditor,
-        PluginPanelViewModel pluginPanel,
-        BatchViewModel batch)
+        PluginBrowserViewModel pluginBrowser,
+        BatchViewModel batch,
+        SettingsViewModel settingsVm) : base(logger)
     {
-        _pipelineService = pipelineService;
-        _imageService = imageService;
+        _settings = settings;
+        _backend = backend;
+
+        Filmstrip = filmstrip;
+        Preview = preview;
         PipelineEditor = pipelineEditor;
-        PluginPanel = pluginPanel;
+        PluginBrowser = pluginBrowser;
         Batch = batch;
+        Settings = settingsVm;
 
-        _ = LoadPluginsAsync();
-    }
+        WindowWidth = settings.Current.WindowWidth;
+        WindowHeight = settings.Current.WindowHeight;
 
-    public MainViewModel() : this(
-        App.Services?.GetRequiredService<IPipelineService>() ?? new LocalPipelineService(),
-        App.Services?.GetRequiredService<IImageService>() ?? new LocalImageService(),
-        new PipelineEditorViewModel(),
-        new PluginPanelViewModel(),
-        new BatchViewModel())
-    { }
+        _backend.HealthChanged += OnBackendHealthChanged;
+        IsBackendHealthy = _backend.IsHealthy;
+        BackendStatus = IsBackendHealthy ? "Connected" : "Disconnected";
 
-    [RelayCommand]
-    private async Task AddImage()
-    {
-        StatusMessage = "Opening file picker...";
+        Filmstrip.ImageSelected += OnImageSelected;
+        Filmstrip.SendToBatchRequested += OnSendToBatch;
     }
 
     [RelayCommand]
-    private void RemoveImage()
-    {
-        if (SelectedImage is not null)
-        {
-            Images.Remove(SelectedImage);
-            SelectedImage = Images.Count > 0 ? Images[0] : null;
-        }
-    }
+    private void ZoomIn() => Preview?.ZoomInCommand.Execute(null);
 
     [RelayCommand]
-    private void ClearImages()
-    {
-        Images.Clear();
-        SelectedImage = null;
-        BeforeImage = null;
-        AfterImage = null;
-    }
+    private void ZoomOut() => Preview?.ZoomOutCommand.Execute(null);
 
     [RelayCommand]
-    private async Task RunPipeline()
+    private void ResetZoom() => Preview?.ResetZoomCommand.Execute(null);
+
+    [RelayCommand]
+    private void ShowSettings()
     {
-        if (SelectedImage is null) return;
-        CurrentPipeline.IsExecuting = true;
-        StatusMessage = "Executing pipeline...";
+        var dialog = App.Services.GetRequiredService<Views.SettingsDialog>();
+        dialog.Owner = System.Windows.Application.Current.MainWindow;
+        dialog.ShowDialog();
+    }
+
+    private void OnBackendHealthChanged(object? sender, bool healthy)
+    {
+        IsBackendHealthy = healthy;
+        BackendStatus = healthy ? "Connected" : "Disconnected";
+    }
+
+    private void OnSendToBatch(IReadOnlyList<Models.ImageEntry> images)
+    {
+        foreach (var img in images)
+            Batch.AddToQueueCommand.Execute(img);
+    }
+
+    public override void Shutdown()
+    {
+        base.Shutdown();
+        Filmstrip.Shutdown();
+        Preview.Shutdown();
+        PipelineEditor.Shutdown();
+        PluginBrowser.Shutdown();
+        Batch.Shutdown();
+        Settings.Shutdown();
+    }
+
+    private async void OnImageSelected(Models.ImageEntry? image)
+    {
+        StatusMessage = image is not null
+            ? $"Selected: {image.FileName} ({image.Width}x{image.Height})"
+            : "Ready";
+        ImageSelected?.Invoke(image);
+
+        if (image is null) return;
+
         try
         {
-            await _pipelineService.ExecutePipelineAsync(CurrentPipeline, SelectedImage.FilePath);
-            StatusMessage = "Pipeline completed";
+            await Preview.LoadImageAsync(image);
+
+            if (PipelineEditor.IsPipelineValid)
+                await Preview.ProcessPreviewAsync(image, PipelineEditor.CurrentPipeline, PipelineEditor.PipelineId);
         }
-        catch
-        {
-            StatusMessage = "Pipeline execution failed";
-        }
-        finally
-        {
-            CurrentPipeline.IsExecuting = false;
-        }
-    }
-
-    [RelayCommand]
-    private void StopExecution()
-    {
-        CurrentPipeline.IsExecuting = false;
-        StatusMessage = "Stopped";
-    }
-
-    [RelayCommand]
-    private void NewPipeline()
-    {
-        CurrentPipeline = new PipelineModel { Name = "New Pipeline" };
-        StatusMessage = "Created new pipeline";
-    }
-
-    [RelayCommand]
-    private void LoadPipeline()
-    {
-        StatusMessage = "Loading pipeline...";
-    }
-
-    [RelayCommand]
-    private async Task SavePipeline()
-    {
-        await _pipelineService.CreatePipelineAsync(CurrentPipeline.Name, CurrentPipeline.Description);
-        StatusMessage = $"Saved pipeline: {CurrentPipeline.Name}";
-    }
-
-    [RelayCommand]
-    private async Task ExportImage()
-    {
-        if (SelectedImage is null) return;
-        StatusMessage = "Exporting processed image...";
-        await _imageService.ExportImageAsync(SelectedImage, "output.tif", CurrentPipeline);
-        StatusMessage = "Export complete";
-    }
-
-    [RelayCommand]
-    private void ZoomIn()
-    {
-        ZoomLevel = Math.Min(ZoomLevel * 1.25, 8.0);
-    }
-
-    [RelayCommand]
-    private void ZoomOut()
-    {
-        ZoomLevel = Math.Max(ZoomLevel / 1.25, 0.1);
-    }
-
-    [RelayCommand]
-    private void ResetZoom()
-    {
-        ZoomLevel = 1.0;
-    }
-
-    [RelayCommand]
-    private void FitToWindow()
-    {
-        ZoomLevel = 1.0;
-    }
-
-    [RelayCommand]
-    private void SendToPhotoshop()
-    {
-        StatusMessage = "Sending current image to Photoshop...";
-    }
-
-    public void Log(string message)
-    {
-        LogMessages.Add($"[{DateTime.Now:HH:mm:ss}] {message}");
-        StatusMessage = message;
-    }
-
-    private async Task LoadPluginsAsync()
-    {
-        try
-        {
-            var plugins = await _pipelineService.GetAvailablePluginsAsync();
-            PluginPanel.LoadPlugins(new ObservableCollection<PluginInfo>(plugins));
-            Log("Plugins loaded");
-        }
+        catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            Log($"Plugin load failed: {ex.Message}");
+            Logger.LogWarning(ex, "Preview update failed for {Path}", image.FilePath);
         }
     }
 }

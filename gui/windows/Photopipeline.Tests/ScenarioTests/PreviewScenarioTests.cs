@@ -1,252 +1,98 @@
-using Photopipeline.Models;
-using Photopipeline.Tests.TestInfrastructure;
+using Microsoft.Extensions.Logging;
+using Moq;
 
 namespace Photopipeline.Tests.ScenarioTests;
 
 public sealed class PreviewScenarioTests
 {
-    // ═══ Selection → Preview ═══
-    [Fact]
-    public void NewHarness_BeforeImage_Null()
+    private static PreviewViewModel Create()
     {
-        var h = new ViewModelTestHarness();
-        Assert.Null(h.Main.BeforeImage);
+        var logger = Mock.Of<ILogger<PreviewViewModel>>();
+        var imageService = Mock.Of<IImageService>();
+        var pipelineService = Mock.Of<IPipelineService>();
+        return new PreviewViewModel(logger, imageService, pipelineService);
     }
 
     [Fact]
-    public void NewHarness_AfterImage_Null()
+    public void ZoomIn_StepsThroughPresetValues()
     {
-        var h = new ViewModelTestHarness();
-        Assert.Null(h.Main.AfterImage);
+        var vm = Create();
+
+        vm.ZoomInCommand.Execute(null); // 1.0 → 1.5
+        vm.ZoomLevel.Should().Be(1.5);
+
+        vm.ZoomInCommand.Execute(null); // 1.5 → 2.0
+        vm.ZoomLevel.Should().Be(2.0);
+
+        vm.ZoomInCommand.Execute(null); // 2.0 → 3.0
+        vm.ZoomLevel.Should().Be(3.0);
     }
 
     [Fact]
-    public void SelectedImage_SetsBeforeImage()
+    public void ZoomOut_StepsThroughPresetValues()
     {
-        var h = new ViewModelTestHarness();
-        h.AddTestImage(TestImageFactory.GetPath("solid_rgb_256.png"), "test.png");
-        h.Main.SelectedImage = h.Main.Images[0];
-        Assert.Equal(h.Main.Images[0], h.Main.BeforeImage);
+        var vm = Create();
+        vm.ZoomLevel = 4.0;
+
+        vm.ZoomOutCommand.Execute(null); // 4.0 → 3.0
+        vm.ZoomLevel.Should().Be(3.0);
+
+        vm.ZoomOutCommand.Execute(null); // 3.0 → 2.0
+        vm.ZoomLevel.Should().Be(2.0);
     }
 
     [Fact]
-    public void SelectedImage_Clears_ClearsBeforeImage()
+    public void PanAndZoom_WorksTogether()
     {
-        var h = new ViewModelTestHarness();
-        h.AddTestImage(TestImageFactory.GetPath("solid_rgb_256.png"), "test.png");
-        h.Main.SelectedImage = h.Main.Images[0];
-        h.Main.SelectedImage = null;
-        Assert.Null(h.Main.BeforeImage);
+        var vm = Create();
+
+        vm.ZoomInCommand.Execute(null);
+        vm.Pan(50, -30);
+
+        vm.ZoomLevel.Should().Be(1.5);
+        vm.PanOffset.X.Should().Be(50f);
+        vm.PanOffset.Y.Should().Be(-30f);
     }
 
     [Fact]
-    public void SwitchSelection_UpdatesBeforeImage()
+    public void SplitView_ToggleAndPosition()
     {
-        var h = new ViewModelTestHarness();
-        h.AddTestImage(TestImageFactory.GetPath("solid_rgb_256.png"), "a.png");
-        h.AddTestImage(TestImageFactory.GetPath("gradient_256.png"), "b.png");
-        h.Main.SelectedImage = h.Main.Images[0];
-        h.Main.SelectedImage = h.Main.Images[1];
-        Assert.Equal(h.Main.Images[1], h.Main.BeforeImage);
-    }
+        var vm = Create();
 
-    // ═══ Zoom ═══
-    [Fact]
-    public void ZoomIn_IncreasesLevel()
-    {
-        var h = new ViewModelTestHarness();
-        double initial = h.Main.ZoomLevel;
-        h.Main.ZoomInCommand.Execute(null);
-        Assert.True(h.Main.ZoomLevel > initial);
+        vm.ToggleSplitCommand.Execute(null);
+        vm.IsSplitView.Should().BeFalse();
+        vm.SplitPosition = 0.75;
+
+        vm.ToggleSplitCommand.Execute(null);
+        vm.IsSplitView.Should().BeTrue();
+        vm.SplitPosition.Should().Be(0.75);
     }
 
     [Fact]
-    public void ZoomOut_DecreasesLevel()
+    public void FitToWindow_ResetZoom_Interaction()
     {
-        var h = new ViewModelTestHarness();
-        h.Main.ZoomLevel = 2.0;
-        h.Main.ZoomOutCommand.Execute(null);
-        Assert.True(h.Main.ZoomLevel < 2.0);
+        var vm = Create();
+        vm.ZoomInCommand.Execute(null);
+        vm.ZoomInCommand.Execute(null);
+
+        vm.FitToWindowCommand.Execute(null);
+        vm.IsFitToWindow.Should().BeTrue();
+
+        vm.ResetZoomCommand.Execute(null);
+        vm.ZoomLevel.Should().Be(1.0);
+        vm.IsFitToWindow.Should().BeFalse();
     }
 
     [Fact]
-    public void ZoomLevel_Clamped_Max8()
+    public void OneToOne_AtHighZoom_Resets()
     {
-        var h = new ViewModelTestHarness();
-        for (int i = 0; i < 20; i++) h.Main.ZoomInCommand.Execute(null);
-        Assert.True(h.Main.ZoomLevel <= 8.0);
-    }
+        var vm = Create();
+        vm.ZoomLevel = 8.0;
+        vm.IsFitToWindow = true;
 
-    [Fact]
-    public void ZoomLevel_Clamped_Min0_1()
-    {
-        var h = new ViewModelTestHarness();
-        for (int i = 0; i < 20; i++) h.Main.ZoomOutCommand.Execute(null);
-        Assert.True(h.Main.ZoomLevel >= 0.1);
-    }
+        vm.OneToOneCommand.Execute(null);
 
-    [Fact]
-    public void ZoomLevel_ZoomInOut_Reversible()
-    {
-        var h = new ViewModelTestHarness();
-        double initial = h.Main.ZoomLevel;
-        h.Main.ZoomInCommand.Execute(null);
-        h.Main.ZoomOutCommand.Execute(null);
-        Assert.Equal(initial, h.Main.ZoomLevel, 4);
-    }
-
-    [Fact]
-    public void ResetZoom_RestoresTo1()
-    {
-        var h = new ViewModelTestHarness();
-        h.Main.ZoomInCommand.Execute(null);
-        h.Main.ZoomInCommand.Execute(null);
-        h.Main.ResetZoomCommand.Execute(null);
-        Assert.Equal(1.0, h.Main.ZoomLevel);
-    }
-
-    [Fact]
-    public void FitToWindow_SetsTo1()
-    {
-        var h = new ViewModelTestHarness();
-        h.Main.ZoomInCommand.Execute(null);
-        h.Main.ZoomInCommand.Execute(null);
-        h.Main.FitToWindowCommand.Execute(null);
-        Assert.Equal(1.0, h.Main.ZoomLevel);
-    }
-
-    // ═══ SplitView / SideBySide ═══
-    [Fact]
-    public void IsSplitView_Default_True()
-    {
-        var h = new ViewModelTestHarness();
-        Assert.True(h.Main.IsSplitView);
-    }
-
-    [Fact]
-    public void IsSideBySide_Default_False()
-    {
-        var h = new ViewModelTestHarness();
-        Assert.False(h.Main.IsSideBySide);
-    }
-
-    [Fact]
-    public void SplitView_ToggleToFalse()
-    {
-        var h = new ViewModelTestHarness();
-        h.Main.IsSplitView = false;
-        Assert.False(h.Main.IsSplitView);
-    }
-
-    [Fact]
-    public void SideBySide_ToggleToTrue()
-    {
-        var h = new ViewModelTestHarness();
-        h.Main.IsSideBySide = true;
-        Assert.True(h.Main.IsSideBySide);
-    }
-
-    [Fact]
-    public void SplitView_SplitPosition_Default_Half()
-    {
-        var h = new ViewModelTestHarness();
-        Assert.Equal(0.5, h.Main.SplitPosition);
-    }
-
-    [Fact]
-    public void SplitView_SplitPosition_CanChange()
-    {
-        var h = new ViewModelTestHarness();
-        h.Main.SplitPosition = 0.75;
-        Assert.Equal(0.75, h.Main.SplitPosition);
-    }
-
-    [Fact]
-    public void SplitView_SplitPosition_ClampZero()
-    {
-        var h = new ViewModelTestHarness();
-        h.Main.SplitPosition = -0.5;
-        Assert.True(h.Main.SplitPosition >= 0 || h.Main.SplitPosition <= 1);
-    }
-
-    // ═══ Export ═══
-    [Fact]
-    public async Task ExportImage_WithoutSelection_DoesNotCrash()
-    {
-        var h = new ViewModelTestHarness();
-        var exception = Record.Exception(() => h.Main.ExportImageCommand.Execute(null));
-        Assert.Null(exception);
-    }
-
-    [Fact]
-    public void ExportImage_StatusMessage_Updates()
-    {
-        var h = new ViewModelTestHarness();
-        h.AddTestImage(TestImageFactory.GetPath("solid_rgb_256.png"), "test.png");
-        h.Main.SelectedImage = h.Main.Images[0];
-        h.Main.ExportImageCommand.Execute(null);
-        Assert.NotNull(h.Main.StatusMessage);
-    }
-
-    // ═══ Processing state ═══
-    [Fact]
-    public void IsProcessing_Default_False()
-    {
-        var h = new ViewModelTestHarness();
-        Assert.False(h.Main.IsProcessing);
-    }
-
-    [Fact]
-    public void RunPipeline_WithoutSelection_DoesNotCrash()
-    {
-        var h = new ViewModelTestHarness();
-        h.AddTestImage(TestImageFactory.GetPath("solid_rgb_256.png"), "test.png");
-        var exception = Record.Exception(() => h.Main.RunPipelineCommand.Execute(null));
-        Assert.Null(exception);
-    }
-
-    [Fact]
-    public void RunPipeline_WithSelection_Executes()
-    {
-        var h = new ViewModelTestHarness();
-        h.AddTestImage(TestImageFactory.GetPath("solid_rgb_256.png"), "test.png");
-        h.Main.SelectedImage = h.Main.Images[0];
-        h.Main.RunPipelineCommand.Execute(null);
-        // Should have completed without exception
-        Assert.NotNull(h.Main.StatusMessage);
-    }
-
-    [Fact]
-    public void StopExecution_SetsStatus()
-    {
-        var h = new ViewModelTestHarness();
-        h.Main.StopExecutionCommand.Execute(null);
-        Assert.Equal("Stopped", h.Main.StatusMessage);
-    }
-
-    // ═══ File entry preview metadata ═══
-    [Fact]
-    public void ImageEntry_HasCorrectPath()
-    {
-        var h = new ViewModelTestHarness();
-        var path = TestImageFactory.GetPath("solid_rgb_256.png");
-        h.AddTestImage(path, "test.png");
-        Assert.Equal(path, h.Main.Images[0].FilePath);
-    }
-
-    [Fact]
-    public void ImageEntry_HasCorrectFileName()
-    {
-        var h = new ViewModelTestHarness();
-        h.AddTestImage(TestImageFactory.GetPath("solid_rgb_256.png"), "my_image.png");
-        Assert.Equal("my_image.png", h.Main.Images[0].FileName);
-    }
-
-    [Fact]
-    public void ImageEntry_Default_ProcessingProgress_Zero()
-    {
-        var h = new ViewModelTestHarness();
-        h.AddTestImage(TestImageFactory.GetPath("solid_rgb_256.png"), "test.png");
-        Assert.Equal(0.0, h.Main.Images[0].ProcessingProgress);
+        vm.ZoomLevel.Should().Be(1.0);
+        vm.IsFitToWindow.Should().BeFalse();
     }
 }

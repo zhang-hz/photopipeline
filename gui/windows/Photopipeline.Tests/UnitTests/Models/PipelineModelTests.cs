@@ -3,250 +3,143 @@ namespace Photopipeline.Tests.UnitTests.Models;
 public sealed class PipelineModelTests
 {
     [Fact]
-    public void PipelineModel_Creation_HasDefaultValues()
+    public void PipelineSpec_Creation_HasDefaultValues()
     {
-        var pipeline = new PipelineModel();
+        var spec = new PipelineSpec();
 
-        pipeline.Id.Should().NotBeNullOrEmpty();
-        pipeline.Name.Should().Be("New Pipeline");
-        pipeline.Description.Should().BeEmpty();
-        pipeline.Nodes.Should().BeEmpty();
-        pipeline.Edges.Should().BeEmpty();
-        pipeline.IsValid.Should().BeFalse();
-        pipeline.IsExecuting.Should().BeFalse();
-        pipeline.ValidationError.Should().BeEmpty();
+        spec.Name.Should().BeEmpty();
+        spec.Nodes.Should().BeEmpty();
+        spec.Edges.Should().BeEmpty();
+        spec.Params.Should().BeEmpty();
     }
 
     [Fact]
-    public void PipelineNode_Creation_HasDefaultPorts()
+    public void PipelineNode_Creation_HasDefaultValues()
     {
         var node = new PipelineNode();
 
         node.Id.Should().NotBeNullOrEmpty();
         node.PluginId.Should().BeEmpty();
-        node.DisplayName.Should().BeEmpty();
-        node.InputPorts.Should().HaveCount(1);
-        node.InputPorts[0].Id.Should().Be("in");
-        node.InputPorts[0].Name.Should().Be("Input");
-        node.InputPorts[0].Direction.Should().Be(PortDirection.Input);
-        node.OutputPorts.Should().HaveCount(1);
-        node.OutputPorts[0].Id.Should().Be("out");
-        node.OutputPorts[0].Name.Should().Be("Output");
-        node.OutputPorts[0].Direction.Should().Be(PortDirection.Output);
+        node.Label.Should().BeEmpty();
+        node.Enabled.Should().BeTrue();
+        node.PositionX.Should().Be(0);
+        node.PositionY.Should().Be(0);
+        node.Params.Should().BeEmpty();
     }
 
     [Fact]
-    public void PipelineNode_Ports_HaveCorrectParentNodeId()
+    public void PipelineNode_UniqueIdPerInstance()
     {
-        var node = new PipelineNode();
-
-        node.InputPorts[0].ParentNodeId.Should().Be(node.Id);
-        node.OutputPorts[0].ParentNodeId.Should().Be(node.Id);
-    }
-
-    [Fact]
-    public void PipelineNode_OnIdChanged_UpdatesPortParentIds()
-    {
-        var node = new PipelineNode();
-        var oldId = node.Id;
-
-        node.Id = "new-test-id";
-
-        node.InputPorts[0].ParentNodeId.Should().Be("new-test-id");
-        node.OutputPorts[0].ParentNodeId.Should().Be("new-test-id");
-    }
-
-    [Fact]
-    public void PipelineModel_AddNodes_WithCorrectPositions()
-    {
-        var pipeline = new PipelineModel();
-        var node1 = new PipelineNode { PluginId = "plugin-a", DisplayName = "Node A", CanvasX = 100, CanvasY = 200 };
-        var node2 = new PipelineNode { PluginId = "plugin-b", DisplayName = "Node B", CanvasX = 300, CanvasY = 400 };
-
-        pipeline.Nodes.Add(node1);
-        pipeline.Nodes.Add(node2);
-
-        pipeline.Nodes.Should().HaveCount(2);
-        pipeline.Nodes[0].CanvasX.Should().Be(100);
-        pipeline.Nodes[0].CanvasY.Should().Be(200);
-        pipeline.Nodes[1].CanvasX.Should().Be(300);
-        pipeline.Nodes[1].CanvasY.Should().Be(400);
-    }
-
-    [Fact]
-    public void PipelineModel_AddEdge_ConnectsTwoNodes()
-    {
-        var pipeline = new PipelineModel();
-        var node1 = new PipelineNode();
-        var node2 = new PipelineNode();
-        pipeline.Nodes.Add(node1);
-        pipeline.Nodes.Add(node2);
-
-        var edge = new PipelineEdge
-        {
-            SourceNodeId = node1.Id,
-            SourcePortId = "out",
-            TargetNodeId = node2.Id,
-            TargetPortId = "in"
-        };
-        pipeline.Edges.Add(edge);
-
-        pipeline.Edges.Should().HaveCount(1);
-        pipeline.Edges[0].SourceNodeId.Should().Be(node1.Id);
-        pipeline.Edges[0].TargetNodeId.Should().Be(node2.Id);
-    }
-
-    [Fact]
-    public void PipelineEdge_ConnectsCorrectPortDirections()
-    {
-        var node1 = new PipelineNode();
-        var node2 = new PipelineNode();
-
-        var edge = new PipelineEdge
-        {
-            SourceNodeId = node1.Id,
-            SourcePortId = "out",
-            TargetNodeId = node2.Id,
-            TargetPortId = "in"
-        };
-
-        edge.SourcePortId.Should().Be("out");
-        edge.TargetPortId.Should().Be("in");
-        edge.Id.Should().NotBeNullOrEmpty();
-    }
-
-    [Fact]
-    public void PipelineModel_ClearingEdges_RemovesAllEdges()
-    {
-        var pipeline = new PipelineModel();
         var n1 = new PipelineNode();
         var n2 = new PipelineNode();
-        pipeline.Nodes.Add(n1);
-        pipeline.Nodes.Add(n2);
-        pipeline.Edges.Add(new PipelineEdge { SourceNodeId = n1.Id, TargetNodeId = n2.Id });
 
-        pipeline.Edges.Clear();
-
-        pipeline.Edges.Should().BeEmpty();
-        pipeline.Nodes.Should().HaveCount(2);
+        n1.Id.Should().NotBe(n2.Id);
     }
 
     [Fact]
-    public void PipelineNode_DefaultSize_Is160x80()
+    public void PipelineEdge_Creation_HasDefaultValues()
+    {
+        var edge = new PipelineEdge();
+
+        edge.From.Should().BeEmpty();
+        edge.To.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void PipelineSpec_AddNodesAndEdges()
+    {
+        var spec = new PipelineSpec { Name = "Test Pipeline" };
+        var n1 = new PipelineNode { PluginId = "p1", Label = "Node 1" };
+        var n2 = new PipelineNode { PluginId = "p2", Label = "Node 2" };
+        spec.Nodes.Add(n1);
+        spec.Nodes.Add(n2);
+        spec.Edges.Add(new PipelineEdge { From = n1.Id, To = n2.Id });
+
+        spec.Nodes.Should().HaveCount(2);
+        spec.Edges.Should().HaveCount(1);
+        spec.Edges[0].From.Should().Be(n1.Id);
+        spec.Edges[0].To.Should().Be(n2.Id);
+    }
+
+    [Fact]
+    public void PipelineNode_Position_LayoutCoordinates()
+    {
+        var node = new PipelineNode { PositionX = 300, PositionY = 150 };
+
+        node.PositionX.Should().Be(300);
+        node.PositionY.Should().Be(150);
+    }
+
+    [Fact]
+    public void PipelineNode_Params_StoresValues()
     {
         var node = new PipelineNode();
+        node.Params["strength"] = 0.75;
+        node.Params["enabled"] = true;
 
-        node.Width.Should().Be(160);
-        node.Height.Should().Be(80);
+        node.Params.Should().HaveCount(2);
+        node.Params["strength"].Should().Be(0.75);
+        node.Params["enabled"].Should().Be(true);
     }
 
     [Fact]
-    public void PipelineNode_IsSelected_TracksSelectionState()
+    public void ValidationResult_Defaults()
     {
-        var node = new PipelineNode();
+        var result = new ValidationResult();
 
-        node.IsSelected.Should().BeFalse();
-
-        node.IsSelected = true;
-        node.IsSelected.Should().BeTrue();
+        result.Valid.Should().BeFalse();
+        result.Issues.Should().BeEmpty();
     }
 
     [Fact]
-    public void PipelineNode_Parameters_InitializesEmpty()
+    public void ValidationIssue_SeverityLevels()
     {
-        var node = new PipelineNode();
-
-        node.Parameters.Should().NotBeNull();
-        node.Parameters.Should().BeEmpty();
-    }
-
-    [Fact]
-    public void PipelineNode_Parameters_StoresKeyValuePairs()
-    {
-        var node = new PipelineNode();
-
-        node.Parameters["threshold"] = 0.5;
-        node.Parameters["enabled"] = true;
-        node.Parameters["name"] = "test";
-
-        node.Parameters.Should().HaveCount(3);
-        node.Parameters["threshold"].Should().Be(0.5);
-        node.Parameters["enabled"].Should().Be(true);
-        node.Parameters["name"].Should().Be("test");
-    }
-
-    [Fact]
-    public void PipelineModel_Validate_TopologicalOrder_DirectedAcyclicGraph()
-    {
-        var pipeline = new PipelineModel();
-        var a = new PipelineNode { DisplayName = "A" };
-        var b = new PipelineNode { DisplayName = "B" };
-        var c = new PipelineNode { DisplayName = "C" };
-        pipeline.Nodes.Add(a);
-        pipeline.Nodes.Add(b);
-        pipeline.Nodes.Add(c);
-
-        pipeline.Edges.Add(new PipelineEdge { SourceNodeId = a.Id, SourcePortId = "out", TargetNodeId = b.Id, TargetPortId = "in" });
-        pipeline.Edges.Add(new PipelineEdge { SourceNodeId = b.Id, SourcePortId = "out", TargetNodeId = c.Id, TargetPortId = "in" });
-
-        var orderedIds = new List<string>();
-        foreach (var edge in pipeline.Edges)
+        var issue = new ValidationIssue
         {
-            orderedIds.Add(edge.SourceNodeId);
-            orderedIds.Add(edge.TargetNodeId);
-        }
+            Severity = ValidationSeverity.Error,
+            Param = "exposure",
+            Message = "Out of range"
+        };
 
-        orderedIds.Distinct().Should().HaveCount(3);
-        orderedIds.Should().ContainInOrder(a.Id, b.Id, b.Id, c.Id);
+        issue.Severity.Should().Be(ValidationSeverity.Error);
+        issue.Param.Should().Be("exposure");
+        issue.Message.Should().Be("Out of range");
     }
 
     [Fact]
-    public void PipelineModel_CycleDetection_AddingBackEdge()
+    public void ExecuteProgress_TracksStageProgress()
     {
-        var pipeline = new PipelineModel();
-        var a = new PipelineNode { DisplayName = "A" };
-        var b = new PipelineNode { DisplayName = "B" };
-        pipeline.Nodes.Add(a);
-        pipeline.Nodes.Add(b);
+        var progress = new ExecuteProgress
+        {
+            Stage = ExecuteStage.Processing,
+            NodeId = "n1",
+            NodeLabel = "Denoise",
+            Fraction = 0.5f,
+            Message = "Processing...",
+            ElapsedMs = 1200
+        };
 
-        pipeline.Edges.Add(new PipelineEdge { SourceNodeId = a.Id, TargetNodeId = b.Id });
-
-        var backEdge = new PipelineEdge { SourceNodeId = b.Id, TargetNodeId = a.Id };
-
-        var existingForward = pipeline.Edges.Any(e =>
-            e.SourceNodeId == backEdge.SourceNodeId && e.TargetNodeId == backEdge.TargetNodeId);
-        existingForward.Should().BeFalse();
-
-        pipeline.Edges.Add(backEdge);
-        pipeline.Edges.Should().HaveCount(2);
+        progress.Stage.Should().Be(ExecuteStage.Processing);
+        progress.Fraction.Should().Be(0.5f);
+        progress.ElapsedMs.Should().Be(1200);
     }
 
     [Fact]
-    public void PipelineModel_NodesAndEdges_ImmuneToEmptyPipeline()
+    public void NodeSchema_MapsPluginMetadata()
     {
-        var pipeline = new PipelineModel();
+        var schema = new NodeSchema
+        {
+            PluginId = "denoise_v1",
+            Name = "Denoise",
+            Version = "1.2.0",
+            Category = "Noise Reduction",
+            Description = "AI-based denoising",
+            ParameterSchema = new Dictionary<string, object> { ["strength"] = new Dictionary<string, object> { ["type"] = "float", ["default"] = 0.5 } },
+            GuiSchema = new Dictionary<string, object> { ["group"] = "Advanced" }
+        };
 
-        pipeline.Nodes.Should().BeEmpty();
-        pipeline.Edges.Should().BeEmpty();
-        pipeline.IsValid.Should().BeFalse();
-    }
-
-    [Fact]
-    public void Port_RelativePosition_Defaults()
-    {
-        var port = new Port { Id = "test", Name = "Test", Direction = PortDirection.Input };
-
-        port.RelativeX.Should().Be(0);
-        port.RelativeY.Should().Be(0);
-        port.IsConnected.Should().BeFalse();
-    }
-
-    [Fact]
-    public void Port_IsConnected_TracksConnectionState()
-    {
-        var port = new Port();
-
-        port.IsConnected = true;
-        port.IsConnected.Should().BeTrue();
+        schema.PluginId.Should().Be("denoise_v1");
+        schema.ParameterSchema.Should().ContainKey("strength");
+        schema.GuiSchema.Should().ContainKey("group");
     }
 }

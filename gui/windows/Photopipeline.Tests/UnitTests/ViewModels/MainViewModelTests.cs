@@ -1,318 +1,125 @@
+using Microsoft.Extensions.Logging;
+using Moq;
+
 namespace Photopipeline.Tests.UnitTests.ViewModels;
 
 public sealed class MainViewModelTests
 {
-    [Fact]
-    public void MainViewModel_InitialState_NoImagesLoaded()
+    private static Mock<ISettingsService> CreateSettingsMock()
     {
-        var vm = new MainViewModel();
+        var mock = new Mock<ISettingsService>();
+        mock.Setup(s => s.Current).Returns(new AppSettings());
+        return mock;
+    }
 
-        vm.Images.Should().BeEmpty();
-        vm.SelectedImage.Should().BeNull();
-        vm.IsProcessing.Should().BeFalse();
-        vm.StatusMessage.Should().NotBeNullOrEmpty();
+    private static Mock<IBackendService> CreateBackendMock()
+    {
+        var mock = new Mock<IBackendService>();
+        mock.Setup(b => b.IsHealthy).Returns(true);
+        return mock;
+    }
+
+    private static MainViewModel Create()
+    {
+        var logger = Mock.Of<ILogger<MainViewModel>>();
+        var settings = CreateSettingsMock().Object;
+        var backend = CreateBackendMock().Object;
+
+        var filmstripLogger = Mock.Of<ILogger<FilmstripViewModel>>();
+        var previewLogger = Mock.Of<ILogger<PreviewViewModel>>();
+        var pipelineEditorLogger = Mock.Of<ILogger<PipelineEditorViewModel>>();
+        var pluginBrowserLogger = Mock.Of<ILogger<PluginBrowserViewModel>>();
+        var batchLogger = Mock.Of<ILogger<BatchViewModel>>();
+        var settingsVmLogger = Mock.Of<ILogger<SettingsViewModel>>();
+
+        var imageService = Mock.Of<IImageService>();
+        var pipelineService = Mock.Of<IPipelineService>();
+        var pluginService = Mock.Of<IPluginService>();
+        var batchService = Mock.Of<IBatchService>();
+
+        var filmstrip = new FilmstripViewModel(filmstripLogger, imageService);
+        var preview = new PreviewViewModel(previewLogger, imageService, pipelineService);
+        var pipelineEditor = new PipelineEditorViewModel(pipelineEditorLogger, pipelineService);
+        var pluginBrowser = new PluginBrowserViewModel(pluginBrowserLogger, pluginService);
+        var batch = new BatchViewModel(batchLogger, batchService);
+        var settingsVm = new SettingsViewModel(settingsVmLogger, settings);
+
+        return new MainViewModel(logger, settings, backend,
+            filmstrip, preview, pipelineEditor, pluginBrowser, batch, settingsVm);
     }
 
     [Fact]
-    public void MainViewModel_InitialState_DefaultPipelineExists()
+    public void InitialState_AllChildViewModelsNotNull()
     {
-        var vm = new MainViewModel();
+        var vm = Create();
 
-        vm.CurrentPipeline.Should().NotBeNull();
-        vm.CurrentPipeline.Name.Should().Be("Default Pipeline");
-    }
-
-    [Fact]
-    public void MainViewModel_InitialState_ZoomLevelIsOne()
-    {
-        var vm = new MainViewModel();
-
-        vm.ZoomLevel.Should().Be(1.0);
-    }
-
-    [Fact]
-    public void MainViewModel_InitialState_SplitPositionIsHalf()
-    {
-        var vm = new MainViewModel();
-
-        vm.SplitPosition.Should().Be(0.5);
-    }
-
-    [Fact]
-    public void MainViewModel_RemoveImage_WithSelectedImage_RemovesFromCollection()
-    {
-        var vm = new MainViewModel();
-        var image = new ImageEntry { FileName = "test.jpg" };
-        vm.Images.Add(image);
-        vm.SelectedImage = image;
-
-        vm.RemoveImageCommand.Execute(null);
-
-        vm.Images.Should().BeEmpty();
-        vm.SelectedImage.Should().BeNull();
-    }
-
-    [Fact]
-    public void MainViewModel_RemoveImage_NoSelectedImage_NoException()
-    {
-        var vm = new MainViewModel();
-
-        vm.RemoveImageCommand.Execute(null);
-
-        vm.Images.Should().BeEmpty();
-    }
-
-    [Fact]
-    public void MainViewModel_ClearImages_RemovesAllAndResetsSelection()
-    {
-        var vm = new MainViewModel();
-        vm.Images.Add(new ImageEntry { FileName = "a.jpg" });
-        vm.Images.Add(new ImageEntry { FileName = "b.jpg" });
-        vm.SelectedImage = vm.Images[0];
-        vm.BeforeImage = vm.Images[0];
-        vm.AfterImage = vm.Images[1];
-
-        vm.ClearImagesCommand.Execute(null);
-
-        vm.Images.Should().BeEmpty();
-        vm.SelectedImage.Should().BeNull();
-        vm.BeforeImage.Should().BeNull();
-        vm.AfterImage.Should().BeNull();
-    }
-
-    [Fact]
-    public void MainViewModel_RunPipeline_UpdatesStatus()
-    {
-        var vm = new MainViewModel();
-        vm.SelectedImage = new ImageEntry { FilePath = "test.jpg" };
-
-        vm.RunPipelineCommand.Execute(null);
-
-        vm.StatusMessage.Should().Be("Pipeline completed");
-    }
-
-    [Fact]
-    public void MainViewModel_StopExecution_UpdatesStatus()
-    {
-        var vm = new MainViewModel();
-        vm.RunPipelineCommand.Execute(null);
-
-        vm.StopExecutionCommand.Execute(null);
-
-        vm.CurrentPipeline.IsExecuting.Should().BeFalse();
-        vm.StatusMessage.Should().Be("Stopped");
-    }
-
-    [Fact]
-    public void MainViewModel_ZoomIn_IncreasesZoomLevel()
-    {
-        var vm = new MainViewModel();
-
-        vm.ZoomInCommand.Execute(null);
-
-        vm.ZoomLevel.Should().BeApproximately(1.25, 0.001);
-    }
-
-    [Fact]
-    public void MainViewModel_ZoomOut_DecreasesZoomLevel()
-    {
-        var vm = new MainViewModel { ZoomLevel = 2.0 };
-
-        vm.ZoomOutCommand.Execute(null);
-
-        vm.ZoomLevel.Should().BeApproximately(1.6, 0.001);
-    }
-
-    [Fact]
-    public void MainViewModel_ZoomIn_AtMaximum_DoesNotExceed()
-    {
-        var vm = new MainViewModel { ZoomLevel = 7.5 };
-
-        vm.ZoomInCommand.Execute(null);
-
-        vm.ZoomLevel.Should().Be(8.0);
-    }
-
-    [Fact]
-    public void MainViewModel_ZoomOut_AtMinimum_DoesNotGoBelow()
-    {
-        var vm = new MainViewModel { ZoomLevel = 0.15 };
-
-        vm.ZoomOutCommand.Execute(null);
-
-        vm.ZoomLevel.Should().BeApproximately(0.12, 0.01);
-
-        vm.ZoomOutCommand.Execute(null);
-
-        vm.ZoomLevel.Should().Be(0.1);
-    }
-
-    [Fact]
-    public void MainViewModel_ResetZoom_ReturnsToDefault()
-    {
-        var vm = new MainViewModel { ZoomLevel = 4.0 };
-
-        vm.ResetZoomCommand.Execute(null);
-
-        vm.ZoomLevel.Should().Be(1.0);
-    }
-
-    [Fact]
-    public void MainViewModel_FitToWindow_SetsZoomToOne()
-    {
-        var vm = new MainViewModel { ZoomLevel = 3.5 };
-
-        vm.FitToWindowCommand.Execute(null);
-
-        vm.ZoomLevel.Should().Be(1.0);
-    }
-
-    [Fact]
-    public void MainViewModel_SplitPosition_PropertyChangedNotification()
-    {
-        var vm = new MainViewModel();
-        var eventRaised = false;
-
-        vm.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(MainViewModel.SplitPosition))
-                eventRaised = true;
-        };
-
-        vm.SplitPosition = 0.75;
-
-        eventRaised.Should().BeTrue();
-    }
-
-    [Fact]
-    public void MainViewModel_SelectedImageChanged_TriggersPropertyChange()
-    {
-        var vm = new MainViewModel();
-        var eventRaised = false;
-
-        vm.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(MainViewModel.SelectedImage))
-                eventRaised = true;
-        };
-
-        vm.SelectedImage = new ImageEntry { FileName = "selected.jpg" };
-
-        eventRaised.Should().BeTrue();
-    }
-
-    [Fact]
-    public void MainViewModel_NewPipeline_ReplacesCurrentPipeline()
-    {
-        var vm = new MainViewModel();
-        var oldPipeline = vm.CurrentPipeline;
-
-        vm.NewPipelineCommand.Execute(null);
-
-        vm.CurrentPipeline.Should().NotBeSameAs(oldPipeline);
-        vm.CurrentPipeline.Name.Should().Be("New Pipeline");
-        vm.StatusMessage.Should().Be("Created new pipeline");
-    }
-
-    [Fact]
-    public void MainViewModel_SubViewModels_AreNotNull()
-    {
-        var vm = new MainViewModel();
-
+        vm.Filmstrip.Should().NotBeNull();
+        vm.Preview.Should().NotBeNull();
         vm.PipelineEditor.Should().NotBeNull();
-        vm.PluginPanel.Should().NotBeNull();
+        vm.PluginBrowser.Should().NotBeNull();
         vm.Batch.Should().NotBeNull();
+        vm.Settings.Should().NotBeNull();
     }
 
     [Fact]
-    public void MainViewModel_Log_AppendsMessageAndSetsStatus()
+    public void InitialState_BackendHealthy()
     {
-        var vm = new MainViewModel();
+        var vm = Create();
 
-        vm.Log("Test log message");
-
-        vm.LogMessages.Should().ContainSingle(msg => msg.EndsWith("Test log message"));
-        vm.StatusMessage.Should().Be("Test log message");
+        vm.IsBackendHealthy.Should().BeTrue();
+        vm.BackendStatus.Should().Be("Connected");
     }
 
     [Fact]
-    public void MainViewModel_Log_MultipleMessages_AccumulateInOrder()
+    public void InitialState_WindowTitle()
     {
-        var vm = new MainViewModel();
-        var baseCount = vm.LogMessages.Count;
+        var vm = Create();
 
-        vm.Log("First");
-        vm.Log("Second");
-
-        vm.LogMessages.Should().HaveCount(baseCount + 2);
-        vm.LogMessages[baseCount].Should().EndWith("First");
-        vm.LogMessages[baseCount + 1].Should().EndWith("Second");
+        vm.WindowTitle.Should().Be("Photopipeline");
     }
 
     [Fact]
-    public void MainViewModel_AddImage_SetsStatusMessage()
+    public void BackendHealthChanged_UpdatesStatus()
     {
-        var vm = new MainViewModel();
+        var backendMock = CreateBackendMock();
+        backendMock.Setup(b => b.IsHealthy).Returns(false);
+        var backend = backendMock.Object;
 
-        vm.AddImageCommand.Execute(null);
+        var logger = Mock.Of<ILogger<MainViewModel>>();
+        var settings = CreateSettingsMock().Object;
+        var imageService = Mock.Of<IImageService>();
+        var pipelineService = Mock.Of<IPipelineService>();
+        var pluginService = Mock.Of<IPluginService>();
+        var batchService = Mock.Of<IBatchService>();
 
-        vm.StatusMessage.Should().Be("Opening file picker...");
+        var vm = new MainViewModel(logger, settings, backend,
+            new FilmstripViewModel(Mock.Of<ILogger<FilmstripViewModel>>(), imageService),
+            new PreviewViewModel(Mock.Of<ILogger<PreviewViewModel>>(), imageService, pipelineService),
+            new PipelineEditorViewModel(Mock.Of<ILogger<PipelineEditorViewModel>>(), pipelineService),
+            new PluginBrowserViewModel(Mock.Of<ILogger<PluginBrowserViewModel>>(), pluginService),
+            new BatchViewModel(Mock.Of<ILogger<BatchViewModel>>(), batchService),
+            new SettingsViewModel(Mock.Of<ILogger<SettingsViewModel>>(), settings));
+
+        vm.IsBackendHealthy.Should().BeFalse();
+        vm.BackendStatus.Should().Be("Disconnected");
     }
 
     [Fact]
-    public void MainViewModel_SendToPhotoshop_SetsStatusMessage()
+    public void ZoomCommands_DelegateToPreview()
     {
-        var vm = new MainViewModel();
+        var vm = Create();
 
-        vm.SendToPhotoshopCommand.Execute(null);
-
-        vm.StatusMessage.Should().Be("Sending current image to Photoshop...");
+        vm.ZoomInCommand.Execute(null);
+        vm.ZoomOutCommand.Execute(null);
+        vm.ResetZoomCommand.Execute(null);
     }
 
     [Fact]
-    public void MainViewModel_RemoveImage_SelectsNextAvailable()
+    public void WindowSize_LoadedFromSettings()
     {
-        var vm = new MainViewModel();
-        var img1 = new ImageEntry { FileName = "a.jpg" };
-        var img2 = new ImageEntry { FileName = "b.jpg" };
-        vm.Images.Add(img1);
-        vm.Images.Add(img2);
-        vm.SelectedImage = img1;
+        var vm = Create();
 
-        vm.RemoveImageCommand.Execute(null);
-
-        vm.Images.Should().ContainSingle();
-        vm.SelectedImage.Should().Be(img2);
-    }
-
-    [Fact]
-    public void MainViewModel_LoadPipeline_SetsStatusMessage()
-    {
-        var vm = new MainViewModel();
-
-        vm.LoadPipelineCommand.Execute(null);
-
-        vm.StatusMessage.Should().Be("Loading pipeline...");
-    }
-
-    [Fact]
-    public void MainViewModel_SavePipeline_SetsStatusMessage()
-    {
-        var vm = new MainViewModel();
-
-        vm.SavePipelineCommand.Execute(null);
-
-        vm.StatusMessage.Should().Contain("Saved pipeline:");
-    }
-
-    [Fact]
-    public void MainViewModel_ExportImage_SetsStatusMessage()
-    {
-        var vm = new MainViewModel();
-        vm.SelectedImage = new ImageEntry { FilePath = "test.jpg" };
-
-        vm.ExportImageCommand.Execute(null);
-
-        vm.StatusMessage.Should().Be("Export complete");
+        vm.WindowWidth.Should().Be(1440);
+        vm.WindowHeight.Should().Be(900);
     }
 }

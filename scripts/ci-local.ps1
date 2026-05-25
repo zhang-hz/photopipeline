@@ -66,8 +66,8 @@ sh "dotnet build Photopipeline.sln -c Release -p:Platform=x64" "$SlnDir" "C# bui
 ok
 
 if (-not $SkipTests) {
-    header "[6/9] C#: dotnet test Photopipeline.Tests -c Release -p:Platform=x64"
-    sh "dotnet test Photopipeline.Tests/Photopipeline.Tests.csproj -c Release -p:Platform=x64" "$SlnDir" "C# tests failed"
+    header "[6/9] C#: dotnet test (L1 + L2) -c Release -p:Platform=x64"
+    sh "dotnet test Photopipeline.Tests/Photopipeline.Tests.csproj -c Release -p:Platform=x64 --no-build" "$SlnDir" "C# tests failed"
     ok
 } else {
     Write-Host "[6/9] C# tests: SKIPPED" -ForegroundColor DarkGray

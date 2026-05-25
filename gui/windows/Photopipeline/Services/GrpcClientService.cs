@@ -82,7 +82,10 @@ public sealed class GrpcClientService : IDisposable
             var channel = await GetChannelAsync(ct);
             return await call(channel);
         }
-        catch
+        catch (Grpc.Core.RpcException ex) when (
+            ex.StatusCode == Grpc.Core.StatusCode.Unavailable ||
+            ex.StatusCode == Grpc.Core.StatusCode.DeadlineExceeded ||
+            ex.StatusCode == Grpc.Core.StatusCode.Aborted)
         {
             await ReconnectAsync(ct);
             var channel = await GetChannelAsync(ct);

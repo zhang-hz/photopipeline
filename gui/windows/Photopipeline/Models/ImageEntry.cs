@@ -1,13 +1,9 @@
 using CommunityToolkit.Mvvm.ComponentModel;
-using System;
 
 namespace Photopipeline.Models;
 
 public sealed partial class ImageEntry : ObservableObject
 {
-    [ObservableProperty]
-    private string _id = Guid.NewGuid().ToString("N");
-
     [ObservableProperty]
     private string _filePath = string.Empty;
 
@@ -15,46 +11,53 @@ public sealed partial class ImageEntry : ObservableObject
     private string _fileName = string.Empty;
 
     [ObservableProperty]
-    private string? _thumbnailPath;
+    private string _format = string.Empty;
 
     [ObservableProperty]
-    private ulong _fileSize;
+    private uint _width;
 
     [ObservableProperty]
-    private int _width;
+    private uint _height;
 
     [ObservableProperty]
-    private int _height;
+    private ulong _fileSizeBytes;
 
     [ObservableProperty]
-    private string _colorSpace = "sRGB";
+    private string _pixelFormat = string.Empty;
 
     [ObservableProperty]
-    private string _bitDepth = "8";
+    private string _colorSpace = string.Empty;
 
     [ObservableProperty]
-    private bool _hasMetadataModified;
+    private byte[]? _thumbnailData;
 
     [ObservableProperty]
-    private ImageOverrideStatus _overrideStatus = ImageOverrideStatus.None;
+    private ImageMetadata? _metadata;
 
     [ObservableProperty]
-    private double _processingProgress;
+    private ImageStatus _status = ImageStatus.None;
 
     [ObservableProperty]
-    private bool _isSelected;
+    private string _statusMessage = string.Empty;
 
-    [ObservableProperty]
-    private bool _isProcessing;
-
-    [ObservableProperty]
-    private bool _hasError;
-
-    [ObservableProperty]
-    private string _errorMessage = string.Empty;
+    public static ImageEntry FromImageInfo(ImageInfo info)
+    {
+        return new ImageEntry
+        {
+            FilePath = info.Path,
+            FileName = info.FileName,
+            Format = info.Format,
+            Width = info.Width,
+            Height = info.Height,
+            FileSizeBytes = info.FileSizeBytes,
+            PixelFormat = info.PixelFormat,
+            ColorSpace = info.ColorSpace,
+            Metadata = info.Metadata,
+        };
+    }
 }
 
-public enum ImageOverrideStatus
+public enum ImageStatus
 {
     None,
     Original,

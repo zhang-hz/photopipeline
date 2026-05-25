@@ -1,306 +1,237 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Photopipeline.Helpers;
 using Photopipeline.Models;
 using Photopipeline.Services;
+using SkiaSharp;
 using System.Collections.ObjectModel;
 
 namespace Photopipeline.ViewModels;
 
-public sealed partial class PipelineEditorViewModel : ObservableObject
+public sealed partial class PipelineEditorViewModel : ViewModelBase
 {
     private readonly IPipelineService _pipelineService;
+    private CancellationTokenSource? _executeCts;
 
-    [ObservableProperty]
-    private ObservableCollection<PipelineNode> _nodes = new();
+    [ObservableProperty] private PipelineSpec _currentPipeline = new() { Name = "New Pipeline" };
+    [ObservableProperty] private string? _pipelineId;
+    [ObservableProperty] private bool _isPipelineValid;
+    [ObservableProperty] private string _validationMessage = string.Empty;
+    [ObservableProperty] private ObservableCollection<PipelineNode> _nodes = new();
+    [ObservableProperty] private ObservableCollection<PipelineEdge> _edges = new();
+    [ObservableProperty] private PipelineNode? _selectedNode;
+    [ObservableProperty] private double _scale = 1.0;
+    [ObservableProperty] private double _offsetX;
+    [ObservableProperty] private double _offsetY;
+    [ObservableProperty] private bool _isExecuting;
+    [ObservableProperty] private string _executionStatus = string.Empty;
+    [ObservableProperty] private ObservableCollection<ExecuteProgress> _progressHistory = new();
 
-    [ObservableProperty]
-    private ObservableCollection<PipelineEdge> _edges = new();
-
-    [ObservableProperty]
-    private PipelineNode? _selectedNode;
-
-    [ObservableProperty]
-    private PipelineEdge? _selectedEdge;
-
-    [ObservableProperty]
-    private double _canvasWidth = 2000;
-
-    [ObservableProperty]
-    private double _canvasHeight = 2000;
-
-    [ObservableProperty]
-    private double _offsetX;
-
-    [ObservableProperty]
-    private double _offsetY;
-
-    [ObservableProperty]
-    private double _scale = 1.0;
-
-    [ObservableProperty]
-    private Port? _draggingPort;
-
-    [ObservableProperty]
-    private double _connectionLineX1;
-
-    [ObservableProperty]
-    private double _connectionLineY1;
-
-    [ObservableProperty]
-    private double _connectionLineX2;
-
-    [ObservableProperty]
-    private double _connectionLineY2;
-
-    [ObservableProperty]
-    private bool _isDrawingConnection;
-
-    [ObservableProperty]
-    private bool _isDraggingNode;
-
-    [ObservableProperty]
-    private bool _isPipelineValid;
-
-    [ObservableProperty]
-    private string _validationResult = string.Empty;
-
-    private double _lastMouseX;
-    private double _lastMouseY;
-
-    public PipelineEditorViewModel(IPipelineService pipelineService)
+    public PipelineEditorViewModel(ILogger<PipelineEditorViewModel> logger, IPipelineService pipelineService)
+        : base(logger)
     {
         _pipelineService = pipelineService;
     }
 
-    public PipelineEditorViewModel() : this(App.Services?.GetRequiredService<IPipelineService>() ?? new LocalPipelineService()) { }
-
     [RelayCommand]
     private void AddNode(PluginInfo plugin)
     {
+        AddNodeAt(plugin, 80 + Nodes.Count * 30, 60 + Nodes.Count * 86);
+    }
+
+    public void AddNodeAt(PluginInfo plugin, double x, double y)
+    {
+        if (IsExecuting) return;
         var node = new PipelineNode
         {
+            Id = Guid.NewGuid().ToString(),
             PluginId = plugin.Id,
-            DisplayName = plugin.Name,
-            CanvasX = 100 + (_nodes.Count * 220) % 1500,
-            CanvasY = 80 + (_nodes.Count / 7) * 180
+            Label = plugin.Name,
+            Enabled = true,
+            PositionX = x,
+            PositionY = y
         };
-
-        foreach (var schema in plugin.ParameterSchemas)
-        {
-            node.Parameters[schema.Name] = schema.DefaultValue ?? new object();
-        }
-
-        // Clear default ports and rebuild based on plugin definition
-        node.InputPorts.Clear();
-        if (plugin.MinInputs > 0)
-        {
-            for (int i = 0; i < plugin.MaxInputs; i++)
-            {
-                node.InputPorts.Add(new Port
-                {
-                    Id = $"in{i}",
-                    Name = plugin.MaxInputs > 1 ? $"Input {i + 1}" : "Input",
-                    Direction = PortDirection.Input,
-                    ParentNodeId = node.Id
-                });
-            }
-        }
-
-        node.OutputPorts.Clear();
-        if (plugin.Outputs > 0)
-        {
-            for (int i = 0; i < plugin.Outputs; i++)
-            {
-                node.OutputPorts.Add(new Port
-                {
-                    Id = $"out{i}",
-                    Name = plugin.Outputs > 1 ? $"Output {i + 1}" : "Output",
-                    Direction = PortDirection.Output,
-                    ParentNodeId = node.Id
-                });
-            }
-        }
-
         Nodes.Add(node);
+        CurrentPipeline.Nodes.Add(node);
+        IsPipelineValid = false;
     }
 
     [RelayCommand]
     private void RemoveNode(PipelineNode? node)
     {
-        if (node is null) return;
-        var edgesToRemove = Edges.Where(e => e.SourceNodeId == node.Id || e.TargetNodeId == node.Id).ToList();
-        foreach (var edge in edgesToRemove)
-            Edges.Remove(edge);
+        if (node is null || IsExecuting) return;
         Nodes.Remove(node);
-        if (SelectedNode == node) SelectedNode = null;
-    }
-
-    [RelayCommand]
-    private void SelectNode(PipelineNode node)
-    {
-        if (SelectedNode is not null)
-            SelectedNode.IsSelected = false;
-        SelectedNode = node;
-        node.IsSelected = true;
-    }
-
-    [RelayCommand]
-    private void ClearSelection()
-    {
-        if (SelectedNode is not null)
+        CurrentPipeline.Nodes.Remove(node);
+        var relatedEdges = Edges.Where(e => e.From == node.Id || e.To == node.Id).ToList();
+        foreach (var edge in relatedEdges)
         {
-            SelectedNode.IsSelected = false;
+            Edges.Remove(edge);
+            CurrentPipeline.Edges.Remove(edge);
+        }
+        if (SelectedNode?.Id == node.Id)
             SelectedNode = null;
-        }
+    }
+
+    public void UpdateNodePosition(string nodeId, double x, double y)
+    {
+        var node = Nodes.FirstOrDefault(n => n.Id == nodeId);
+        if (node is null) return;
+        node.PositionX = x;
+        node.PositionY = y;
     }
 
     [RelayCommand]
-    private void ConnectPorts()
+    private void ConnectNodes((string from, string to) connection)
     {
-        if (_draggingPort is null) return;
+        if (IsExecuting) return;
+        if (!CanConnect(connection.from, connection.to)) return;
 
-        if (SelectedNode is not null && _draggingPort.ParentNodeId != SelectedNode.Id)
+        var exists = Edges.Any(e => e.From == connection.from && e.To == connection.to);
+        if (exists) return;
+
+        var edge = new PipelineEdge { From = connection.from, To = connection.to };
+        Edges.Add(edge);
+        CurrentPipeline.Edges.Add(edge);
+    }
+
+    [RelayCommand]
+    private void DisconnectEdge(PipelineEdge? edge)
+    {
+        if (edge is null) return;
+        Edges.Remove(edge);
+        CurrentPipeline.Edges.Remove(edge);
+    }
+
+    public bool CanConnect(string fromNodeId, string toNodeId)
+    {
+        if (fromNodeId == toNodeId) return false;
+        return !WouldCreateCycle(fromNodeId, toNodeId);
+    }
+
+    private bool WouldCreateCycle(string from, string to)
+    {
+        var visited = new HashSet<string>();
+        var queue = new Queue<string>();
+        queue.Enqueue(from);
+
+        while (queue.Count > 0)
         {
-            var sourceNodeId = _draggingPort.Direction == PortDirection.Output
-                ? _draggingPort.ParentNodeId : SelectedNode.Id;
-            var sourcePortId = _draggingPort.Direction == PortDirection.Output
-                ? _draggingPort.Id : "in0";
-            var targetNodeId = _draggingPort.Direction == PortDirection.Input
-                ? _draggingPort.ParentNodeId : SelectedNode.Id;
-            var targetPortId = _draggingPort.Direction == PortDirection.Input
-                ? _draggingPort.Id : "out0";
+            var current = queue.Dequeue();
+            if (current == to) return true;
+            if (!visited.Add(current)) continue;
 
-            var existing = Edges.FirstOrDefault(e =>
-                e.SourceNodeId == sourceNodeId && e.TargetNodeId == targetNodeId);
-            if (existing is null)
+            foreach (var edge in Edges.Where(e => e.To == current))
+                queue.Enqueue(edge.From);
+        }
+        return false;
+    }
+
+    [RelayCommand]
+    private async Task Validate(CancellationToken ct)
+    {
+        if (Nodes.Count == 0)
+        {
+            ValidationMessage = "Pipeline has no nodes";
+            IsPipelineValid = false;
+            return;
+        }
+        await ExecuteAsync(async ct2 =>
+        {
+            var result = await _pipelineService.ValidateAsync(CurrentPipeline, ct2);
+            IsPipelineValid = result.Valid;
+            ValidationMessage = result.Valid ? "Valid" : string.Join("; ", result.Issues.Select(i => i.Message));
+        }, "Validate pipeline", ct);
+    }
+
+    [RelayCommand]
+    private async Task Create(CancellationToken ct)
+    {
+        await ExecuteAsync(async ct2 =>
+        {
+            PipelineId = await _pipelineService.CreatePipelineAsync(CurrentPipeline, ct2);
+            StatusMessage = $"Pipeline created: {PipelineId}";
+        }, "Create pipeline", ct);
+    }
+
+    [RelayCommand]
+    private async Task Execute(CancellationToken ct)
+    {
+        if (Nodes.Count == 0)
+        {
+            ErrorMessage = "Add at least one node to the pipeline";
+            return;
+        }
+
+        CancelExecute();
+        _executeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var token = _executeCts.Token;
+
+        try
+        {
+            IsExecuting = true;
+            ExecutionStatus = "Starting...";
+            ProgressHistory.Clear();
+            ErrorMessage = null;
+
+            var pid = PipelineId;
+            if (string.IsNullOrEmpty(pid))
+                pid = await _pipelineService.CreatePipelineAsync(CurrentPipeline, token);
+
+            await foreach (var progress in _pipelineService.ExecuteAsync(pid, "preview", "preview.tif", token))
             {
-                Edges.Add(new PipelineEdge
-                {
-                    SourceNodeId = sourceNodeId,
-                    SourcePortId = sourcePortId,
-                    TargetNodeId = targetNodeId,
-                    TargetPortId = targetPortId
-                });
+                token.ThrowIfCancellationRequested();
+                ProgressHistory.Add(progress);
+                ExecutionStatus = $"{progress.Stage}: {progress.NodeLabel} ({progress.Fraction:P0})";
             }
+
+            ExecutionStatus = "Completed";
+            StatusMessage = "Pipeline execution completed";
         }
-
-        _draggingPort = null;
-        IsDrawingConnection = false;
-    }
-
-    public void OnNodeMouseDown(PipelineNode node, double x, double y)
-    {
-        _lastMouseX = x;
-        _lastMouseY = y;
-        SelectNodeCommand.Execute(node);
-        node.IsDragging = true;
-        IsDraggingNode = true;
-    }
-
-    public void OnNodeMouseMove(double x, double y)
-    {
-        if (!IsDraggingNode || SelectedNode is null) return;
-        var dx = (x - _lastMouseX) / Scale;
-        var dy = (y - _lastMouseY) / Scale;
-        SelectedNode.CanvasX += dx;
-        SelectedNode.CanvasY += dy;
-        _lastMouseX = x;
-        _lastMouseY = y;
-    }
-
-    public void OnNodeMouseUp()
-    {
-        if (SelectedNode is not null)
-            SelectedNode.IsDragging = false;
-        IsDraggingNode = false;
-    }
-
-    public void OnPortDragStart(Port port, double canvasX, double canvasY)
-    {
-        _draggingPort = port;
-        IsDrawingConnection = true;
-        ConnectionLineX1 = canvasX;
-        ConnectionLineY1 = canvasY;
-        ConnectionLineX2 = canvasX;
-        ConnectionLineY2 = canvasY;
-    }
-
-    public void OnPortDrag(double toX, double toY)
-    {
-        if (!IsDrawingConnection) return;
-        ConnectionLineX2 = toX;
-        ConnectionLineY2 = toY;
-    }
-
-    [RelayCommand]
-    private async Task ValidatePipeline()
-    {
-        bool valid = true;
-        string error = string.Empty;
-
-        var connectedNodeIds = new HashSet<string>();
-        foreach (var edge in Edges)
+        catch (OperationCanceledException)
         {
-            connectedNodeIds.Add(edge.SourceNodeId);
-            connectedNodeIds.Add(edge.TargetNodeId);
+            ExecutionStatus = "Cancelled";
         }
-
-        if (connectedNodeIds.Count < Nodes.Count && Nodes.Count > 1)
+        catch (Exception ex)
         {
-            valid = false;
-            error = "Some nodes are not connected";
+            Logger.LogWarning(ex, "Pipeline execution failed");
+            ExecutionStatus = "Failed";
+            ErrorMessage = $"Execution failed: {ex.Message}";
         }
-
-        foreach (var node in Nodes)
+        finally
         {
-            if (node.OutputPorts.Count > 0 && !Edges.Any(e => e.SourceNodeId == node.Id) &&
-                !Edges.Any(e => e.TargetNodeId == node.Id) && Edges.Count > 0 && node != Nodes[^1])
-            {
-                valid = false;
-                error = $"Node '{node.DisplayName}' has no connections";
-                break;
-            }
+            IsExecuting = false;
         }
-
-        IsPipelineValid = valid;
-        ValidationResult = valid ? "Pipeline is valid" : error;
-        OnPropertyChanged(nameof(ValidationResult));
     }
 
     [RelayCommand]
-    public void FitAll()
+    private void CancelExecute()
     {
-        if (Nodes.Count == 0) return;
-        var minX = Nodes.Min(n => n.CanvasX);
-        var minY = Nodes.Min(n => n.CanvasY);
-        var maxX = Nodes.Max(n => n.CanvasX + n.Width);
-        var maxY = Nodes.Max(n => n.CanvasY + n.Height);
-        OffsetX = -minX + 40;
-        OffsetY = -minY + 40;
-    }
-
-    [RelayCommand]
-    public void DuplicateSelected()
-    {
-        if (SelectedNode is null) return;
-        var clone = new PipelineNode
+        if (_executeCts != null)
         {
-            PluginId = SelectedNode.PluginId,
-            DisplayName = SelectedNode.DisplayName + " (copy)",
-            CanvasX = SelectedNode.CanvasX + 200,
-            CanvasY = SelectedNode.CanvasY + 30,
-            Parameters = new Dictionary<string, object>(SelectedNode.Parameters)
-        };
-        Nodes.Add(clone);
+            _executeCts.Cancel();
+            _executeCts.Dispose();
+            _executeCts = null;
+        }
     }
 
     [RelayCommand]
-    private void ZoomIn() => Scale = Math.Min(Scale * 1.25, 5.0);
+    private void UpdateNodeParameter((string nodeId, string key, object value) param)
+    {
+        var node = Nodes.FirstOrDefault(n => n.Id == param.nodeId);
+        if (node is null) return;
+        node.Params[param.key] = param.value;
+    }
 
     [RelayCommand]
-    private void ZoomOut() => Scale = Math.Max(Scale / 1.25, 0.1);
+    private void ZoomCanvas(double delta) => Scale = Math.Clamp(Scale + delta, 0.1, 5.0);
 
     [RelayCommand]
-    private void ResetZoom() { Scale = 1.0; OffsetX = 0; OffsetY = 0; }
+    private void ResetCanvas() { Scale = 1.0; OffsetX = 0; OffsetY = 0; }
+
+    public override void Shutdown()
+    {
+        base.Shutdown();
+        try { _executeCts?.Cancel(); _executeCts?.Dispose(); } catch { }
+    }
 }
