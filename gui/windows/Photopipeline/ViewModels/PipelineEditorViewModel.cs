@@ -42,6 +42,7 @@ public sealed partial class PipelineEditorViewModel : ViewModelBase
     [RelayCommand]
     private void NewPipeline()
     {
+        Logger.LogInformation("Creating new pipeline");
         CurrentPipeline = new PipelineSpec { Name = "New Pipeline" };
         Nodes = new ObservableCollection<PipelineNode>();
         Edges = new ObservableCollection<PipelineEdge>();
@@ -68,6 +69,7 @@ public sealed partial class PipelineEditorViewModel : ViewModelBase
             PositionX = x,
             PositionY = y
         };
+        Logger.LogDebug("Node added: {PluginId} at ({X},{Y})", plugin.Id, x, y);
         Nodes.Add(node);
         CurrentPipeline.Nodes.Add(node);
         IsPipelineValid = false;
@@ -112,6 +114,7 @@ public sealed partial class PipelineEditorViewModel : ViewModelBase
         var exists = Edges.Any(e => e.From == connection.from && e.To == connection.to);
         if (exists) return;
 
+        Logger.LogDebug("Nodes connected: {From} → {To}", connection.from, connection.to);
         var edge = new PipelineEdge { From = connection.from, To = connection.to };
         Edges.Add(edge);
         CurrentPipeline.Edges.Add(edge);
@@ -172,6 +175,7 @@ public sealed partial class PipelineEditorViewModel : ViewModelBase
         await ExecuteAsync(async ct2 =>
         {
             PipelineId = await _pipelineService.CreatePipelineAsync(CurrentPipeline, ct2);
+            Logger.LogInformation("Pipeline saved: {PipelineId} ({NodeCount} nodes)", PipelineId, Nodes.Count);
             StatusMessage = $"Pipeline created: {PipelineId}";
         }, "Create pipeline", ct);
     }
@@ -201,6 +205,8 @@ public sealed partial class PipelineEditorViewModel : ViewModelBase
             ProgressHistory.Clear();
             ErrorMessage = null;
 
+            Logger.LogInformation("Pipeline executing: {NodeCount} nodes on {ImagePath}",
+                Nodes.Count, SelectedImagePath);
             var pid = PipelineId;
             if (string.IsNullOrEmpty(pid))
                 pid = await _pipelineService.CreatePipelineAsync(CurrentPipeline, token);

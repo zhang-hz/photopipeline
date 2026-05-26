@@ -100,6 +100,8 @@ public sealed partial class BatchViewModel : ViewModelBase
                 FilePattern = string.Join(";", pending.Select(i => i.FilePath))
             };
             _batchId = await _batchService.SubmitAsync(spec, token);
+            Logger.LogInformation("Batch submitted: {BatchId} ({FileCount} files, {Parallel}x parallel)",
+                _batchId, pending.Count, ParallelCount);
             StatusMessage = $"Batch {_batchId} started";
 
             await foreach (var progress in _batchService.GetProgressAsync(_batchId, token))
@@ -145,6 +147,7 @@ public sealed partial class BatchViewModel : ViewModelBase
     [RelayCommand]
     private void PauseBatch()
     {
+        Logger.LogInformation("Batch paused: {Completed}/{Total}", CompletedItems, TotalItems);
         IsPaused = true;
         StatusMessage = "Paused";
         StopTimer();
@@ -161,6 +164,7 @@ public sealed partial class BatchViewModel : ViewModelBase
     [RelayCommand]
     private void ResumeBatch()
     {
+        Logger.LogInformation("Batch resumed: {BatchId}", _batchId ?? "new");
         IsPaused = false;
         StatusMessage = "Resuming...";
         // Re-submit the remaining pending items or resume from the saved _batchId
@@ -176,6 +180,7 @@ public sealed partial class BatchViewModel : ViewModelBase
     [RelayCommand]
     private void StopBatch()
     {
+        Logger.LogInformation("Batch stopped: {Completed}/{Total} completed", CompletedItems, TotalItems);
         CancelInternal();
         IsRunning = false;
         IsPaused = false;

@@ -1,4 +1,5 @@
 using Grpc.Net.Client;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Net.Http;
 using System.Threading;
@@ -10,15 +11,18 @@ public sealed class GrpcClientService : IDisposable
 {
     private GrpcChannel? _channel;
     private readonly string _serverAddress;
+    private readonly ILogger<GrpcClientService> _logger;
     private readonly SemaphoreSlim _lock = new(1, 1);
     private bool _isConnected;
     private int _reconnectAttempts;
 
     public bool IsConnected => _isConnected;
 
-    public GrpcClientService(string serverAddress = "http://localhost:50051")
+    public GrpcClientService(string serverAddress = "http://localhost:50051",
+        ILogger<GrpcClientService>? logger = null)
     {
         _serverAddress = serverAddress;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<GrpcClientService>.Instance;
     }
 
     public async Task ConnectAsync(CancellationToken ct = default)
@@ -43,10 +47,12 @@ public sealed class GrpcClientService : IDisposable
 
             _isConnected = true;
             _reconnectAttempts = 0;
+            _logger.LogInformation("gRPC connected to {Address}", _serverAddress);
         }
-        catch
+        catch (Exception ex)
         {
             _isConnected = false;
+            _logger.LogWarning(ex, "gRPC connection failed to {Address}", _serverAddress);
             throw;
         }
         finally
@@ -67,10 +73,11 @@ public sealed class GrpcClientService : IDisposable
         _isConnected = false;
         _reconnectAttempts++;
         var delay = Math.Min(_reconnectAttempts * 1000, 15000);
+        _logger.LogWarning("gRPC reconnecting (attempt {Attempt}, delay {Delay}ms)", _reconnectAttempts, delay);
         try { await Task.Delay(delay, ct); }
         catch (OperationCanceledException) { return; }
         try { await ConnectAsync(ct); }
-        catch { /* reconnection best-effort */ }
+        catch (Exception ex) { _logger.LogWarning(ex, "gRPC reconnect attempt {Attempt} failed", _reconnectAttempts); }
     }
 
     /// <summary>
@@ -92,6 +99,7 @@ public sealed class GrpcClientService : IDisposable
             ex.StatusCode == Grpc.Core.StatusCode.DeadlineExceeded ||
             ex.StatusCode == Grpc.Core.StatusCode.Aborted)
         {
+            _logger.LogWarning(ex, "gRPC call failed ({Status}), retrying after reconnect", ex.StatusCode);
             await ReconnectAsync(ct);
             var channel = await GetChannelAsync(ct);
             return await call(channel);
@@ -103,5 +111,6 @@ public sealed class GrpcClientService : IDisposable
         _isConnected = false;
         _channel?.Dispose();
         _lock.Dispose();
+        _logger.LogDebug("gRPC client disposed");
     }
 }

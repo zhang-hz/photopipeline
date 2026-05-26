@@ -16,12 +16,15 @@ public sealed class ImageService : IImageService
 
     public async Task<ImageInfo> LoadImageInfoAsync(string path, CancellationToken ct = default)
     {
+        _logger.LogInformation("Loading image info: {Path}", path);
         var channel = await _grpc.GetChannelAsync(ct);
         var client = new global::Photopipeline.Image.ImageService.ImageServiceClient(channel);
         var proto = await client.LoadAsync(
             new global::Photopipeline.Image.ImagePath { Path = path },
             cancellationToken: ct);
 
+        _logger.LogInformation("Image info loaded: {Path} ({Width}x{Height}, {Format})",
+            path, proto.Width, proto.Height, proto.Format);
         return new ImageInfo
         {
             Id = proto.Id,
@@ -53,6 +56,7 @@ public sealed class ImageService : IImageService
         if (options?.MaxWidth.HasValue == true) request.MaxWidth = options.MaxWidth.Value;
         if (options?.MaxHeight.HasValue == true) request.MaxHeight = options.MaxHeight.Value;
 
+        _logger.LogInformation("Decoding image: {Path}", path);
         using var call = client.Decode(request, cancellationToken: ct);
         while (await call.ResponseStream.MoveNext(ct))
         {
@@ -91,6 +95,8 @@ public sealed class ImageService : IImageService
         if (request.Effort.HasValue) protoReq.Effort = request.Effort.Value;
         if (request.Metadata is not null) protoReq.Metadata = MapToProtoMetadata(request.Metadata);
 
+        _logger.LogInformation("Encoding image: {Format} {Width}x{Height} → {OutputPath}",
+            protoReq.Format, protoReq.Width, protoReq.Height, protoReq.OutputPath);
         using var call = client.Encode(protoReq, cancellationToken: ct);
         while (await call.ResponseStream.MoveNext(ct))
         {
@@ -109,9 +115,11 @@ public sealed class ImageService : IImageService
     {
         var channel = await _grpc.GetChannelAsync(ct);
         var client = new global::Photopipeline.Image.ImageService.ImageServiceClient(channel);
+        _logger.LogDebug("Generating thumbnail: {Path} (max {MaxSize}px)", path, maxSize);
         var response = await client.GetThumbnailAsync(
             new global::Photopipeline.Image.ThumbnailRequest { Path = path, MaxSize = (uint)maxSize },
             cancellationToken: ct);
+        _logger.LogDebug("Thumbnail generated: {Path} ({Bytes} bytes)", path, response.Data.Length);
         return response.Data.ToByteArray();
     }
 

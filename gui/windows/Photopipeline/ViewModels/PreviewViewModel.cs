@@ -96,6 +96,7 @@ public sealed partial class PreviewViewModel : ViewModelBase
         };
         if (dialog.ShowDialog() != true) return;
 
+        Logger.LogInformation("Exporting image: {Width}x{Height} to {Path}", bmp.Width, bmp.Height, dialog.FileName);
         await ExecuteAsync(async ct2 =>
         {
             var pixels = bmp.Bytes;
@@ -156,7 +157,9 @@ public sealed partial class PreviewViewModel : ViewModelBase
             var colorType = ParseColorType(image.PixelFormat);
             var bmp = new SKBitmap((int)width, (int)height, colorType, SKAlphaType.Premul);
             System.Runtime.InteropServices.Marshal.Copy(allBytes, 0, bmp.GetPixels(), allBytes.Length);
+            BeforeBitmap?.Dispose();
             BeforeBitmap = bmp;
+            Logger.LogDebug("Bitmap loaded: {Width}x{Height} ({ColorType})", width, height, colorType);
 
             StatusMessage = $"Loaded {image.FileName} ({width}x{height})";
         }
@@ -222,7 +225,10 @@ public sealed partial class PreviewViewModel : ViewModelBase
                 var colorType = ParseColorType(info.PixelFormat);
                 var bmp = new SKBitmap((int)info.Width, (int)info.Height, colorType, SKAlphaType.Premul);
                 System.Runtime.InteropServices.Marshal.Copy(allBytes, 0, bmp.GetPixels(), allBytes.Length);
+                AfterBitmap?.Dispose();
                 AfterBitmap = bmp;
+                Logger.LogDebug("Preview bitmap rendered: {Width}x{Height} ({ColorType})",
+                    info.Width, info.Height, colorType);
                 StatusMessage = "Preview rendered";
             }
         }

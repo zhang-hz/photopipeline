@@ -55,6 +55,8 @@ public sealed class PipelineService : IPipelineService
     {
         var channel = await _grpc.GetChannelAsync(ct);
         var client = new global::Photopipeline.Pipeline.PipelineService.PipelineServiceClient(channel);
+        _logger.LogInformation("Pipeline execute started: {PipelineId}, {ImagePath} → {OutputPath}",
+            pipelineId, imagePath, outputPath);
         var request = new global::Photopipeline.Pipeline.ExecuteRequest
         {
             PipelineId = pipelineId,

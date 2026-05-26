@@ -54,7 +54,8 @@ public partial class App : Application
                 {
                     var config = sp.GetRequiredService<IConfiguration>();
                     var port = config.GetValue<int>("Server:Port", 50051);
-                    return new GrpcClientService($"http://localhost:{port}");
+                    var logger = sp.GetRequiredService<ILogger<GrpcClientService>>();
+                    return new GrpcClientService($"http://localhost:{port}", logger);
                 });
 
                 // Services
