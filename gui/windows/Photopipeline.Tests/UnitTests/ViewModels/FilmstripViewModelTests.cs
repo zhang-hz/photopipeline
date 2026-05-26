@@ -9,7 +9,7 @@ public sealed class FilmstripViewModelTests
     {
         var logger = Mock.Of<ILogger<FilmstripViewModel>>();
         var imageService = imageServiceMock?.Object ?? Mock.Of<IImageService>();
-        return new FilmstripViewModel(logger, imageService);
+        return new FilmstripViewModel(logger, imageService, null!);
     }
 
     [Fact]

@@ -37,11 +37,11 @@ public sealed class MainViewModelTests
         var pluginService = Mock.Of<IPluginService>();
         var batchService = Mock.Of<IBatchService>();
 
-        var filmstrip = new FilmstripViewModel(filmstripLogger, imageService);
-        var preview = new PreviewViewModel(previewLogger, imageService, pipelineService);
+        var filmstrip = new FilmstripViewModel(filmstripLogger, imageService, null!);
+        var preview = new PreviewViewModel(previewLogger, imageService, pipelineService, null!);
         var pipelineEditor = new PipelineEditorViewModel(pipelineEditorLogger, pipelineService);
         var pluginBrowser = new PluginBrowserViewModel(pluginBrowserLogger, pluginService);
-        var batch = new BatchViewModel(batchLogger, batchService);
+        var batch = new BatchViewModel(batchLogger, batchService, null!);
         var settingsVm = new SettingsViewModel(settingsVmLogger, settings);
 
         return new MainViewModel(logger, settings, backend,
@@ -93,11 +93,11 @@ public sealed class MainViewModelTests
         var batchService = Mock.Of<IBatchService>();
 
         var vm = new MainViewModel(logger, settings, backend,
-            new FilmstripViewModel(Mock.Of<ILogger<FilmstripViewModel>>(), imageService),
-            new PreviewViewModel(Mock.Of<ILogger<PreviewViewModel>>(), imageService, pipelineService),
+            new FilmstripViewModel(Mock.Of<ILogger<FilmstripViewModel>>(), imageService, null!),
+            new PreviewViewModel(Mock.Of<ILogger<PreviewViewModel>>(), imageService, pipelineService, null!),
             new PipelineEditorViewModel(Mock.Of<ILogger<PipelineEditorViewModel>>(), pipelineService),
             new PluginBrowserViewModel(Mock.Of<ILogger<PluginBrowserViewModel>>(), pluginService),
-            new BatchViewModel(Mock.Of<ILogger<BatchViewModel>>(), batchService),
+            new BatchViewModel(Mock.Of<ILogger<BatchViewModel>>(), batchService, null!),
             new SettingsViewModel(Mock.Of<ILogger<SettingsViewModel>>(), settings));
 
         vm.IsBackendHealthy.Should().BeFalse();

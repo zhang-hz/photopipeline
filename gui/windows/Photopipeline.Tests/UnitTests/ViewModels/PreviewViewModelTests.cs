@@ -12,7 +12,7 @@ public sealed class PreviewViewModelTests
         var logger = Mock.Of<ILogger<PreviewViewModel>>();
         var imageService = imageServiceMock?.Object ?? Mock.Of<IImageService>();
         var pipelineService = pipelineServiceMock?.Object ?? Mock.Of<IPipelineService>();
-        return new PreviewViewModel(logger, imageService, pipelineService);
+        return new PreviewViewModel(logger, imageService, pipelineService, null!);
     }
 
     [Fact]

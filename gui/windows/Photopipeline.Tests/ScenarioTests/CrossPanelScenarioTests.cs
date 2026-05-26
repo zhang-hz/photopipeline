@@ -10,7 +10,7 @@ public sealed class CrossPanelScenarioTests
     {
         var logger = Mock.Of<ILogger<FilmstripViewModel>>();
         var imageService = Mock.Of<IImageService>();
-        var filmstrip = new FilmstripViewModel(logger, imageService);
+        var filmstrip = new FilmstripViewModel(logger, imageService, null!);
         var pipelineLogger = Mock.Of<ILogger<PipelineEditorViewModel>>();
         var pipelineService = Mock.Of<IPipelineService>();
         var editor = new PipelineEditorViewModel(pipelineLogger, pipelineService);
@@ -50,7 +50,7 @@ public sealed class CrossPanelScenarioTests
     {
         var batchLogger = Mock.Of<ILogger<BatchViewModel>>();
         var batchService = Mock.Of<IBatchService>();
-        var batch = new BatchViewModel(batchLogger, batchService);
+        var batch = new BatchViewModel(batchLogger, batchService, null!);
 
         var img1 = new ImageEntry { FileName = "a.dng" };
         var img2 = new ImageEntry { FileName = "b.dng" };

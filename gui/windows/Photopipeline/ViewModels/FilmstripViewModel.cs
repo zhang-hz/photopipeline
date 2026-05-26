@@ -15,6 +15,7 @@ namespace Photopipeline.ViewModels;
 public sealed partial class FilmstripViewModel : ViewModelBase
 {
     private readonly IImageService _imageService;
+    private readonly IDialogService _dialogService;
     private readonly SemaphoreSlim _thumbnailSemaphore = new(4);
 
     [ObservableProperty] private ObservableCollection<ImageEntry> _images = new();
@@ -34,10 +35,11 @@ public sealed partial class FilmstripViewModel : ViewModelBase
     public event Action<ImageEntry?>? ImageSelected;
     public event Action<IReadOnlyList<ImageEntry>>? SendToBatchRequested;
 
-    public FilmstripViewModel(ILogger<FilmstripViewModel> logger, IImageService imageService)
-        : base(logger)
+    public FilmstripViewModel(ILogger<FilmstripViewModel> logger, IImageService imageService,
+        IDialogService dialogService) : base(logger)
     {
         _imageService = imageService;
+        _dialogService = dialogService;
         FilteredImages = new ObservableCollection<ImageEntry>();
     }
 
@@ -49,18 +51,13 @@ public sealed partial class FilmstripViewModel : ViewModelBase
     [RelayCommand]
     private async Task AddImages(CancellationToken ct)
     {
-        // TODO: File dialogs should be abstracted behind a service interface to avoid violating MVVM
         await ExecuteAsync(async ct2 =>
         {
-            var dialog = new Microsoft.Win32.OpenFileDialog
+            var paths = _dialogService.ShowOpenFileDialog("Select images",
+                "Image files|*.dng;*.nef;*.cr2;*.arw;*.orf;*.tif;*.tiff;*.jpg;*.jpeg;*.png;*.heic;*.heif;*.avif;*.jxl;*.exr;*.bmp;*.ppm|All files|*.*");
+            if (paths != null)
             {
-                Title = "Select images",
-                Multiselect = true,
-                Filter = "Image files|*.dng;*.nef;*.cr2;*.arw;*.orf;*.tif;*.tiff;*.jpg;*.jpeg;*.png;*.heic;*.heif;*.avif;*.jxl;*.exr;*.bmp;*.ppm|All files|*.*"
-            };
-            if (dialog.ShowDialog() == true)
-            {
-                foreach (var path in dialog.FileNames)
+                foreach (var path in paths)
                 {
                     ct2.ThrowIfCancellationRequested();
                     if (Images.Any(i => string.Equals(i.FilePath, path, StringComparison.OrdinalIgnoreCase)))

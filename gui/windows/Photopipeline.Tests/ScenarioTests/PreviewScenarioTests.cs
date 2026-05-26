@@ -10,7 +10,7 @@ public sealed class PreviewScenarioTests
         var logger = Mock.Of<ILogger<PreviewViewModel>>();
         var imageService = Mock.Of<IImageService>();
         var pipelineService = Mock.Of<IPipelineService>();
-        return new PreviewViewModel(logger, imageService, pipelineService);
+        return new PreviewViewModel(logger, imageService, pipelineService, null!);
     }
 
     [Fact]

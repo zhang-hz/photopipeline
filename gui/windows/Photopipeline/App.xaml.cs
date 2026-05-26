@@ -77,6 +77,7 @@ public partial class App : Application
                     var logger = sp.GetRequiredService<ILogger<BatchService>>();
                     return new BatchService(grpc, logger);
                 });
+                services.AddSingleton<IDialogService, WindowsDialogService>();
                 services.AddSingleton<IPluginService, PluginService>();
                 services.AddSingleton<ISettingsService, SettingsService>();
                 services.AddSingleton<IBackendService>(sp =>

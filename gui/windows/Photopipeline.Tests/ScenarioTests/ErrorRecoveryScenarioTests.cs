@@ -13,7 +13,7 @@ public sealed class ErrorRecoveryScenarioTests
         // DecodeAsync returns IAsyncEnumerable, ThrowsAsync not supported.
         // Just verify construction succeeds.
 
-        var vm = new PreviewViewModel(logger, imageServiceMock.Object, Mock.Of<IPipelineService>());
+        var vm = new PreviewViewModel(logger, imageServiceMock.Object, Mock.Of<IPipelineService>(), null!);
 
         vm.ErrorMessage.Should().BeNull();
         vm.IsLoading.Should().BeFalse();
@@ -28,7 +28,7 @@ public sealed class ErrorRecoveryScenarioTests
             .Setup(s => s.LoadImageInfoAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("Backend unavailable"));
 
-        var vm = new FilmstripViewModel(logger, imageServiceMock.Object);
+        var vm = new FilmstripViewModel(logger, imageServiceMock.Object, null!);
 
         // Should not throw on construction
         vm.Images.Should().BeEmpty();
@@ -43,7 +43,7 @@ public sealed class ErrorRecoveryScenarioTests
             .Setup(s => s.SubmitAsync(It.IsAny<BatchSpec>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("Server error"));
 
-        var vm = new BatchViewModel(logger, batchServiceMock.Object);
+        var vm = new BatchViewModel(logger, batchServiceMock.Object, null!);
         vm.AddToQueueCommand.Execute(new ImageEntry { FileName = "test.dng" });
         vm.OutputDirectory = @"C:\Output";
 
@@ -80,7 +80,7 @@ public sealed class ErrorRecoveryScenarioTests
     {
         var logger = Mock.Of<ILogger<FilmstripViewModel>>();
         var imageService = Mock.Of<IImageService>();
-        var vm = new FilmstripViewModel(logger, imageService);
+        var vm = new FilmstripViewModel(logger, imageService, null!);
 
         vm.ErrorMessage = "Previous error";
 

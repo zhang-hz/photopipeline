@@ -1,6 +1,5 @@
 using Photopipeline.Tests.FunctionalTests.Infrastructure;
 using Xunit.Abstractions;
-using Xunit.Sdk;
 
 namespace Photopipeline.Tests.FunctionalTests.ApiChannel;
 

@@ -9,7 +9,7 @@ public sealed class BatchScenarioTests
     {
         var logger = Mock.Of<ILogger<BatchViewModel>>();
         var batchService = batchServiceMock?.Object ?? Mock.Of<IBatchService>();
-        return new BatchViewModel(logger, batchService);
+        return new BatchViewModel(logger, batchService, null!);
     }
 
     [Fact]

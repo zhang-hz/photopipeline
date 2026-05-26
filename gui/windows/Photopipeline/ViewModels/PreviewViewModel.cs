@@ -12,6 +12,7 @@ public sealed partial class PreviewViewModel : ViewModelBase
 {
     private readonly IImageService _imageService;
     private readonly IPipelineService _pipelineService;
+    private readonly IDialogService _dialogService;
     private CancellationTokenSource? _loadCts;
     private CancellationTokenSource? _processCts;
 
@@ -38,10 +39,12 @@ public sealed partial class PreviewViewModel : ViewModelBase
     public PreviewViewModel(
         ILogger<PreviewViewModel> logger,
         IImageService imageService,
-        IPipelineService pipelineService) : base(logger)
+        IPipelineService pipelineService,
+        IDialogService dialogService) : base(logger)
     {
         _imageService = imageService;
         _pipelineService = pipelineService;
+        _dialogService = dialogService;
     }
 
     [RelayCommand]
@@ -87,16 +90,11 @@ public sealed partial class PreviewViewModel : ViewModelBase
             return;
         }
 
-        // TODO: File dialogs should be abstracted behind a service interface to avoid violating MVVM
-        var dialog = new Microsoft.Win32.SaveFileDialog
-        {
-            Title = "Export Image",
-            Filter = "TIFF|*.tif|JPEG|*.jpg|PNG|*.png|WebP|*.webp|AVIF|*.avif",
-            DefaultExt = ".tif"
-        };
-        if (dialog.ShowDialog() != true) return;
+        var outputPath = _dialogService.ShowSaveFileDialog("Export Image",
+            "TIFF|*.tif|JPEG|*.jpg|PNG|*.png|WebP|*.webp|AVIF|*.avif");
+        if (outputPath is null) return;
 
-        Logger.LogInformation("Exporting image: {Width}x{Height} to {Path}", bmp.Width, bmp.Height, dialog.FileName);
+        Logger.LogInformation("Exporting image: {Width}x{Height} to {Path}", bmp.Width, bmp.Height, outputPath);
         await ExecuteAsync(async ct2 =>
         {
             var pixels = bmp.Bytes;
@@ -107,12 +105,12 @@ public sealed partial class PreviewViewModel : ViewModelBase
                 Height = (uint)bmp.Height,
                 PixelFormat = DerivePixelFormat(bmp),
                 Layout = DeriveLayout(bmp),
-                OutputPath = dialog.FileName,
-                Format = System.IO.Path.GetExtension(dialog.FileName).TrimStart('.').ToUpperInvariant()
+                OutputPath = outputPath,
+                Format = System.IO.Path.GetExtension(outputPath).TrimStart('.').ToUpperInvariant()
             };
 
             await foreach (var _ in _imageService.EncodeAsync(request, ct2)) { }
-            StatusMessage = $"Exported to {dialog.FileName}";
+            StatusMessage = $"Exported to {outputPath}";
         }, "Export image", ct);
     }
 

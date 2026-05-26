@@ -13,6 +13,7 @@ namespace Photopipeline.ViewModels;
 public sealed partial class BatchViewModel : ViewModelBase
 {
     private readonly IBatchService _batchService;
+    private readonly IDialogService _dialogService;
     private CancellationTokenSource? _batchCts;
     private string? _batchId;
 
@@ -38,9 +39,11 @@ public sealed partial class BatchViewModel : ViewModelBase
     private DispatcherTimer? _timer;
     private DateTime _startTime;
 
-    public BatchViewModel(ILogger<BatchViewModel> logger, IBatchService batchService) : base(logger)
+    public BatchViewModel(ILogger<BatchViewModel> logger, IBatchService batchService,
+        IDialogService dialogService) : base(logger)
     {
         _batchService = batchService;
+        _dialogService = dialogService;
     }
 
     [RelayCommand]
@@ -215,13 +218,9 @@ public sealed partial class BatchViewModel : ViewModelBase
     [RelayCommand]
     private void BrowseOutputDirectory()
     {
-        var dialog = new Microsoft.Win32.OpenFolderDialog
-        {
-            Title = "Select output directory",
-            Multiselect = false
-        };
-        if (dialog.ShowDialog() == true)
-            OutputDirectory = dialog.FolderName;
+        var folder = _dialogService.ShowOpenFolderDialog("Select output directory");
+        if (folder is not null)
+            OutputDirectory = folder;
     }
 
     private void CancelInternal()

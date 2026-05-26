@@ -20,11 +20,11 @@ public sealed class EndToEndScenarioTests
         var pluginService = Mock.Of<IPluginService>();
         var batchService = Mock.Of<IBatchService>();
 
-        var filmstrip = new FilmstripViewModel(Mock.Of<ILogger<FilmstripViewModel>>(), imageService);
-        var preview = new PreviewViewModel(Mock.Of<ILogger<PreviewViewModel>>(), imageService, pipelineService);
+        var filmstrip = new FilmstripViewModel(Mock.Of<ILogger<FilmstripViewModel>>(), imageService, null!);
+        var preview = new PreviewViewModel(Mock.Of<ILogger<PreviewViewModel>>(), imageService, pipelineService, null!);
         var pipelineEditor = new PipelineEditorViewModel(Mock.Of<ILogger<PipelineEditorViewModel>>(), pipelineService);
         var pluginBrowser = new PluginBrowserViewModel(Mock.Of<ILogger<PluginBrowserViewModel>>(), pluginService);
-        var batch = new BatchViewModel(Mock.Of<ILogger<BatchViewModel>>(), batchService);
+        var batch = new BatchViewModel(Mock.Of<ILogger<BatchViewModel>>(), batchService, null!);
         var settingsVm = new SettingsViewModel(Mock.Of<ILogger<SettingsViewModel>>(), settingsMock.Object);
 
         var mainVm = new MainViewModel(logger, settingsMock.Object, backendMock.Object,
@@ -64,7 +64,7 @@ public sealed class EndToEndScenarioTests
     {
         var filmstripLogger = Mock.Of<ILogger<FilmstripViewModel>>();
         var imageService = Mock.Of<IImageService>();
-        var filmstrip = new FilmstripViewModel(filmstripLogger, imageService);
+        var filmstrip = new FilmstripViewModel(filmstripLogger, imageService, null!);
 
         // Load images
         filmstrip.Images.Add(new ImageEntry { FileName = "photo1.dng", Format = "DNG" });
