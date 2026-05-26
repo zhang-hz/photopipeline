@@ -26,7 +26,7 @@ public abstract class ApiTestBase : IDisposable
             loggerFactory.CreateLogger<BatchService>());
     }
 
-    protected async Task EnsureConnectedAsync(CancellationToken ct = default)
+    public async Task EnsureConnectedAsync(CancellationToken ct = default)
     {
         if (!_isConnected)
         {
@@ -45,7 +45,7 @@ public abstract class ApiTestBase : IDisposable
         return spec;
     }
 
-    protected async Task<string> ExecuteAndGetOutput(
+    public async Task<string> ExecuteAndGetOutput(
         PipelineSpec spec, string inputImagePath, string outputPath, CancellationToken ct = default)
     {
         await EnsureConnectedAsync(ct);

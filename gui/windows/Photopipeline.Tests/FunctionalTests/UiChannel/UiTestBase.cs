@@ -5,7 +5,7 @@ namespace Photopipeline.Tests.FunctionalTests.UiChannel;
 
 public abstract class UiTestBase : IDisposable
 {
-    protected readonly string AppPath;
+    public readonly string AppPath;
     protected Process? _appProcess;
     protected bool _isRunning;
 
@@ -26,7 +26,7 @@ public abstract class UiTestBase : IDisposable
         AppPath = Path.Combine(publishDir, "Photopipeline.exe");
     }
 
-    protected void StartApp(string? args = null)
+    public void StartApp(string? args = null)
     {
         if (!File.Exists(AppPath))
             throw new FileNotFoundException($"Application not found at: {AppPath}");
@@ -48,7 +48,7 @@ public abstract class UiTestBase : IDisposable
         Thread.Sleep(5000);
     }
 
-    protected void StopApp()
+    public void StopApp()
     {
         if (_appProcess is { HasExited: false })
         {
