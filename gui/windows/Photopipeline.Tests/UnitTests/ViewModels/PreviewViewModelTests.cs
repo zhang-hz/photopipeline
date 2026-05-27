@@ -107,7 +107,7 @@ public sealed class PreviewViewModelTests : IDisposable
         for (int i = 0; i < 100; i++)
             vm.ZoomInCommand.Execute(null);
 
-        vm.ZoomLevel.Should().Be(8.0, "zoom must stop at max discrete step");
+        vm.ZoomLevel.Should().Be(32.0, "zoom must stop at MaxZoom after repeated ZoomIn");
     }
 
     // ═════════════════════════════════════════════════════════════

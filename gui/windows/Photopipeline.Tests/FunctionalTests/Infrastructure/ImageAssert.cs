@@ -599,7 +599,7 @@ public static class ImageAssert
 
     private static double GetMaxValueForColorType(SKColorType colorType) => colorType switch
     {
-        SKColorType.Rgba16161616 or SKColorType.Rgb16161616 => 65535.0,
+        SKColorType.Rgba16161616 => 65535.0,
         SKColorType.RgbaF16 or SKColorType.RgbaF32 => 1.0,
         SKColorType.Alpha8 or SKColorType.Gray8 => 255.0,
         _ => 255.0

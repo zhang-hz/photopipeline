@@ -273,7 +273,7 @@ public static class TestImageGenerator
             SaveBitmap(bmp, path, fmt switch
             {
                 "JPEG" => SKEncodedImageFormat.Jpeg,
-                "TIFF" => SKEncodedImageFormat.Tiff,
+                "TIFF" => SKEncodedImageFormat.Png /* SkiaSharp 3.x lacks TIFF encoder */,
                 "WEBP" => SKEncodedImageFormat.Webp,
                 "BMP" => SKEncodedImageFormat.Bmp,
                 // AVIF/HEIF/JXL: saved as PNG (SkiaSharp doesn't encode these natively)

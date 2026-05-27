@@ -717,10 +717,10 @@ public static class TestCaseCatalog
             Pipeline = new PipelineSpec
             {
                 Name = "DuplicateNodes",
-                Nodes = new[]
+                Nodes = new List<PipelineNode>
                 {
-                    new PipelineNode { Id = "n1", PluginId = "photopipeline.plugins.transform" },
-                    new PipelineNode { Id = "n1", PluginId = "photopipeline.plugins.colorspace" },
+                    new() { Id = "n1", PluginId = "photopipeline.plugins.transform" },
+                    new() { Id = "n1", PluginId = "photopipeline.plugins.colorspace" },
                 }
             },
             ExpectError = true, SkipUiChannel = true,

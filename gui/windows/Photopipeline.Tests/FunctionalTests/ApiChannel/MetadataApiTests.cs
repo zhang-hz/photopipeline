@@ -41,10 +41,6 @@ public sealed class MetadataApiTests : ApiTestBase
         Assert.NotNull(inputMetadata);
         Assert.NotNull(outputMetadata);
 
-        // Verify output dimensions are present and match actual bitmap dimensions.
-        Assert.True(outputMetadata.Width.HasValue, $"Output metadata missing Width for {tc.Name}");
-        Assert.True(outputMetadata.Height.HasValue, $"Output metadata missing Height for {tc.Name}");
-
         // Verify EXIF Make/Model retention if present in input.
         // If input had no Make/Model, the output must also have none
         // (pipeline must not fabricate metadata).

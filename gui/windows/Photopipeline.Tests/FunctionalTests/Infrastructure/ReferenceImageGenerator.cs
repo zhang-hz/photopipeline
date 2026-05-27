@@ -251,7 +251,8 @@ public static class ReferenceImageGenerator
     private static void SaveAsTiff(SKBitmap bmp, string path)
     {
         using var image = SKImage.FromBitmap(bmp);
-        using var data = image.Encode(SKEncodedImageFormat.Tiff, 100);
+        // TIFF encoding unsupported in SkiaSharp 3.x; use PNG with .tif extension
+        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
         using var stream = new FileStream(path, FileMode.Create, FileAccess.Write);
         data.SaveTo(stream);
     }

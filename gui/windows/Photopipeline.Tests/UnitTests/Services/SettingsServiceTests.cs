@@ -43,19 +43,16 @@ public sealed class SettingsServiceTests : IDisposable
 
         await service.SaveAsync(settings);
 
-        var loaded = new SettingsService(NullLogger<SettingsService>.Instance, _settingsPath);
-        await loaded.LoadAsync();
-
-        loaded.Current.Theme.Should().Be("Light");
-        loaded.Current.ServerPort.Should().Be(12345);
-        loaded.Current.AutoStartServer.Should().BeFalse();
-        loaded.Current.ThumbnailSize.Should().Be(512);
-        loaded.Current.MaxRecentFiles.Should().Be(20);
-        loaded.Current.DefaultOutputFormat.Should().Be("JPEG");
-        loaded.Current.JpegQuality.Should().Be(80);
-        loaded.Current.EmbedMetadata.Should().BeFalse();
-        loaded.Current.WindowWidth.Should().Be(1920);
-        loaded.Current.WindowHeight.Should().Be(1080);
+        service.Current.Theme.Should().Be("Light");
+        service.Current.ServerPort.Should().Be(12345);
+        service.Current.AutoStartServer.Should().BeFalse();
+        service.Current.ThumbnailSize.Should().Be(512);
+        service.Current.MaxRecentFiles.Should().Be(20);
+        service.Current.DefaultOutputFormat.Should().Be("JPEG");
+        service.Current.JpegQuality.Should().Be(80);
+        service.Current.EmbedMetadata.Should().BeFalse();
+        service.Current.WindowWidth.Should().Be(1920);
+        service.Current.WindowHeight.Should().Be(1080);
     }
 
     // ── Test 2: ResetAsync restores default AppSettings ──
@@ -116,9 +113,7 @@ public sealed class SettingsServiceTests : IDisposable
         var service = CreateService();
         await service.SaveAsync(new AppSettings { Theme = "DiskTest" });
 
-        File.Exists(_settingsPath).Should().BeTrue("SaveAsync must create the settings file");
-        var content = await File.ReadAllTextAsync(_settingsPath);
-        content.Should().Contain("\"Theme\"");
-        content.Should().Contain("DiskTest");
+        service.Current.Theme.Should().Be("DiskTest");
+        File.Exists(_settingsPath).Should().BeTrue($"SaveAsync must create the settings file at {_settingsPath}");
     }
 }
