@@ -1261,6 +1261,14 @@ public sealed class UiTestDriver : IDisposable
         return outputPath;
     }
 
+    /// <summary>Forcefully terminates the app process, clearing all resources.</summary>
+    public void ForceKill()
+    {
+        try { _appProcess?.Kill(entireProcessTree: true); } catch { }
+        try { _app?.Dispose(); } catch { }
+        try { _automation?.Dispose(); } catch { }
+    }
+
     public void Dispose()
     {
         try

@@ -23,6 +23,7 @@ photopipeline-windows-x64.zip
 
 # Dev tooling
 .spec-workflow/
+.claude/settings.local.json
 
 # Vendor archives
 vendor/exiftool/*.zip

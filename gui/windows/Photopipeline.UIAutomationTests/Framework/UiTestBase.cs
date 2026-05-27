@@ -64,7 +64,17 @@ public abstract class UiTestBase : IAsyncLifetime
         try
         {
             if (Driver != null!)
-                await Driver.CloseAppAsync();
+            {
+                // Timeout: force-kill if app doesn't close within 15 seconds
+                var closeTask = Driver.CloseAppAsync();
+                var timeoutTask = Task.Delay(15_000);
+                var completed = await Task.WhenAny(closeTask, timeoutTask);
+                if (completed == timeoutTask)
+                {
+                    Output.WriteLine("TIMEOUT: App did not close within 15s — force killing");
+                    Driver.ForceKill();
+                }
+            }
         }
         catch (Exception ex)
         {
