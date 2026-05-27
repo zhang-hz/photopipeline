@@ -3,11 +3,13 @@ using Xunit.Abstractions;
 
 namespace Photopipeline.Tests.FunctionalTests.ApiChannel;
 
+/// <summary>
+/// Layer 4 gRPC integration tests for multi-node pipeline topologies.
+/// Verifies linear chains, disabled nodes, and single-node regression.
+/// </summary>
 public sealed class PipelineApiTests : ApiTestBase
 {
-    private readonly ITestOutputHelper _output;
-
-    public PipelineApiTests(ITestOutputHelper output) => _output = output;
+    public PipelineApiTests(ITestOutputHelper output) : base(output) { }
 
     public static IEnumerable<object[]> PipelineTestCases =>
         TestCaseCatalog.GetByCategory("pipeline")
@@ -18,22 +20,41 @@ public sealed class PipelineApiTests : ApiTestBase
     [MemberData(nameof(PipelineTestCases))]
     public async Task ExecutePipelineTopology(TestCaseDefinition tc)
     {
-        try { await EnsureConnectedAsync(); }
-        catch
-        {
-            _output.WriteLine("Backend not available — skipping pipeline API test");
-            return;
-        }
+        // Iron Rule 2: No silent skip.
+        await RequireBackendAsync();
 
         using var outputMgr = new TestOutputManager(tc.Name);
         var inputPath = TestDataCatalog.Instance.GetPath(tc.InputImage);
-        var outputPath = outputMgr.GetOutputPath($"{tc.Name}_output.tif");
+        var outputPath = outputMgr.GetOutputPath($"{tc.Name}_output.png");
 
-        await ExecuteAndGetOutput(tc.Pipeline!, inputPath, outputPath);
+        var pipeline = tc.Pipeline!;
 
-        Assert.True(File.Exists(outputPath), $"Output file not found: {outputPath}");
-        ImageAssert.IsValidFormat(outputPath, tc.OutputFormat, expectedBitDepth: (int?)tc.OutputBitDepth);
+        // Single-node regression tests: verify determinism.
+        if (tc.Tags.Contains("regression"))
+        {
+            await ExecuteTwiceAndAssertDeterministic(pipeline, inputPath, outputPath, outputMgr);
+        }
+        else
+        {
+            await ExecuteAndGetOutput(pipeline, inputPath, outputPath);
+        }
 
-        _output.WriteLine($"PASS: {tc.Name} — {tc.Pipeline!.Nodes.Count} nodes, {tc.Pipeline.Edges.Count} edges");
+        // Iron rule 1: Verify output format and non-empty.
+        AssertValidOutput(outputPath, tc.OutputFormat,
+            expectedBitDepth: tc.OutputBitDepth.HasValue ? (int)tc.OutputBitDepth.Value : null);
+
+        // For topology tests (linear/disabled), verify the pipeline actually produced output.
+        var nodeCount = pipeline.Nodes.Count;
+        var enabledCount = pipeline.Nodes.Count(n => n.Enabled);
+        var edgeCount = pipeline.Edges.Count;
+
+        // All-disabled pipeline: output should still be valid (passthrough).
+        if (enabledCount == 0 && nodeCount > 0)
+        {
+            _output?.WriteLine($"All-disabled pipeline ({nodeCount} nodes): verifying passthrough output");
+            // Output should be a valid image — already verified above.
+        }
+
+        _output?.WriteLine($"PASS: {tc.Name} — {nodeCount} nodes ({enabledCount} enabled), {edgeCount} edges");
     }
 }

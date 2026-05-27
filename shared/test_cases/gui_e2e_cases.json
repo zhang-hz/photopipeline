@@ -1,0 +1,922 @@
+{
+  "$schema": "./schema.json",
+  "title": "GUI E2E Test Cases",
+  "description": "Layer 5 C# GUI FlaUI end-to-end test case definitions shared with cross-channel verification.",
+  "expected_total_cases": 105,
+  "cases": [
+    {
+      "id": "GE2E-001",
+      "layer": 5,
+      "name": "RawInput AutoExposure SDR Output via GUI",
+      "category": "plugin",
+      "description": "11-step GUI E2E: Launch app, Import I01, Navigate to Pipeline Editor, Add raw_input + tiff_encoder, Set params (auto, apply_wb=true), Run, Wait for progress, Export, Verify TIFF output.",
+      "skip": false,
+      "tags": ["gui_e2e", "raw_input", "single_plugin", "full_workflow"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.raw_input",
+            "label": "Raw Input (auto)",
+            "enabled": true,
+            "params": {
+              "raw_mode": "auto",
+              "apply_white_balance": true
+            }
+          },
+          {
+            "id": "n2",
+            "plugin": "photopipeline.plugins.tiff_encoder",
+            "label": "TIFF Output",
+            "enabled": true,
+            "params": {
+              "compression": "deflate",
+              "pixel_format": "u8"
+            }
+          }
+        ],
+        "edges": [
+          { "from": "n1", "to": "n2" }
+        ]
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "pixel_exact",
+        "expected_format": "TIFF",
+        "expected_width": 1920,
+        "expected_height": 1080,
+        "expected_bit_depth": 8,
+        "golden_reference": "golden/ge2e001_raw_auto_tiff.png"
+      }
+    },
+    {
+      "id": "GE2E-002",
+      "layer": 5,
+      "name": "Transform Crop 50% GUI Workflow",
+      "category": "plugin",
+      "description": "11-step GUI E2E: Import I01, Add transform(crop 50%) + png_encoder, Set crop parameters, Run pipeline, Export PNG, Verify output dimensions 960x540 and pixel content.",
+      "skip": false,
+      "tags": ["gui_e2e", "transform", "crop", "single_plugin", "full_workflow"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.transform",
+            "label": "Transform (crop 50%)",
+            "enabled": true,
+            "params": {
+              "crop_enabled": true,
+              "crop_left": 25,
+              "crop_top": 25,
+              "crop_width": 50,
+              "crop_height": 50
+            }
+          },
+          {
+            "id": "n2",
+            "plugin": "photopipeline.plugins.png_encoder",
+            "label": "PNG Output",
+            "enabled": true,
+            "params": {
+              "color_type": "rgb",
+              "compression_level": 6
+            }
+          }
+        ],
+        "edges": [
+          { "from": "n1", "to": "n2" }
+        ]
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "pixel_exact",
+        "expected_format": "PNG",
+        "expected_width": 960,
+        "expected_height": 540,
+        "expected_bit_depth": 8,
+        "golden_reference": "golden/ge2e002_crop50_png.png"
+      }
+    },
+    {
+      "id": "GE2E-003",
+      "layer": 5,
+      "name": "Transform Resize Fit Mode GUI Workflow",
+      "category": "plugin",
+      "description": "GUI E2E: Import I01, Add transform(fit mode 256x256) + png_encoder, Run, Verify output fits within 256x256.",
+      "skip": false,
+      "tags": ["gui_e2e", "transform", "resize", "fit", "single_plugin"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.transform",
+            "label": "Transform Fit 256",
+            "enabled": true,
+            "params": {
+              "resize_mode": "fit",
+              "width": 256,
+              "height": 256
+            }
+          },
+          {
+            "id": "n2",
+            "plugin": "photopipeline.plugins.png_encoder",
+            "label": "PNG",
+            "enabled": true,
+            "params": { "compression_level": 6 }
+          }
+        ],
+        "edges": [
+          { "from": "n1", "to": "n2" }
+        ]
+      },
+      "assertions": {
+        "tolerance_per_channel": 1,
+        "assertion_type": "dimensions",
+        "expected_format": "PNG",
+        "expected_width": 256,
+        "expected_height": 144
+      }
+    },
+    {
+      "id": "GE2E-004",
+      "layer": 5,
+      "name": "Transform Rotate -90 Degrees GUI Workflow",
+      "category": "plugin",
+      "description": "GUI E2E: Import I01, Add transform(rotate -90) + png_encoder, Run, Verify output has transposed dimensions.",
+      "skip": false,
+      "tags": ["gui_e2e", "transform", "rotate", "single_plugin"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.transform",
+            "label": "Transform Rotate -90",
+            "enabled": true,
+            "params": { "angle": -90.0 }
+          },
+          {
+            "id": "n2",
+            "plugin": "photopipeline.plugins.png_encoder",
+            "label": "PNG",
+            "enabled": true,
+            "params": { "compression_level": 6 }
+          }
+        ],
+        "edges": [
+          { "from": "n1", "to": "n2" }
+        ]
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "dimensions",
+        "expected_format": "PNG",
+        "expected_width": 1080,
+        "expected_height": 1920
+      }
+    },
+    {
+      "id": "GE2E-005",
+      "layer": 5,
+      "name": "Colorspace Adobe RGB to sRGB GUI Workflow",
+      "category": "plugin",
+      "description": "GUI E2E: Import I01, Add colorspace(adobe_rgb→srgb absolute_colorimetric) + png_encoder, Run, Verify output.",
+      "skip": false,
+      "tags": ["gui_e2e", "colorspace", "single_plugin", "full_workflow"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.colorspace",
+            "label": "Adobe RGB to sRGB",
+            "enabled": true,
+            "params": {
+              "source_color_space": "adobe_rgb",
+              "target_color_space": "srgb",
+              "rendering_intent": "absolute_colorimetric",
+              "bp_comp": true
+            }
+          },
+          {
+            "id": "n2",
+            "plugin": "photopipeline.plugins.png_encoder",
+            "label": "PNG",
+            "enabled": true,
+            "params": { "compression_level": 6 }
+          }
+        ],
+        "edges": [
+          { "from": "n1", "to": "n2" }
+        ]
+      },
+      "assertions": {
+        "tolerance_per_channel": 2,
+        "assertion_type": "ssim",
+        "expected_format": "PNG",
+        "expected_width": 1920,
+        "expected_height": 1080,
+        "min_ssim": 0.97
+      }
+    },
+    {
+      "id": "GE2E-006",
+      "layer": 5,
+      "name": "PNG Encoder 16-bit Output GUI Workflow",
+      "category": "plugin",
+      "description": "GUI E2E: Import I01, Add png_encoder(bit_depth=16), Run, Verify 16-bit PNG output.",
+      "skip": false,
+      "tags": ["gui_e2e", "png_encoder", "16bit", "single_plugin", "encoder"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.png_encoder",
+            "label": "PNG 16-bit",
+            "enabled": true,
+            "params": {
+              "bit_depth": "16",
+              "compression_level": 6
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "pixel_exact",
+        "expected_format": "PNG",
+        "expected_width": 1920,
+        "expected_height": 1080,
+        "expected_bit_depth": 16
+      }
+    },
+    {
+      "id": "GE2E-007",
+      "layer": 5,
+      "name": "JPEG Encoder Quality 100 GUI Workflow",
+      "category": "plugin",
+      "description": "GUI E2E: Import I01, Add jpeg_encoder(quality=100), Run, Verify maximum quality JPEG output.",
+      "skip": false,
+      "tags": ["gui_e2e", "jpeg_encoder", "single_plugin", "encoder"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.jpeg_encoder",
+            "label": "JPEG Q100",
+            "enabled": true,
+            "params": { "quality": 100 }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "ssim",
+        "expected_format": "JPEG",
+        "expected_width": 1920,
+        "expected_height": 1080,
+        "min_ssim": 0.96
+      }
+    },
+    {
+      "id": "GE2E-008",
+      "layer": 5,
+      "name": "WEBP Encoder Lossless GUI Workflow",
+      "category": "plugin",
+      "description": "GUI E2E: Import I01, Add webp_encoder(lossless=true), Run, Verify lossless WEBP output.",
+      "skip": false,
+      "tags": ["gui_e2e", "webp_encoder", "lossless", "single_plugin", "encoder"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.webp_encoder",
+            "label": "WEBP Lossless",
+            "enabled": true,
+            "params": {
+              "lossless": true,
+              "quality": 100
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "ssim",
+        "expected_format": "WEBP",
+        "expected_width": 1920,
+        "expected_height": 1080,
+        "min_ssim": 0.999
+      }
+    },
+    {
+      "id": "GE2E-009",
+      "layer": 5,
+      "name": "AVIF Encoder Quality 90 GUI Workflow",
+      "category": "plugin",
+      "description": "GUI E2E: Import I01, Add avif_encoder(quality=90, speed=0), Run, Verify high-quality AVIF output.",
+      "skip": false,
+      "tags": ["gui_e2e", "avif_encoder", "single_plugin", "encoder", "next_gen"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.avif_encoder",
+            "label": "AVIF Q90",
+            "enabled": true,
+            "params": {
+              "quality": 90.0,
+              "speed": 0
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "ssim",
+        "expected_format": "AVIF",
+        "expected_width": 1920,
+        "expected_height": 1080,
+        "min_ssim": 0.92
+      }
+    },
+    {
+      "id": "GE2E-010",
+      "layer": 5,
+      "name": "JXL Encoder Distance 1.0 GUI Workflow",
+      "category": "plugin",
+      "description": "GUI E2E: Import I01, Add jxl_encoder(distance=1.0, effort=3), Run, Verify JXL output.",
+      "skip": false,
+      "tags": ["gui_e2e", "jxl_encoder", "single_plugin", "encoder", "next_gen"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.jxl_encoder",
+            "label": "JXL D1.0",
+            "enabled": true,
+            "params": {
+              "quality": 80.0,
+              "distance": 1.0,
+              "effort": 3
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "ssim",
+        "expected_format": "JXL",
+        "expected_width": 1920,
+        "expected_height": 1080,
+        "min_ssim": 0.90
+      }
+    },
+    {
+      "id": "GE2E-011",
+      "layer": 5,
+      "name": "HEIF Encoder AVC Type GUI Workflow",
+      "category": "plugin",
+      "description": "GUI E2E: Import I01, Add heif_encoder(encoder_type=avc), Run, Verify HEIF output with AVC codec.",
+      "skip": false,
+      "tags": ["gui_e2e", "heif_encoder", "single_plugin", "encoder", "next_gen"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.heif_encoder",
+            "label": "HEIF AVC",
+            "enabled": true,
+            "params": {
+              "quality": 70.0,
+              "encoder_type": "avc"
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "ssim",
+        "expected_format": "HEIF",
+        "expected_width": 1920,
+        "expected_height": 1080,
+        "min_ssim": 0.88
+      }
+    },
+    {
+      "id": "GE2E-012",
+      "layer": 5,
+      "name": "Linear 4-Node Pipeline GUI Workflow",
+      "category": "pipeline",
+      "description": "GUI E2E: Build raw_input→colorspace→transform→png_encoder 4-node chain, Run, Verify pipeline output.",
+      "skip": false,
+      "tags": ["gui_e2e", "pipeline", "linear", "4_node", "multi_plugin"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.raw_input",
+            "label": "Raw",
+            "enabled": true,
+            "params": { "raw_mode": "auto" }
+          },
+          {
+            "id": "n2",
+            "plugin": "photopipeline.plugins.colorspace",
+            "label": "Color",
+            "enabled": true,
+            "params": {
+              "source_color_space": "srgb",
+              "target_color_space": "display_p3",
+              "rendering_intent": "perceptual"
+            }
+          },
+          {
+            "id": "n3",
+            "plugin": "photopipeline.plugins.transform",
+            "label": "Transform",
+            "enabled": true,
+            "params": { "flip_horizontal": true }
+          },
+          {
+            "id": "n4",
+            "plugin": "photopipeline.plugins.png_encoder",
+            "label": "PNG",
+            "enabled": true,
+            "params": { "compression_level": 6 }
+          }
+        ],
+        "edges": [
+          { "from": "n1", "to": "n2" },
+          { "from": "n2", "to": "n3" },
+          { "from": "n3", "to": "n4" }
+        ]
+      },
+      "assertions": {
+        "tolerance_per_channel": 2,
+        "assertion_type": "ssim",
+        "expected_format": "PNG",
+        "expected_width": 1920,
+        "expected_height": 1080,
+        "min_ssim": 0.96
+      }
+    },
+    {
+      "id": "GE2E-013",
+      "layer": 5,
+      "name": "Fork Topology GUI Workflow",
+      "category": "pipeline",
+      "description": "GUI E2E: Build fork topology (raw→colorspace + raw→transform), Run, Verify branching pipeline works in GUI.",
+      "skip": false,
+      "tags": ["gui_e2e", "pipeline", "fork", "branching", "topology"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "src",
+            "plugin": "photopipeline.plugins.raw_input",
+            "label": "Source",
+            "enabled": true,
+            "params": { "raw_mode": "auto" }
+          },
+          {
+            "id": "b1",
+            "plugin": "photopipeline.plugins.colorspace",
+            "label": "Branch 1",
+            "enabled": true,
+            "params": {
+              "source_color_space": "srgb",
+              "target_color_space": "display_p3"
+            }
+          },
+          {
+            "id": "b2",
+            "plugin": "photopipeline.plugins.transform",
+            "label": "Branch 2",
+            "enabled": true,
+            "params": { "angle": 180.0 }
+          }
+        ],
+        "edges": [
+          { "from": "src", "to": "b1" },
+          { "from": "src", "to": "b2" }
+        ]
+      },
+      "assertions": {
+        "tolerance_per_channel": 2,
+        "assertion_type": "ssim",
+        "expected_format": "PNG",
+        "min_ssim": 0.95
+      }
+    },
+    {
+      "id": "GE2E-014",
+      "layer": 5,
+      "name": "Branch with Disabled Node GUI Workflow",
+      "category": "pipeline",
+      "description": "GUI E2E: Build fork with one disabled branch, Run, Verify active branch produces output.",
+      "skip": false,
+      "tags": ["gui_e2e", "pipeline", "fork", "disabled_node", "branching"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "src",
+            "plugin": "photopipeline.plugins.raw_input",
+            "label": "Source",
+            "enabled": true,
+            "params": { "raw_mode": "auto" }
+          },
+          {
+            "id": "b1",
+            "plugin": "photopipeline.plugins.colorspace",
+            "label": "Disabled Branch",
+            "enabled": false,
+            "params": { "target_color_space": "adobe_rgb" }
+          },
+          {
+            "id": "b2",
+            "plugin": "photopipeline.plugins.transform",
+            "label": "Active Branch",
+            "enabled": true,
+            "params": { "angle": 90.0 }
+          }
+        ],
+        "edges": [
+          { "from": "src", "to": "b1" },
+          { "from": "src", "to": "b2" }
+        ]
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "pixel_exact",
+        "expected_format": "PNG"
+      }
+    },
+    {
+      "id": "GE2E-015",
+      "layer": 5,
+      "name": "Batch 5 Files GUI Workflow",
+      "category": "batch",
+      "description": "GUI E2E: Import 5 images, Add transform pipeline, Run batch, Verify all outputs produced.",
+      "skip": false,
+      "tags": ["gui_e2e", "batch", "multi_file", "full_workflow"],
+      "input_images": ["I01", "I02", "I03", "I04", "I05"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.transform",
+            "label": "Transform 50%",
+            "enabled": true,
+            "params": {
+              "resize_mode": "percentage",
+              "scale_percent": 50.0
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 1,
+        "assertion_type": "dimensions",
+        "expected_format": "PNG",
+        "min_ssim": 0.95
+      }
+    },
+    {
+      "id": "GE2E-016",
+      "layer": 5,
+      "name": "PNG to JPEG Format Conversion GUI",
+      "category": "format",
+      "description": "GUI E2E: Import PNG, Export as JPEG, Verify JPEG output is valid.",
+      "skip": false,
+      "tags": ["gui_e2e", "format_conversion", "png", "jpeg"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.jpeg_encoder",
+            "label": "JPEG Output",
+            "enabled": true,
+            "params": { "quality": 90 }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "ssim",
+        "expected_format": "JPEG",
+        "expected_width": 1920,
+        "expected_height": 1080,
+        "min_ssim": 0.94
+      }
+    },
+    {
+      "id": "GE2E-017",
+      "layer": 5,
+      "name": "Alpha Channel WEBP to PNG GUI",
+      "category": "format",
+      "description": "GUI E2E: Import RGBA image, Convert to PNG, Verify alpha channel preserved.",
+      "skip": false,
+      "tags": ["gui_e2e", "format_conversion", "alpha", "webp", "png"],
+      "input_images": ["I06"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.png_encoder",
+            "label": "PNG with Alpha",
+            "enabled": true,
+            "params": {
+              "compression_level": 6,
+              "alpha_channel": true
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "pixel_exact",
+        "expected_format": "PNG",
+        "min_ssim": 0.999,
+        "check_metadata": true
+      }
+    },
+    {
+      "id": "GE2E-018",
+      "layer": 5,
+      "name": "Grayscale 256 Steps to TIFF GUI",
+      "category": "format",
+      "description": "GUI E2E: Import 256-step grayscale gradient, Export to TIFF, Verify grayscale preservation.",
+      "skip": false,
+      "tags": ["gui_e2e", "format_conversion", "grayscale", "tiff"],
+      "input_images": ["I07"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.tiff_encoder",
+            "label": "TIFF Grayscale",
+            "enabled": true,
+            "params": { "compression": "deflate" }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "pixel_exact",
+        "expected_format": "TIFF",
+        "min_ssim": 0.999
+      }
+    },
+    {
+      "id": "GE2E-019",
+      "layer": 5,
+      "name": "EXIF Read Write Tags GUI Workflow",
+      "category": "plugin",
+      "description": "GUI E2E: Import JPEG with EXIF data, Run exif_rw plugin, Export TIFF, Verify metadata preserved.",
+      "skip": false,
+      "tags": ["gui_e2e", "exif_rw", "metadata", "single_plugin"],
+      "input_images": ["I08"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.exif_rw",
+            "label": "EXIF Read/Write",
+            "enabled": true,
+            "params": { "write_tags": true }
+          },
+          {
+            "id": "n2",
+            "plugin": "photopipeline.plugins.tiff_encoder",
+            "label": "TIFF",
+            "enabled": true,
+            "params": { "compression": "deflate" }
+          }
+        ],
+        "edges": [
+          { "from": "n1", "to": "n2" }
+        ]
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "pixel_exact",
+        "expected_format": "TIFF",
+        "check_metadata": true
+      }
+    },
+    {
+      "id": "GE2E-020",
+      "layer": 5,
+      "name": "Corrupted Input File Error GUI",
+      "category": "plugin",
+      "description": "GUI E2E: Attempt to load corrupted image file, Verify error is displayed in GUI.",
+      "skip": false,
+      "tags": ["gui_e2e", "error_path", "corrupted_file"],
+      "input_images": ["I99"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.transform",
+            "label": "Transform",
+            "enabled": true
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "file_exists",
+        "expect_error": true,
+        "expected_error_message": "corrupt"
+      }
+    },
+    {
+      "id": "GE2E-021",
+      "layer": 5,
+      "name": "Invalid Parameter Value Error GUI",
+      "category": "plugin",
+      "description": "GUI E2E: Set negative scale_percent, Run, Verify GUI shows validation error.",
+      "skip": false,
+      "tags": ["gui_e2e", "error_path", "invalid_param"],
+      "input_images": ["I09"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.transform",
+            "label": "Bad Transform",
+            "enabled": true,
+            "params": {
+              "resize_mode": "absolute",
+              "width": -100,
+              "height": -100
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "file_exists",
+        "expect_error": true,
+        "expected_error_message": "invalid"
+      }
+    },
+    {
+      "id": "GE2E-022",
+      "layer": 5,
+      "name": "16-bit TIFF Output Format Verification GUI",
+      "category": "format",
+      "description": "GUI E2E: Import 8-bit image, Export as 16-bit TIFF, Verify bit depth increased.",
+      "skip": false,
+      "tags": ["gui_e2e", "format_conversion", "16bit", "tiff"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.tiff_encoder",
+            "label": "TIFF 16-bit",
+            "enabled": true,
+            "params": {
+              "compression": "deflate",
+              "pixel_format": "u16"
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "pixel_exact",
+        "expected_format": "TIFF",
+        "expected_bit_depth": 16
+      }
+    },
+    {
+      "id": "GE2E-023",
+      "layer": 5,
+      "name": "BMP Encoder Output GUI Workflow",
+      "category": "plugin",
+      "description": "GUI E2E: Import I01, Add bmp_encoder, Run, Verify valid BMP output produced.",
+      "skip": false,
+      "tags": ["gui_e2e", "bmp_encoder", "single_plugin", "encoder"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.bmp_encoder",
+            "label": "BMP Output",
+            "enabled": true,
+            "params": {}
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "pixel_exact",
+        "expected_format": "BMP",
+        "expected_width": 1920,
+        "expected_height": 1080
+      }
+    },
+    {
+      "id": "GE2E-024",
+      "layer": 5,
+      "name": "Transform Resize Absolute Mode GUI Workflow",
+      "category": "plugin",
+      "description": "GUI E2E: Import I01, Add transform(resize absolute 320x180) + png_encoder, Run, Verify exact dimensions.",
+      "skip": false,
+      "tags": ["gui_e2e", "transform", "resize", "absolute", "single_plugin"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.transform",
+            "label": "Transform Absolute 320x180",
+            "enabled": true,
+            "params": {
+              "resize_mode": "absolute",
+              "width": 320,
+              "height": 180
+            }
+          },
+          {
+            "id": "n2",
+            "plugin": "photopipeline.plugins.png_encoder",
+            "label": "PNG Encoder",
+            "enabled": true,
+            "params": { "compression_level": 6 }
+          }
+        ],
+        "edges": [
+          { "from": "n1", "to": "n2" }
+        ]
+      },
+      "assertions": {
+        "tolerance_per_channel": 1,
+        "assertion_type": "dimensions",
+        "expected_format": "PNG",
+        "expected_width": 320,
+        "expected_height": 180
+      }
+    },
+    {
+      "id": "GE2E-025",
+      "layer": 5,
+      "name": "Transform 360 Degree Rotation Identity GUI",
+      "category": "plugin",
+      "description": "GUI E2E: Import I01, Add transform(rotate 360), Run, Verify output matches input (identity transform).",
+      "skip": false,
+      "tags": ["gui_e2e", "transform", "rotate", "identity", "single_plugin"],
+      "input_images": ["I09"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.transform",
+            "label": "Rotate 360",
+            "enabled": true,
+            "params": { "angle": 360.0 }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "pixel_exact",
+        "expected_format": "PNG",
+        "min_psnr": 50.0,
+        "min_ssim": 0.999
+      }
+    }
+  ]
+}

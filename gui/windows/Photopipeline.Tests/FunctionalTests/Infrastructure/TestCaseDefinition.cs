@@ -12,7 +12,7 @@ public sealed record TestCaseDefinition
 
     public PipelineSpec? Pipeline { get; init; }
 
-    public string OutputFormat { get; init; } = "TIFF";
+    public string OutputFormat { get; init; } = "PNG";
     public uint? OutputBitDepth { get; init; }
     public bool? OutputLossless { get; init; }
 

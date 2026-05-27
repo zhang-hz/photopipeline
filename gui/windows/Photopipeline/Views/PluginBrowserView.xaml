@@ -20,14 +20,16 @@
 
         <!-- Search + Filter -->
         <StackPanel Grid.Row="0" Margin="8,8,8,4">
-            <ui:TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+            <ui:TextBox AutomationProperties.AutomationId="PluginSearchBox"
+                        Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                         PlaceholderText="Search plugins..." ClearButtonEnabled="True" Margin="0,0,0,4" />
             <ComboBox ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory}"
                       FontSize="11" />
         </StackPanel>
 
         <!-- Plugin List -->
-        <ListBox Grid.Row="1" ItemsSource="{Binding FilteredPlugins}"
+        <ListBox Grid.Row="1" AutomationProperties.AutomationId="PluginBrowserList"
+                 ItemsSource="{Binding FilteredPlugins}"
                  SelectedItem="{Binding SelectedPlugin}"
                  VirtualizingPanel.ScrollUnit="Pixel"
                  Background="Transparent" BorderThickness="0"
@@ -81,7 +83,8 @@
                 <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
                     <ui:Button Content="Reset to Defaults" Appearance="Secondary" FontSize="11"
                                Margin="0,0,6,0" Click="OnResetParameters" />
-                    <ui:Button Content="Add to Pipeline" Command="{Binding AddToPipelineCommand}"
+                    <ui:Button AutomationProperties.AutomationId="AddToPipelineButton"
+                               Content="Add to Pipeline" Command="{Binding AddToPipelineCommand}"
                                CommandParameter="{Binding SelectedPlugin}" FontSize="11" />
                 </StackPanel>
             </Grid>

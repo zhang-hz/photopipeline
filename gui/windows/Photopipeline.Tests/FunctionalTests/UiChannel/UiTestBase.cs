@@ -9,6 +9,11 @@ public abstract class UiTestBase : IDisposable
     protected Process? _appProcess;
     protected bool _isRunning;
 
+    /// <summary>
+    /// Exposes the underlying WPF process for diagnostics (exit code, stdout, stderr).
+    /// </summary>
+    public Process? AppProcess => _appProcess;
+
     protected UiTestBase()
     {
         // Resolve from publish output or debug build
@@ -44,8 +49,49 @@ public abstract class UiTestBase : IDisposable
         _appProcess = Process.Start(startInfo);
         _isRunning = true;
 
-        // Wait for app to initialize
-        Thread.Sleep(5000);
+        // Poll for app initialization instead of blind Thread.Sleep(5000).
+        // Wait for the process to create a main window handle or until timeout.
+        if (!WaitForAppReady(TimeSpan.FromSeconds(30)))
+        {
+            // Fallback: if polling times out, try a shorter sleep as last resort
+            Thread.Sleep(2000);
+        }
+    }
+
+    /// <summary>
+    /// Polls the process until it is ready (has a main window handle, is responding).
+    /// Returns true if the app became ready within the timeout.
+    /// </summary>
+    private bool WaitForAppReady(TimeSpan timeout)
+    {
+        if (_appProcess == null) return false;
+
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (_appProcess.HasExited)
+                throw new InvalidOperationException(
+                    $"Application exited prematurely with code {_appProcess.ExitCode}");
+
+            // The process has created its main window
+            if (_appProcess.MainWindowHandle != IntPtr.Zero)
+                return true;
+
+            // Check if the process is responding
+            try
+            {
+                if (_appProcess.Responding)
+                    return true;
+            }
+            catch
+            {
+                // Process may not be fully initialized yet
+            }
+
+            Thread.Sleep(200);
+        }
+
+        return false;
     }
 
     public void StopApp()

@@ -16,11 +16,16 @@ public sealed class SettingsService : ISettingsService
     public event EventHandler<AppSettings>? SettingsChanged;
 
     public SettingsService(ILogger<SettingsService> logger)
+        : this(logger, Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "Photopipeline", "appsettings.json"))
+    {
+    }
+
+    public SettingsService(ILogger<SettingsService> logger, string settingsPath)
     {
         _logger = logger;
-        _settingsPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "Photopipeline", "appsettings.json");
+        _settingsPath = settingsPath;
         _jsonOptions = new JsonSerializerOptions { WriteIndented = true };
     }
 

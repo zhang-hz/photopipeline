@@ -3,11 +3,14 @@ using Xunit.Abstractions;
 
 namespace Photopipeline.Tests.FunctionalTests.ApiChannel;
 
+/// <summary>
+/// Layer 4 gRPC integration tests for format conversion.
+/// Verifies cross-format decode-encode cycles with IsValidFormat +
+/// PSNRAbove (lossless) or SSIMAbove (lossy) assertions.
+/// </summary>
 public sealed class FormatApiTests : ApiTestBase
 {
-    private readonly ITestOutputHelper _output;
-
-    public FormatApiTests(ITestOutputHelper output) => _output = output;
+    public FormatApiTests(ITestOutputHelper output) : base(output) { }
 
     public static IEnumerable<object[]> FormatTestCases =>
         TestCaseCatalog.GetByCategory("format")
@@ -18,26 +21,37 @@ public sealed class FormatApiTests : ApiTestBase
     [MemberData(nameof(FormatTestCases))]
     public async Task ConvertFormat(TestCaseDefinition tc)
     {
-        try { await EnsureConnectedAsync(); }
-        catch
-        {
-            _output.WriteLine("Backend not available — skipping format API test");
-            return;
-        }
+        // Iron Rule 2: No silent skip.
+        await RequireBackendAsync();
 
         using var outputMgr = new TestOutputManager(tc.Name);
         var inputPath = TestDataCatalog.Instance.GetPath(tc.InputImage);
         var ext = tc.OutputFormat.ToLowerInvariant();
         var outputPath = outputMgr.GetOutputPath($"{tc.Name}_output.{ext}");
 
-        await ExecuteAndGetOutput(tc.Pipeline!, inputPath, outputPath);
+        // Format tests may have no Pipeline — use identity passthrough.
+        await ExecuteOrIdentity(tc.Pipeline, inputPath, outputPath);
 
-        Assert.True(File.Exists(outputPath), $"Output file not found: {outputPath}");
-        ImageAssert.IsValidFormat(outputPath, tc.OutputFormat);
+        // Iron rule 1: Verify output format, dimensions, and non-empty.
+        AssertValidOutput(outputPath, tc.OutputFormat);
 
-        var fileInfo = new FileInfo(outputPath);
-        Assert.True(fileInfo.Length > 0, $"Output file is empty: {outputPath}");
+        // For lossless formats, verify pixel quality against input.
+        if (tc.OutputLossless == true)
+        {
+            ImageAssert.PSNRAbove(outputPath, inputPath, minPSNR_dB: tc.MinPSNR ?? 40.0);
+        }
+        else if (tc.MinSSIM.HasValue)
+        {
+            ImageAssert.SSIMAbove(outputPath, inputPath, tc.MinSSIM.Value);
+        }
 
-        _output.WriteLine($"PASS: {tc.Name} ({fileInfo.Length} bytes)");
+        // For all format tests: verify output bit depth if specified.
+        if (tc.OutputBitDepth.HasValue)
+        {
+            ImageAssert.IsValidFormat(outputPath, tc.OutputFormat,
+                expectedBitDepth: (int)tc.OutputBitDepth.Value);
+        }
+
+        _output?.WriteLine($"PASS: {tc.Name}");
     }
 }

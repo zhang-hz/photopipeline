@@ -16,7 +16,10 @@ public sealed class TestDataCatalog
     private TestDataCatalog()
     {
         var manifestPath = Path.Combine(InputDir, "manifest.json");
-        if (!File.Exists(manifestPath)) return;
+        if (!File.Exists(manifestPath))
+            throw new FileNotFoundException(
+                $"Test data manifest not found at: {manifestPath}. " +
+                "Run GenerateTestDataHelper first, or ensure test data is deployed.");
 
         var json = File.ReadAllText(manifestPath);
         var records = JsonSerializer.Deserialize<List<TestImageRecord>>(json);

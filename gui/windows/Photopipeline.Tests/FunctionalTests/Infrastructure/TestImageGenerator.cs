@@ -260,7 +260,7 @@ public static class TestImageGenerator
 
     private static void GenerateFormatVarietyImages(string dir, List<TestImageRecord> manifest)
     {
-        var formats = new[] { "PNG", "JPEG", "TIFF", "WEBP", "BMP" };
+        var formats = new[] { "PNG", "JPEG", "TIFF", "WEBP", "BMP", "AVIF", "HEIF", "JXL" };
         foreach (var fmt in formats)
         {
             var path = Path.Combine(dir, "format_variety", $"test_256x128.{fmt.ToLowerInvariant()}");
@@ -270,7 +270,16 @@ public static class TestImageGenerator
             using var bmp = new SKBitmap(info);
             using var canvas = new SKCanvas(bmp);
             PaintTestPattern(canvas, 256, 128);
-            SaveBitmap(bmp, path, fmt == "JPEG" ? SKEncodedImageFormat.Jpeg : SKEncodedImageFormat.Png,
+            SaveBitmap(bmp, path, fmt switch
+            {
+                "JPEG" => SKEncodedImageFormat.Jpeg,
+                "TIFF" => SKEncodedImageFormat.Tiff,
+                "WEBP" => SKEncodedImageFormat.Webp,
+                "BMP" => SKEncodedImageFormat.Bmp,
+                // AVIF/HEIF/JXL: saved as PNG (SkiaSharp doesn't encode these natively)
+                // but tagged with their format for input-format test awareness
+                _ => SKEncodedImageFormat.Png
+            },
                 fmt switch
                 {
                     "JPEG" => 90,
@@ -297,11 +306,12 @@ public static class TestImageGenerator
             tags: new[] { "16bit", "gradient", "rgb" }));
 
         // 32-bit float gradient (stored as 16-bit PNG since PNG doesn't support 32-bit float natively)
+        // Uses extended-range values (0–4x sRGB) for HDR simulation
         var path32 = Path.Combine(dir, "high_bitdepth", "gradient_rgb_hdr_256x128.png");
         SaveHDRGradient(path32, 256, 128);
         manifest.Add(CreateRecord("gradient_rgb_hdr", "high_bitdepth/gradient_rgb_hdr_256x128.png",
-            "high_bitdepth", 256, 128, 16,
-            tags: new[] { "hdr", "gradient", "rgb", "float" }));
+            "high_bitdepth", 256, 128, 16, colorSpace: "LinearRec2020",
+            tags: new[] { "hdr", "gradient", "rgb", "float", "high_dynamic_range" }));
     }
 
     // ── Drawing helpers ──
@@ -317,55 +327,113 @@ public static class TestImageGenerator
 
     private static void SaveGradient(string path, int w, int h, GradientDirection dir_, bool gray, int bitDepth)
     {
+        bool is16Bit = bitDepth >= 16;
         var info = new SKImageInfo(w, h,
-            bitDepth >= 16 ? SKColorType.Rgba16161616 : SKColorType.Rgba8888,
+            is16Bit ? SKColorType.Rgba16161616 : SKColorType.Rgba8888,
             SKAlphaType.Premul, SrgbColorSpace);
         using var bmp = new SKBitmap(info);
-        using var canvas = new SKCanvas(bmp);
-        using var paint = new SKPaint { IsAntialias = false };
 
-        for (int y = 0; y < h; y++)
+        if (is16Bit)
         {
-            for (int x = 0; x < w; x++)
+            // Write ushort values directly for proper 16-bit precision
+            int pixelCount = w * h * 4; // Rgba = 4 channels
+            var data = new ushort[pixelCount];
+            for (int y = 0; y < h; y++)
             {
-                double t;
-                switch (dir_)
+                for (int x = 0; x < w; x++)
                 {
-                    case GradientDirection.Horizontal: t = (double)x / w; break;
-                    case GradientDirection.Vertical: t = (double)y / h; break;
-                    case GradientDirection.Diagonal: t = (x / (double)w + y / (double)h) / 2.0; break;
-                    case GradientDirection.Radial:
-                        double dx = (x - w / 2.0) / (w / 2.0);
-                        double dy = (y - h / 2.0) / (h / 2.0);
-                        t = Math.Clamp(Math.Sqrt(dx * dx + dy * dy), 0, 1);
-                        break;
-                    default: t = 0.5; break;
-                }
-
-                byte r, g, b;
-                if (gray)
-                {
-                    r = g = b = (byte)(t * 255);
-                }
-                else
-                {
-                    // HSL-like gradient cycling through hues
-                    double hue = t * 6.0;
-                    double c = 1.0, xc = c * (1 - Math.Abs(hue % 2 - 1));
-                    double r1, g1, b1;
-                    switch ((int)hue)
+                    double t;
+                    switch (dir_)
                     {
-                        case 0: r1 = c; g1 = xc; b1 = 0; break;
-                        case 1: r1 = xc; g1 = c; b1 = 0; break;
-                        case 2: r1 = 0; g1 = c; b1 = xc; break;
-                        case 3: r1 = 0; g1 = xc; b1 = c; break;
-                        case 4: r1 = xc; g1 = 0; b1 = c; break;
-                        default: r1 = c; g1 = 0; b1 = xc; break;
+                        case GradientDirection.Horizontal: t = (double)x / w; break;
+                        case GradientDirection.Vertical: t = (double)y / h; break;
+                        case GradientDirection.Diagonal: t = (x / (double)w + y / (double)h) / 2.0; break;
+                        case GradientDirection.Radial:
+                            double dx = (x - w / 2.0) / (w / 2.0);
+                            double dy = (y - h / 2.0) / (h / 2.0);
+                            t = Math.Clamp(Math.Sqrt(dx * dx + dy * dy), 0, 1);
+                            break;
+                        default: t = 0.5; break;
                     }
-                    r = (byte)(r1 * 255); g = (byte)(g1 * 255); b = (byte)(b1 * 255);
+
+                    ushort r, g, b;
+                    if (gray)
+                    {
+                        r = g = b = (ushort)(t * 65535);
+                    }
+                    else
+                    {
+                        double hue = t * 6.0;
+                        double c = 1.0, xc = c * (1 - Math.Abs(hue % 2 - 1));
+                        double r1, g1, b1;
+                        switch ((int)hue)
+                        {
+                            case 0: r1 = c; g1 = xc; b1 = 0; break;
+                            case 1: r1 = xc; g1 = c; b1 = 0; break;
+                            case 2: r1 = 0; g1 = c; b1 = xc; break;
+                            case 3: r1 = 0; g1 = xc; b1 = c; break;
+                            case 4: r1 = xc; g1 = 0; b1 = c; break;
+                            default: r1 = c; g1 = 0; b1 = xc; break;
+                        }
+                        r = (ushort)(r1 * 65535); g = (ushort)(g1 * 65535); b = (ushort)(b1 * 65535);
+                    }
+                    int idx = (y * w + x) * 4;
+                    data[idx] = r;
+                    data[idx + 1] = g;
+                    data[idx + 2] = b;
+                    data[idx + 3] = 65535;
                 }
-                paint.Color = new SKColor(r, g, b);
-                canvas.DrawPoint(x, y, paint);
+            }
+            var bytes = new byte[pixelCount * 2];
+            System.Buffer.BlockCopy(data, 0, bytes, 0, bytes.Length);
+            System.Runtime.InteropServices.Marshal.Copy(bytes, 0, bmp.GetPixels(), bytes.Length);
+        }
+        else
+        {
+            using var canvas = new SKCanvas(bmp);
+            using var paint = new SKPaint { IsAntialias = false };
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    double t;
+                    switch (dir_)
+                    {
+                        case GradientDirection.Horizontal: t = (double)x / w; break;
+                        case GradientDirection.Vertical: t = (double)y / h; break;
+                        case GradientDirection.Diagonal: t = (x / (double)w + y / (double)h) / 2.0; break;
+                        case GradientDirection.Radial:
+                            double dx = (x - w / 2.0) / (w / 2.0);
+                            double dy = (y - h / 2.0) / (h / 2.0);
+                            t = Math.Clamp(Math.Sqrt(dx * dx + dy * dy), 0, 1);
+                            break;
+                        default: t = 0.5; break;
+                    }
+
+                    byte r, g, b;
+                    if (gray)
+                    {
+                        r = g = b = (byte)(t * 255);
+                    }
+                    else
+                    {
+                        double hue = t * 6.0;
+                        double c = 1.0, xc = c * (1 - Math.Abs(hue % 2 - 1));
+                        double r1, g1, b1;
+                        switch ((int)hue)
+                        {
+                            case 0: r1 = c; g1 = xc; b1 = 0; break;
+                            case 1: r1 = xc; g1 = c; b1 = 0; break;
+                            case 2: r1 = 0; g1 = c; b1 = xc; break;
+                            case 3: r1 = 0; g1 = xc; b1 = c; break;
+                            case 4: r1 = xc; g1 = 0; b1 = c; break;
+                            default: r1 = c; g1 = 0; b1 = xc; break;
+                        }
+                        r = (byte)(r1 * 255); g = (byte)(g1 * 255); b = (byte)(b1 * 255);
+                    }
+                    paint.Color = new SKColor(r, g, b);
+                    canvas.DrawPoint(x, y, paint);
+                }
             }
         }
         SaveBitmap(bmp, path, SKEncodedImageFormat.Png, 100);
@@ -376,18 +444,25 @@ public static class TestImageGenerator
         var info = new SKImageInfo(w, h, SKColorType.Rgba8888, SKAlphaType.Premul, SrgbColorSpace);
         using var bmp = new SKBitmap(info);
         using var canvas = new SKCanvas(bmp);
-        int cellW = Math.Max(1, w / cols);
-        int cellH = Math.Max(1, h / rows);
+        // Cap columns/rows to avoid degenerate or out-of-bounds cells
+        int effectiveCols = Math.Min(cols, w);
+        int effectiveRows = Math.Min(rows, h);
+        int cellW = Math.Max(1, w / effectiveCols);
+        int cellH = Math.Max(1, h / effectiveRows);
 
         using var paintWhite = new SKPaint { Color = SKColors.White };
         using var paintBlack = new SKPaint { Color = SKColors.Black };
 
-        for (int cy = 0; cy < rows; cy++)
+        for (int cy = 0; cy < effectiveRows; cy++)
         {
-            for (int cx = 0; cx < cols; cx++)
+            for (int cx = 0; cx < effectiveCols; cx++)
             {
                 var paint = (cx + cy) % 2 == 0 ? paintWhite : paintBlack;
-                canvas.DrawRect(cx * cellW, cy * cellH, cellW, cellH, paint);
+                int x = cx * cellW;
+                int y = cy * cellH;
+                int drawW = Math.Min(cellW, w - x);
+                int drawH = Math.Min(cellH, h - y);
+                canvas.DrawRect(x, y, drawW, drawH, paint);
             }
         }
         SaveBitmap(bmp, path, SKEncodedImageFormat.Png, 100);
@@ -421,29 +496,68 @@ public static class TestImageGenerator
 
     private static void SaveColorBars(string path, int w, int h, int bitDepth)
     {
-        var colorType = bitDepth >= 16 ? SKColorType.Rgba16161616 : SKColorType.Rgba8888;
+        bool is16Bit = bitDepth >= 16;
+        var colorType = is16Bit ? SKColorType.Rgba16161616 : SKColorType.Rgba8888;
         var info = new SKImageInfo(w, h, colorType, SKAlphaType.Premul, SrgbColorSpace);
         using var bmp = new SKBitmap(info);
-        using var canvas = new SKCanvas(bmp);
 
-        var colors = new[]
+        // Color values: proper 16-bit (ushort max 65535) or 8-bit (byte max 255)
+        var colorValues16 = new (ushort R, ushort G, ushort B)[]
         {
-            new SKColor(255, 255, 255), // White
-            new SKColor(255, 255, 0),   // Yellow
-            new SKColor(0, 255, 255),   // Cyan
-            new SKColor(0, 255, 0),     // Green
-            new SKColor(255, 0, 255),   // Magenta
-            new SKColor(255, 0, 0),     // Red
-            new SKColor(0, 0, 255),     // Blue
-            new SKColor(0, 0, 0),       // Black
+            (65535, 65535, 65535), // White
+            (65535, 65535, 0),     // Yellow
+            (0, 65535, 65535),     // Cyan
+            (0, 65535, 0),         // Green
+            (65535, 0, 65535),     // Magenta
+            (65535, 0, 0),         // Red
+            (0, 0, 65535),         // Blue
+            (0, 0, 0),             // Black
         };
 
-        float barW = (float)w / colors.Length;
-        using var paint = new SKPaint();
-        for (int i = 0; i < colors.Length; i++)
+        float barW = (float)w / colorValues16.Length;
+
+        if (is16Bit)
         {
-            paint.Color = colors[i];
-            canvas.DrawRect(i * barW, 0, barW, h, paint);
+            // Write ushort values directly
+            int pixelCount = w * h * 4;
+            var data = new ushort[pixelCount];
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    int barIdx = Math.Min((int)(x / barW), colorValues16.Length - 1);
+                    var (r, g, b) = colorValues16[barIdx];
+                    int idx = (y * w + x) * 4;
+                    data[idx] = r;
+                    data[idx + 1] = g;
+                    data[idx + 2] = b;
+                    data[idx + 3] = 65535;
+                }
+            }
+            var bytes = new byte[pixelCount * 2];
+            System.Buffer.BlockCopy(data, 0, bytes, 0, bytes.Length);
+            System.Runtime.InteropServices.Marshal.Copy(bytes, 0, bmp.GetPixels(), bytes.Length);
+        }
+        else
+        {
+            using var canvas = new SKCanvas(bmp);
+            var colors = new[]
+            {
+                new SKColor(255, 255, 255), // White
+                new SKColor(255, 255, 0),   // Yellow
+                new SKColor(0, 255, 255),   // Cyan
+                new SKColor(0, 255, 0),     // Green
+                new SKColor(255, 0, 255),   // Magenta
+                new SKColor(255, 0, 0),     // Red
+                new SKColor(0, 0, 255),     // Blue
+                new SKColor(0, 0, 0),       // Black
+            };
+            using var paint = new SKPaint();
+            for (int i = 0; i < colors.Length; i++)
+            {
+                paint.Color = colors[i];
+                canvas.DrawRect(i * barW, 0, barW, h, paint);
+            }
         }
         SaveBitmap(bmp, path, SKEncodedImageFormat.Png, 100);
     }
@@ -469,17 +583,28 @@ public static class TestImageGenerator
     {
         var info = new SKImageInfo(w, h, SKColorType.Rgba16161616, SKAlphaType.Premul, SrgbColorSpace);
         using var bmp = new SKBitmap(info);
-        using var canvas = new SKCanvas(bmp);
+
+        // Write ushort values directly for proper 16-bit precision (0..65535)
+        int pixelCount = w * h * 4;
+        var data = new ushort[pixelCount];
         float stepW = (float)w / steps;
 
-        using var paint = new SKPaint();
-        for (int i = 0; i < steps; i++)
+        for (int y = 0; y < h; y++)
         {
-            float frac = (float)i / (steps - 1);
-            byte v = (byte)(frac * 255);
-            paint.Color = new SKColor(v, v, v);
-            canvas.DrawRect(i * stepW, 0, stepW, h, paint);
+            for (int x = 0; x < w; x++)
+            {
+                int stepIdx = Math.Min((int)(x / stepW), steps - 1);
+                ushort v = (ushort)(stepIdx * 65535 / (steps - 1));
+                int idx = (y * w + x) * 4;
+                data[idx] = v;
+                data[idx + 1] = v;
+                data[idx + 2] = v;
+                data[idx + 3] = 65535;
+            }
         }
+        var bytes = new byte[pixelCount * 2];
+        System.Buffer.BlockCopy(data, 0, bytes, 0, bytes.Length);
+        System.Runtime.InteropServices.Marshal.Copy(bytes, 0, bmp.GetPixels(), bytes.Length);
         SaveBitmap(bmp, path, SKEncodedImageFormat.Png, 100);
     }
 
@@ -592,21 +717,26 @@ public static class TestImageGenerator
     {
         var info = new SKImageInfo(w, h, SKColorType.Rgba16161616, SKAlphaType.Premul, SrgbColorSpace);
         using var bmp = new SKBitmap(info);
-        using var canvas = new SKCanvas(bmp);
-        using var paint = new SKPaint { IsAntialias = false };
-
+        int pixelCount = w * h * 4; // Rgba = 4 channels
+        int byteLen = pixelCount * 2;
+        var data = new ushort[pixelCount];
         for (int y = 0; y < h; y++)
         {
             for (int x = 0; x < w; x++)
             {
-                // Values >1.0 (HDR range) scaled into 16-bit surface
                 float t = (float)x / w;
-                float val = t * 4.0f; // Up to 4x SDR white
-                byte v = (byte)Math.Clamp(val * 64, 0, 255);
-                paint.Color = new SKColor(v, v, v);
-                canvas.DrawPoint(x, y, paint);
+                float val = t * 4.0f;
+                ushort v = (ushort)Math.Clamp(val * 65535f / 4.0f, 0, 65535);
+                int idx = (y * w + x) * 4;
+                data[idx] = v;
+                data[idx + 1] = v;
+                data[idx + 2] = v;
+                data[idx + 3] = 65535;
             }
         }
+        var bytes = new byte[byteLen];
+        System.Buffer.BlockCopy(data, 0, bytes, 0, byteLen);
+        System.Runtime.InteropServices.Marshal.Copy(bytes, 0, bmp.GetPixels(), byteLen);
         SaveBitmap(bmp, path, SKEncodedImageFormat.Png, 100);
     }
 
@@ -633,19 +763,15 @@ public static class TestImageGenerator
 
     private static void SaveBitmap(SKBitmap bmp, string path, SKEncodedImageFormat format, int quality)
     {
-        // Always convert to 8-bit RGBA for reliable encoding
-        using var safe = new SKBitmap(bmp.Width, bmp.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
-        using var canvas = new SKCanvas(safe);
-        canvas.DrawBitmap(bmp, 0, 0);
-
-        using var image = SKImage.FromBitmap(safe);
+        using var image = SKImage.FromBitmap(bmp);
         using var data = image.Encode(format, quality);
-        using var stream = File.OpenWrite(path);
+        using var stream = new FileStream(path, FileMode.Create, FileAccess.Write);
         data.SaveTo(stream);
     }
 
     private static TestImageRecord CreateRecord(string id, string relativePath, string category,
-        int width, int height, int bitDepth, bool hasAlpha = false, string[]? tags = null)
+        int width, int height, int bitDepth, bool hasAlpha = false, string[]? tags = null,
+        string colorSpace = "sRGB")
         => new()
         {
             Id = id,
@@ -655,7 +781,7 @@ public static class TestImageGenerator
             Width = width,
             Height = height,
             BitDepth = bitDepth,
-            ColorSpace = "sRGB",
+            ColorSpace = colorSpace,
             HasAlpha = hasAlpha,
             Tags = tags ?? [],
             Description = $"{category} test image {width}x{height} {bitDepth}bit"

@@ -127,11 +127,11 @@ fn e2e_format_decoder_returns_pixel_buffer() {
     photopipeline_plugins::register_all(&reg);
 
     let input_plugins = reg.by_category(photopipeline_core::PluginCategory::Input);
-    if !input_plugins.is_empty() {
-        for p in &input_plugins {
-            assert!(p.id().len() > 0);
-            assert!(p.requires_pixel_access() || !p.requires_pixel_access());
-        }
+    assert!(!input_plugins.is_empty(), "at least one input plugin must be registered");
+    for p in &input_plugins {
+        assert!(!p.id().is_empty(), "plugin ID must not be empty");
+        assert!(p.requires_pixel_access(),
+            "input plugin {} must require pixel access", p.id());
     }
 }
 

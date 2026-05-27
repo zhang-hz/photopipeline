@@ -46,8 +46,17 @@ public sealed class ErrorRecoveryScenarioTests
         var vm = new BatchViewModel(logger, batchServiceMock.Object, null!);
         vm.AddToQueueCommand.Execute(new ImageEntry { FileName = "test.dng" });
         vm.OutputDirectory = @"C:\Output";
+        // Must set PipelineConfigPath, otherwise StartBatch returns early with
+        // "Create a pipeline in the Pipeline Editor first" before reaching SubmitAsync
+        vm.PipelineConfigPath = "test-pipeline";
 
         vm.StartBatchCommand.Execute(null);
+
+        // After service failure, the VM should set an error message and not be running
+        vm.IsRunning.Should().BeFalse("batch should stop running on service failure");
+        vm.ErrorMessage.Should().NotBeNull("service failure should populate ErrorMessage");
+        vm.ErrorMessage.Should().Contain("Server error",
+            "ErrorMessage should contain the exception message");
     }
 
     [Fact]
@@ -63,6 +72,10 @@ public sealed class ErrorRecoveryScenarioTests
         vm.AddNodeAt(new PluginInfo { Id = "test", Name = "Test" }, 100, 100);
 
         vm.ValidateCommand.Execute(null);
+
+        // Backend failure during validation should set an error message
+        vm.ErrorMessage.Should().NotBeNull("backend failure during validate should set ErrorMessage");
+        vm.IsPipelineValid.Should().BeFalse("pipeline should not be valid when validation fails");
     }
 
     [Fact]
@@ -72,21 +85,32 @@ public sealed class ErrorRecoveryScenarioTests
         var pipelineService = Mock.Of<IPipelineService>();
         var vm = new PipelineEditorViewModel(logger, pipelineService);
 
+        // Verify initial state
         vm.IsBusy.Should().BeFalse();
+
+        // ViewModelBase.ExecuteAsync has guard: if (IsBusy) return;
+        // PipelineEditorViewModel.AddNodeAt has guard: if (IsExecuting) return;
+        // Test both guards: IsExecuting prevents node addition, IsBusy prevents re-entry via ExecuteAsync
+        vm.IsExecuting = true;
+        vm.AddNodeAt(new PluginInfo { Id = "test", Name = "Test" }, 100, 100);
+        vm.Nodes.Should().BeEmpty("IsExecuting guard in AddNodeAt prevents addition while executing");
     }
 
     [Fact]
     public void ViewModelBase_ErrorState_ClearsOnNextOperation()
     {
-        var logger = Mock.Of<ILogger<FilmstripViewModel>>();
-        var imageService = Mock.Of<IImageService>();
-        var vm = new FilmstripViewModel(logger, imageService, null!);
+        var logger = Mock.Of<ILogger<PipelineEditorViewModel>>();
+        var pipelineService = Mock.Of<IPipelineService>();
+        var vm = new PipelineEditorViewModel(logger, pipelineService);
 
         vm.ErrorMessage = "Previous error";
+        vm.ErrorMessage.Should().Be("Previous error");
 
-        vm.ClearImagesCommand.Execute(null);
+        // Executing a command through ExecuteSync should clear the error
+        // (ViewModelBase.ExecuteSync sets ErrorMessage = null before running the action)
+        vm.NewPipelineCommand.Execute(null);
 
-        // ClearImages is synchronous, so ErrorMessage should not be affected
-        vm.Images.Should().BeEmpty();
+        vm.ErrorMessage.Should().BeNull("Error should be cleared when a new command executes");
+        vm.Nodes.Should().BeEmpty("NewPipeline should reset all state");
     }
 }

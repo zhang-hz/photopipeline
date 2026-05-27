@@ -79,12 +79,15 @@ public sealed class PipelineEditorScenarioTests
         vm.AddNodeAt(P("a", "A"), 80, 100);
         vm.AddNodeAt(P("b", "B"), 300, 100);
         vm.AddNodeAt(P("c", "C"), 520, 100);
+        // Create linear chain: A → B → C
         vm.ConnectNodesCommand.Execute((vm.Nodes[0].Id, vm.Nodes[1].Id));
         vm.ConnectNodesCommand.Execute((vm.Nodes[1].Id, vm.Nodes[2].Id));
 
-        var canClose = vm.CanConnect(vm.Nodes[2].Id, vm.Nodes[0].Id);
+        // Adding C → A would close the cycle A→B→C→A; CanConnect should reject this
+        var wouldCreateCycle = vm.CanConnect(vm.Nodes[2].Id, vm.Nodes[0].Id);
 
-        canClose.Should().BeFalse();
+        wouldCreateCycle.Should().BeFalse(
+            "connecting last node back to first would create a cycle");
     }
 
     [Fact]

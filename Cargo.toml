@@ -5,12 +5,15 @@ members = [
     "crates/engine",
     "crates/plugins",
     "crates/server",
+    "crates/test-defs",
     "crates/halide",
     "crates/oiio",
     "cli",
     "tests",
     "tests/test_harness",
+    "tests/pipeline_integration",
     "tests/e2e",
+    "tests/grpc_e2e",
     "benches",
 ]
 resolver = "2"

@@ -1,3 +1,7 @@
+// NOTE: These concurrency tests create per-thread isolated state (separate runtime,
+// separate registry, separate graph). They verify that parallel execution does not
+// panic or deadlock, but do NOT detect data races on shared mutable state.
+// For true race detection, tests should share state across threads.
 #![allow(clippy::result_large_err)]
 #![allow(unused_imports)]
 
@@ -100,7 +104,7 @@ fn e2e_concurrent_registry_access_8_threads() {
                 let cats = r.categories();
                 assert!(!cats.is_empty());
 
-                if let Some(p) = r.get(&"photopipeline.plugins.exif_rw".into()) {
+                if let Some(p) = r.get("photopipeline.plugins.exif_rw") {
                     let _ = p.id();
                     let _ = p.name();
                     let _ = p.category();
@@ -261,7 +265,7 @@ fn e2e_concurrent_plugin_validate() {
         let r = reg.clone();
         handles.push(thread::spawn(move || {
             for _i in 0..20 {
-                if let Some(p) = r.get(&"photopipeline.plugins.exif_rw".into()) {
+                if let Some(p) = r.get("photopipeline.plugins.exif_rw") {
                     let schema = p.parameter_schema();
                     let defaults = schema.defaults();
                     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -295,7 +299,7 @@ fn e2e_concurrent_mixed_registry_operations() {
             for _j in 0..100 {
                 let all = r.all();
                 assert!(!all.is_empty());
-                if let Some(p) = r.get(&"photopipeline.plugins.exif_rw".into()) {
+                if let Some(p) = r.get("photopipeline.plugins.exif_rw") {
                     let schema = p.parameter_schema();
                     let defaults = schema.defaults();
                     let rt = tokio::runtime::Runtime::new().unwrap();

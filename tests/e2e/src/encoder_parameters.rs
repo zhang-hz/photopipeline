@@ -35,7 +35,7 @@ fn e2e_heif_encoder_quality_param_range() {
     let reg = Arc::new(Registry::new());
     photopipeline_plugins::register_all(&reg);
 
-    let plugin = reg.get(&"photopipeline.plugins.heif_encoder".into());
+    let plugin = reg.get("photopipeline.plugins.heif_encoder");
     assert!(plugin.is_some(), "heif_encoder plugin should be registered");
 
     if let Some(p) = plugin {
@@ -50,7 +50,7 @@ fn e2e_png_encoder_compression_level() {
     let reg = Arc::new(Registry::new());
     photopipeline_plugins::register_all(&reg);
 
-    let plugin = reg.get(&"photopipeline.plugins.png_encoder".into());
+    let plugin = reg.get("photopipeline.plugins.png_encoder");
     assert!(plugin.is_some(), "png_encoder plugin should be registered");
 
     if let Some(p) = plugin {
@@ -75,12 +75,16 @@ fn e2e_jxl_encoder_effort_parameter() {
     let reg = Arc::new(Registry::new());
     photopipeline_plugins::register_all(&reg);
 
-    let plugin = reg.get(&"photopipeline.plugins.jxl_encoder".into());
+    let plugin = reg.get("photopipeline.plugins.jxl_encoder");
     assert!(plugin.is_some(), "jxl_encoder plugin should be registered");
 
     if let Some(p) = plugin {
         let schema = p.parameter_schema();
-        let _ = schema.defaults();
+        let defaults = schema.defaults();
+        assert!(!defaults.is_empty(),
+            "jxl_encoder must have default parameters");
+        assert!(defaults.contains_key("effort"),
+            "jxl_encoder schema must include effort parameter");
     }
 }
 
@@ -89,11 +93,13 @@ fn e2e_avif_encoder_speed_param() {
     let reg = Arc::new(Registry::new());
     photopipeline_plugins::register_all(&reg);
 
-    let plugin = reg.get(&"photopipeline.plugins.avif_encoder".into());
+    let plugin = reg.get("photopipeline.plugins.avif_encoder");
     assert!(plugin.is_some(), "avif_encoder plugin should be registered");
 
     if let Some(p) = plugin {
-        let _schema = p.parameter_schema();
+        let schema = p.parameter_schema();
+        assert!(!schema.sections.is_empty(),
+            "avif_encoder schema must not be empty");
     }
 }
 
@@ -102,13 +108,16 @@ fn e2e_tiff_encoder_compression_options() {
     let reg = Arc::new(Registry::new());
     photopipeline_plugins::register_all(&reg);
 
-    let plugin = reg.get(&"photopipeline.plugins.tiff_encoder".into());
+    let plugin = reg.get("photopipeline.plugins.tiff_encoder");
     assert!(plugin.is_some(), "tiff_encoder plugin should be registered");
 
     if let Some(p) = plugin {
         let schema = p.parameter_schema();
         let defaults = schema.defaults();
-        let _ = defaults;
+        assert!(!defaults.is_empty(),
+            "tiff_encoder must have default parameters");
+        assert!(defaults.contains_key("compression"),
+            "tiff_encoder schema must include compression parameter");
     }
 }
 

@@ -44,7 +44,7 @@ fn rt() -> tokio::runtime::Runtime {
 
 fn encode_png(reg: &Arc<Registry>, pb: &PixelBuffer, rt: &tokio::runtime::Runtime) -> Vec<u8> {
     let png = reg
-        .get_format_processor(&"photopipeline.plugins.png_encoder".into())
+        .get_format_processor("photopipeline.plugins.png_encoder")
         .unwrap();
     rt.block_on(async {
         png.encode(pb, &Metadata::default(), &EncodeOptions::default())
@@ -55,7 +55,7 @@ fn encode_png(reg: &Arc<Registry>, pb: &PixelBuffer, rt: &tokio::runtime::Runtim
 
 fn decode_png(reg: &Arc<Registry>, data: &[u8], rt: &tokio::runtime::Runtime) -> PixelBuffer {
     let png = reg
-        .get_format_processor(&"photopipeline.plugins.png_encoder".into())
+        .get_format_processor("photopipeline.plugins.png_encoder")
         .unwrap();
     rt.block_on(async { png.decode(data, &DecodeOptions::default()).await })
         .unwrap()
@@ -64,7 +64,7 @@ fn decode_png(reg: &Arc<Registry>, data: &[u8], rt: &tokio::runtime::Runtime) ->
 
 fn encode_tiff(reg: &Arc<Registry>, pb: &PixelBuffer, rt: &tokio::runtime::Runtime) -> Vec<u8> {
     let tiff = reg
-        .get_format_processor(&"photopipeline.plugins.tiff_encoder".into())
+        .get_format_processor("photopipeline.plugins.tiff_encoder")
         .unwrap();
     rt.block_on(async {
         tiff.encode(pb, &Metadata::default(), &EncodeOptions::default())
@@ -863,7 +863,7 @@ fn encode_format(
     quality: f32,
     rt: &tokio::runtime::Runtime,
 ) -> Vec<u8> {
-    let proc = reg.get_format_processor(&plugin_id.into()).unwrap();
+    let proc = reg.get_format_processor(plugin_id).unwrap();
     let opts = EncodeOptions {
         format: ImageFormat::JPEG,
         quality: Some(quality),
@@ -879,7 +879,7 @@ fn decode_format(
     data: &[u8],
     rt: &tokio::runtime::Runtime,
 ) -> PixelBuffer {
-    let proc = reg.get_format_processor(&plugin_id.into()).unwrap();
+    let proc = reg.get_format_processor(plugin_id).unwrap();
     rt.block_on(async { proc.decode(data, &DecodeOptions::default()).await })
         .unwrap()
         .buffer

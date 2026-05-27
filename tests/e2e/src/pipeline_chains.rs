@@ -105,7 +105,15 @@ fn e2e_metadata_pipeline_gps_and_time_shift() {
         ],
         edges: vec![
             TemplateEdge {
-                from: "exif_rw".into(),
+                from: "colorspace".into(),
+                to: "lens".into(),
+            },
+            TemplateEdge {
+                from: "lens".into(),
+                to: "denoise".into(),
+            },
+            TemplateEdge {
+                from: "denoise".into(),
                 to: "gps".into(),
             },
             TemplateEdge {
@@ -146,8 +154,9 @@ fn e2e_metadata_pipeline_gps_and_time_shift() {
     });
 
     match result {
-        Ok(_exec_result) => {
-            assert!(true, "metadata pipeline executed");
+        Ok(exec_result) => {
+            assert!(!exec_result.output_data.is_empty(),
+                "metadata pipeline must produce non-empty output");
         }
         Err(e) => {
             let msg = e.to_string();

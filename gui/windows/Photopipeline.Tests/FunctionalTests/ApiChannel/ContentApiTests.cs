@@ -3,11 +3,13 @@ using Xunit.Abstractions;
 
 namespace Photopipeline.Tests.FunctionalTests.ApiChannel;
 
+/// <summary>
+/// Layer 4 gRPC integration tests for content identity/passthrough.
+/// Verifies that decode-then-re-encode pipelines preserve pixel data.
+/// </summary>
 public sealed class ContentApiTests : ApiTestBase
 {
-    private readonly ITestOutputHelper _output;
-
-    public ContentApiTests(ITestOutputHelper output) => _output = output;
+    public ContentApiTests(ITestOutputHelper output) : base(output) { }
 
     public static IEnumerable<object[]> ContentTestCases =>
         TestCaseCatalog.GetByCategory("content")
@@ -18,23 +20,32 @@ public sealed class ContentApiTests : ApiTestBase
     [MemberData(nameof(ContentTestCases))]
     public async Task ContentValidation(TestCaseDefinition tc)
     {
-        try { await EnsureConnectedAsync(); }
-        catch
-        {
-            _output.WriteLine("Backend not available — skipping content API test");
-            return;
-        }
+        // Iron Rule 2: No silent skip.
+        await RequireBackendAsync();
 
         using var outputMgr = new TestOutputManager(tc.Name);
         var inputPath = TestDataCatalog.Instance.GetPath(tc.InputImage);
-        var outputPath = outputMgr.GetOutputPath($"{tc.Name}_output.tif");
+        var ext = tc.OutputFormat.ToLowerInvariant();
+        var outputPath = outputMgr.GetOutputPath($"{tc.Name}_output.{ext}");
 
-        await ExecuteAndGetOutput(tc.Pipeline!, inputPath, outputPath);
+        // Content identity tests may have no Pipeline — use passthrough.
+        await ExecuteOrIdentity(tc.Pipeline, inputPath, outputPath);
 
-        Assert.True(File.Exists(outputPath), $"Output file not found: {outputPath}");
-        var fileInfo = new FileInfo(outputPath);
-        Assert.True(fileInfo.Length > 0, $"Content output is empty: {outputPath}");
+        // Iron rule 1: Verify output format, dimensions, and non-empty.
+        AssertValidOutput(outputPath, tc.OutputFormat);
 
-        _output.WriteLine($"PASS: {tc.Name} ({fileInfo.Length} bytes)");
+        // For identity content tests (TolerancePerChannel=0): output must match input.
+        if (tc.TolerancePerChannel == 0)
+        {
+            ImageAssert.PixelsEqual(outputPath, inputPath, tc.TolerancePerChannel);
+            _output?.WriteLine($"PASS: {tc.Name} — pixel-identical to input (identity verified)");
+        }
+        else
+        {
+            // For content with tolerance, use PSNR with test-case-specified threshold.
+            var psnrThreshold = tc.MinPSNR ?? 30.0;
+            ImageAssert.PSNRAbove(outputPath, inputPath, minPSNR_dB: psnrThreshold);
+            _output?.WriteLine($"PASS: {tc.Name} — PSNR above {psnrThreshold}dB");
+        }
     }
 }

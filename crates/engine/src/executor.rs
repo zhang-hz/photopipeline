@@ -3,7 +3,8 @@ use std::fmt;
 use std::sync::Arc;
 
 use photopipeline_core::{
-    ImageInfo, Metadata, NodeId, PixelBuffer, PluginError, PluginResult, ProcessingStats,
+    EncodeOptions, ImageInfo, Metadata, NodeId, PixelBuffer, PluginError, PluginResult,
+    ProcessingStats,
 };
 use photopipeline_plugin::{ProgressSink, Registry};
 
@@ -58,6 +59,7 @@ impl Default for NodeRunState {
 pub struct ExecutionContext {
     pub image_info: ImageInfo,
     pub buffer: Option<PixelBuffer>,
+    pub encoded_output: Option<Vec<u8>>,
     pub metadata: Metadata,
     pub node_states: HashMap<NodeId, NodeRunState>,
 }
@@ -67,6 +69,7 @@ impl ExecutionContext {
         Self {
             image_info,
             buffer,
+            encoded_output: None,
             metadata,
             node_states: HashMap::new(),
         }
@@ -76,6 +79,7 @@ impl ExecutionContext {
 #[derive(Debug)]
 pub struct ExecutionResult {
     pub buffer: Option<PixelBuffer>,
+    pub encoded_output: Option<Vec<u8>>,
     pub metadata: Metadata,
     pub node_states: HashMap<NodeId, NodeRunState>,
 }
@@ -264,7 +268,7 @@ impl NodeExecutor {
                         return Err(e);
                     }
                 }
-            } else {
+            } else if self.registry.get_metadata_processor(&node.plugin_id).is_some() {
                 tracing::debug!(
                     node_label = %node.label,
                     "Executing metadata-processing node '{}'",
@@ -295,6 +299,55 @@ impl NodeExecutor {
                         return Err(e);
                     }
                 }
+            } else if self.registry.get_format_processor(&node.plugin_id).is_some() {
+                tracing::debug!(
+                    node_label = %node.label,
+                    "Executing format-processing node '{}'",
+                    node.label,
+                );
+                match self
+                    .process_format_node(&mut ctx, node, &final_params)
+                    .await
+                {
+                    Ok(s) => s,
+                    Err(e) => {
+                        tracing::error!(
+                            node_label = %node.label,
+                            plugin_id = %node.plugin_id,
+                            error = %e,
+                            "Node '{}' execution failed: {}",
+                            node.label,
+                            e,
+                        );
+                        ctx.node_states.insert(
+                            *node_id,
+                            NodeRunState {
+                                status: NodeStatus::Failed(e.to_string()),
+                                started_at: Some(started_at),
+                            },
+                        );
+                        nodes_failed += 1;
+                        return Err(e);
+                    }
+                }
+            } else {
+                let err = PluginError::NotFound(node.plugin_id.clone());
+                tracing::error!(
+                    node_label = %node.label,
+                    plugin_id = %node.plugin_id,
+                    error = %err,
+                    "Node '{}': no processor found for plugin (not pixel, metadata, or format)",
+                    node.label,
+                );
+                ctx.node_states.insert(
+                    *node_id,
+                    NodeRunState {
+                        status: NodeStatus::Failed(err.to_string()),
+                        started_at: Some(started_at),
+                    },
+                );
+                nodes_failed += 1;
+                return Err(err);
             };
 
             let node_ms = node_timer.elapsed_ms();
@@ -338,6 +391,7 @@ impl NodeExecutor {
 
         Ok(ExecutionResult {
             buffer: ctx.buffer,
+            encoded_output: ctx.encoded_output,
             metadata: ctx.metadata,
             node_states: ctx.node_states,
         })
@@ -553,6 +607,99 @@ impl NodeExecutor {
             output_pixels: 0,
         })
     }
+
+    #[tracing::instrument(skip_all, fields(node = %node.label))]
+    async fn process_format_node(
+        &self,
+        ctx: &mut ExecutionContext,
+        node: &crate::graph::PipelineNode,
+        params: &photopipeline_plugin::ParameterSet,
+    ) -> PluginResult<ProcessingStats> {
+        let input = ctx
+            .buffer
+            .as_ref()
+            .ok_or_else(|| PluginError::NodeExecutionFailed {
+                node: node.label.clone(),
+                message: "no pixel buffer available for format node".into(),
+            })?;
+
+        let processor = self
+            .registry
+            .get_format_processor(&node.plugin_id)
+            .ok_or_else(|| PluginError::NotFound(node.plugin_id.clone()))?;
+
+        let options = EncodeOptions {
+            format: processor.format_id(),
+            quality: params.get_f64("quality").map(|q| q as f32),
+            lossless: params.get_bool("lossless").unwrap_or(false),
+            bit_depth: params
+                .get_i64("bit_depth")
+                .map(|b| b as u8)
+                .unwrap_or(8),
+            chroma_subsampling: None,
+            encoder: None,
+            effort: params
+                .get_i64("effort")
+                .or_else(|| params.get_i64("speed"))
+                .map(|e| e as u8),
+            compression: params
+                .get_str("compression")
+                .or_else(|| params.get_str("compression_level"))
+                .map(|s| s.to_string()),
+            embed_profile: None,
+        };
+
+        tracing::debug!(
+            input_width = input.width,
+            input_height = input.height,
+            format = ?options.format,
+            "Encoding with format processor '{}': {}x{} → {:?}",
+            node.label,
+            input.width,
+            input.height,
+            options.format,
+        );
+
+        // Input-only format processors (can_encode() == false) act as passthrough.
+        // They decode raw input into pixels earlier in the real pipeline; here the
+        // input is already loaded by the server, so pass it through unchanged.
+        if !processor.can_encode(&options.format) {
+            tracing::debug!(
+                node_label = %node.label,
+                "Format processor '{}' is input-only, passing through pixel buffer",
+                node.label,
+            );
+            return Ok(ProcessingStats {
+                elapsed_ms: 0,
+                cpu_time_ms: 0,
+                gpu_time_ms: None,
+                peak_memory_mb: 0,
+                input_pixels: input.pixel_count(),
+                output_pixels: input.pixel_count(),
+            });
+        }
+
+        let encoded = processor.encode(input, &ctx.metadata, &options).await?;
+
+        tracing::info!(
+            node_label = %node.label,
+            encoded_bytes = encoded.len(),
+            "Format node '{}' produced {} bytes",
+            node.label,
+            encoded.len(),
+        );
+
+        ctx.encoded_output = Some(encoded);
+
+        Ok(ProcessingStats {
+            elapsed_ms: 0,
+            cpu_time_ms: 0,
+            gpu_time_ms: None,
+            peak_memory_mb: 0,
+            input_pixels: input.pixel_count(),
+            output_pixels: 0,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -669,6 +816,7 @@ mod tests {
     fn execution_result_default_fields() {
         let result = ExecutionResult {
             buffer: None,
+            encoded_output: None,
             metadata: Metadata::default(),
             node_states: std::collections::HashMap::new(),
         };
@@ -680,6 +828,7 @@ mod tests {
         let pb = PixelBuffer::new(10, 10, ChannelLayout::RGB, PixelFormat::U8);
         let result = ExecutionResult {
             buffer: Some(pb),
+            encoded_output: None,
             metadata: Metadata::default(),
             node_states: Default::default(),
         };

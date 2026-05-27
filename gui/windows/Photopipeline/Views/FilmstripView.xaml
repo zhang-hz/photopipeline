@@ -23,7 +23,8 @@
 
         <!-- Toolbar -->
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="8,8,8,0">
-            <ui:Button Content="Import" Command="{Binding AddImagesCommand}"
+            <ui:Button AutomationProperties.AutomationId="ImportButton"
+                       Content="Import" Command="{Binding AddImagesCommand}"
                        Icon="{ui:SymbolIcon Image24}" Margin="0,0,4,0" FontSize="11" />
             <ui:Button Content="Clear" Command="{Binding ClearImagesCommand}"
                        Icon="{ui:SymbolIcon Delete24}" Appearance="Secondary" FontSize="11" Margin="0,0,4,0" />
@@ -52,6 +53,7 @@
 
         <!-- Image List -->
         <ListBox Grid.Row="2" x:Name="ImageListBox"
+                 AutomationProperties.AutomationId="FilmstripListBox"
                  ItemsSource="{Binding FilteredImages}"
                  SelectedItem="{Binding SelectedImage}"
                  SelectionMode="Extended"

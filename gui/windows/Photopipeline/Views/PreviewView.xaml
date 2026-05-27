@@ -41,7 +41,8 @@
 
                 <ui:Button Content="Split" Command="{Binding ToggleSplitCommand}"
                            Appearance="Transparent" FontSize="11" Width="44" />
-                <ui:Button Content="Export" Command="{Binding ExportCommand}"
+                <ui:Button AutomationProperties.AutomationId="ExportButton"
+                           Content="Export" Command="{Binding ExportCommand}"
                            Appearance="Transparent" FontSize="11" Width="52" />
             </StackPanel>
         </Border>

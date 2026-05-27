@@ -44,10 +44,12 @@ public sealed class FilmstripScenarioTests
         vm.Images.Add(new ImageEntry { FileName = "a.dng", FileSizeBytes = 1000 });
         vm.Images.Add(new ImageEntry { FileName = "b.dng", FileSizeBytes = 2000 });
 
+        // Trigger SortBy change to populate FilteredImages via ViewModel's ApplyFilter logic
         vm.SortBy = "Size";
 
         vm.FilteredImages.Should().HaveCount(3);
         vm.FilteredImages[0].FileSizeBytes.Should().Be(3000);
+        vm.FilteredImages[1].FileSizeBytes.Should().Be(2000);
         vm.FilteredImages[2].FileSizeBytes.Should().Be(1000);
     }
 
@@ -55,18 +57,22 @@ public sealed class FilmstripScenarioTests
     public void MultiSelect_ThenRemove()
     {
         var vm = Create();
-        var img1 = new ImageEntry { FileName = "a.dng" };
-        var img2 = new ImageEntry { FileName = "b.dng" };
-        var img3 = new ImageEntry { FileName = "c.dng" };
+        var img1 = new ImageEntry { FileName = "a.dng", Format = "DNG" };
+        var img2 = new ImageEntry { FileName = "b.dng", Format = "DNG" };
+        var img3 = new ImageEntry { FileName = "c.dng", Format = "DNG" };
         vm.Images.Add(img1);
         vm.Images.Add(img2);
         vm.Images.Add(img3);
-        vm.FilteredImages.Add(img1);
-        vm.FilteredImages.Add(img2);
-        vm.FilteredImages.Add(img3);
+
+        // Populate FilteredImages through ViewModel filter logic, not direct manipulation
+        vm.FilterFormat = "DNG"; // triggers ApplyFilter, all images have Format="DNG"
+        vm.FilteredImages.Should().HaveCount(3);
 
         vm.SelectAllCommand.Execute(null);
         vm.SelectedImages.Should().HaveCount(3);
+        vm.SelectedImages.Should().Contain(img1);
+        vm.SelectedImages.Should().Contain(img2);
+        vm.SelectedImages.Should().Contain(img3);
 
         vm.ClearSelectionCommand.Execute(null);
         vm.SelectedImages.Should().BeEmpty();

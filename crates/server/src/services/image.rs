@@ -155,7 +155,7 @@ impl ImageService for ImageServiceImpl {
                                 let end = ((offset as usize) + chunk_size).min(total as usize);
                                 let slice = data[offset as usize..end].to_vec();
                                 let is_last = end >= total as usize;
-                                let _ = tx.send(Ok(PixelDataChunk {
+                                let _ = tx.try_send(Ok(PixelDataChunk {
                                     offset,
                                     data: slice,
                                     total_size: total,
@@ -165,18 +165,18 @@ impl ImageService for ImageServiceImpl {
                             }
                         }
                         Err(e) => {
-                            let _ = tx.send(Err(Status::internal(format!("decode failed: {}", e))));
+                            let _ = tx.try_send(Err(Status::internal(format!("decode failed: {}", e))));
                         }
                     },
                     Err(e) => {
-                        let _ = tx.send(Err(Status::internal(format!(
+                        let _ = tx.try_send(Err(Status::internal(format!(
                             "unknown image format: {}",
                             e
                         ))));
                     }
                 },
                 Err(e) => {
-                    let _ = tx.send(Err(Status::internal(format!(
+                    let _ = tx.try_send(Err(Status::internal(format!(
                         "failed to open image: {}",
                         e
                     ))));
@@ -241,7 +241,7 @@ impl ImageService for ImageServiceImpl {
             let format_proc = find_format_processor_for_format(&registry, &format);
 
             if let Some(proc) = format_proc {
-                let _ = tx.send(Ok(EncodeProgress {
+                let _ = tx.try_send(Ok(EncodeProgress {
                     fraction: 0.1,
                     message: "Starting encoding with format processor...".into(),
                     bytes_written: 0,
@@ -252,13 +252,13 @@ impl ImageService for ImageServiceImpl {
                     Ok(encoded) => {
                         let bytes_written = encoded.len() as u64;
                         if let Err(e) = std::fs::write(&output_path, &encoded) {
-                            let _ = tx.send(Err(Status::internal(format!(
+                            let _ = tx.try_send(Err(Status::internal(format!(
                                 "failed to write output: {}",
                                 e
                             ))));
                             return;
                         }
-                        let _ = tx.send(Ok(EncodeProgress {
+                        let _ = tx.try_send(Ok(EncodeProgress {
                             fraction: 1.0,
                             message: format!("Encoded to {}", output_path),
                             bytes_written,
@@ -266,11 +266,11 @@ impl ImageService for ImageServiceImpl {
                         }));
                     }
                     Err(e) => {
-                        let _ = tx.send(Err(Status::internal(format!("encode failed: {}", e))));
+                        let _ = tx.try_send(Err(Status::internal(format!("encode failed: {}", e))));
                     }
                 }
             } else {
-                let _ = tx.send(Ok(EncodeProgress {
+                let _ = tx.try_send(Ok(EncodeProgress {
                     fraction: 0.1,
                     message: "Falling back to raw write...".into(),
                     bytes_written: 0,
@@ -280,7 +280,7 @@ impl ImageService for ImageServiceImpl {
                 match std::fs::write(&output_path, &buffer.data.data) {
                     Ok(()) => {
                         let bytes_written = buffer.data.data.len() as u64;
-                        let _ = tx.send(Ok(EncodeProgress {
+                        let _ = tx.try_send(Ok(EncodeProgress {
                             fraction: 1.0,
                             message: format!("Raw data written to {}", output_path),
                             bytes_written,
@@ -288,7 +288,7 @@ impl ImageService for ImageServiceImpl {
                         }));
                     }
                     Err(e) => {
-                        let _ = tx.send(Err(Status::internal(format!(
+                        let _ = tx.try_send(Err(Status::internal(format!(
                             "failed to write output: {}",
                             e
                         ))));

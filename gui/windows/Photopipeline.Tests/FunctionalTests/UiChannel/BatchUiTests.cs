@@ -12,7 +12,6 @@ public sealed class BatchUiTests : UiTestBase
     public static IEnumerable<object[]> BatchUiTestCases =>
         TestCaseCatalog.GetByCategory("batch")
             .Where(t => !t.SkipUiChannel)
-            .Take(6)
             .Select(t => new object[] { t });
 
     [Theory]
@@ -21,14 +20,19 @@ public sealed class BatchUiTests : UiTestBase
     {
         if (!File.Exists(AppPath))
         {
-            _output.WriteLine($"App not found at {AppPath} — skipping UI test");
-            return;
+            throw new FileNotFoundException(
+                $"UI test cannot run: App not found at {AppPath}. Build the project first.");
         }
 
         if (ResourceMonitor.ShouldSkipLargeTest())
-            return;
+            throw new InvalidOperationException(
+                "Insufficient resources to run UI test; refusing to silently skip per Iron Rule 2.");
 
-        using var driver = new UiTestDriver();
+        using var driver = new UiTestDriver(
+            AppPath,
+            TestDataCatalog.GetInputDir(),
+            Path.Combine(Path.GetTempPath(), "photopipeline_ui_tests"),
+            _output);
 
         var images = tc.InputImages ?? new[] { tc.InputImage };
 
@@ -36,7 +40,7 @@ public sealed class BatchUiTests : UiTestBase
         {
             var outputPath = await driver.RunFullWorkflowAsync(
                 TestDataCatalog.Instance.GetPath(imageName),
-                tc.Pipeline!,
+                tc.Pipeline!.Nodes.Select(n => n.PluginId).ToArray(),
                 outputFormat: tc.OutputFormat);
 
             Assert.True(File.Exists(outputPath), $"Batch UI output missing: {outputPath}");

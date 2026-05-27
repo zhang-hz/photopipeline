@@ -720,7 +720,7 @@
     "Description": "pattern test image 256x128 8bit"
   },
   {
-    "Id": "color_bars_8bit",
+    "Id": "color_bars_8bit_large",
     "RelativePath": "pattern/color_bars_512x256_8bit.png",
     "Category": "pattern",
     "Format": "PNG",
@@ -1377,6 +1377,57 @@
     "Description": "format_variety test image 256x128 8bit"
   },
   {
+    "Id": "format_avif",
+    "RelativePath": "format_variety/test_256x128.avif",
+    "Category": "format_variety",
+    "Format": "AVIF",
+    "Width": 256,
+    "Height": 128,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "format",
+      "avif",
+      "next_gen_format"
+    ],
+    "Description": "format_variety test image 256x128 8bit (AVIF reference, stored as PNG)"
+  },
+  {
+    "Id": "format_heif",
+    "RelativePath": "format_variety/test_256x128.heif",
+    "Category": "format_variety",
+    "Format": "HEIF",
+    "Width": 256,
+    "Height": 128,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "format",
+      "heif",
+      "next_gen_format"
+    ],
+    "Description": "format_variety test image 256x128 8bit (HEIF reference, stored as PNG)"
+  },
+  {
+    "Id": "format_jxl",
+    "RelativePath": "format_variety/test_256x128.jxl",
+    "Category": "format_variety",
+    "Format": "JXL",
+    "Width": 256,
+    "Height": 128,
+    "BitDepth": 8,
+    "ColorSpace": "sRGB",
+    "HasAlpha": false,
+    "Tags": [
+      "format",
+      "jxl",
+      "next_gen_format"
+    ],
+    "Description": "format_variety test image 256x128 8bit (JXL reference, stored as PNG)"
+  },
+  {
     "Id": "gradient_rgb_16bit",
     "RelativePath": "high_bitdepth/gradient_rgb_16bit_256x128.png",
     "Category": "high_bitdepth",
@@ -1401,14 +1452,15 @@
     "Width": 256,
     "Height": 128,
     "BitDepth": 16,
-    "ColorSpace": "sRGB",
+    "ColorSpace": "LinearRec2020",
     "HasAlpha": false,
     "Tags": [
       "hdr",
       "gradient",
       "rgb",
-      "float"
+      "float",
+      "high_dynamic_range"
     ],
-    "Description": "high_bitdepth test image 256x128 16bit"
+    "Description": "high_bitdepth HDR test image 256x128 16bit (4x extended range)"
   }
 ]

@@ -12,7 +12,6 @@ public sealed class PipelineUiTests : UiTestBase
     public static IEnumerable<object[]> PipelineUiTestCases =>
         TestCaseCatalog.GetByCategory("pipeline")
             .Where(t => !t.SkipUiChannel)
-            .Take(12)
             .Select(t => new object[] { t });
 
     [Theory]
@@ -21,14 +20,18 @@ public sealed class PipelineUiTests : UiTestBase
     {
         if (!File.Exists(AppPath))
         {
-            _output.WriteLine($"App not found at {AppPath} — skipping UI test");
-            return;
+            throw new FileNotFoundException(
+                $"UI test cannot run: App not found at {AppPath}. Build the project first.");
         }
 
-        using var driver = new UiTestDriver();
+        using var driver = new UiTestDriver(
+            AppPath,
+            TestDataCatalog.GetInputDir(),
+            Path.Combine(Path.GetTempPath(), "photopipeline_ui_tests"),
+            _output);
         var outputPath = await driver.RunFullWorkflowAsync(
             TestDataCatalog.Instance.GetPath(tc.InputImage),
-            tc.Pipeline!,
+            tc.Pipeline!.Nodes.Select(n => n.PluginId).ToArray(),
             outputFormat: tc.OutputFormat);
 
         Assert.True(File.Exists(outputPath), $"Pipeline UI output not found: {outputPath}");

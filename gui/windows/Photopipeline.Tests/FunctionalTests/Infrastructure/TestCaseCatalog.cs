@@ -54,6 +54,13 @@ public static class TestCaseCatalog
         ["colorspace_target_color_space"] = new() { ["source_color_space"] = "srgb" },
         ["colorspace_rendering_intent"] = new() { ["source_color_space"] = "srgb", ["target_color_space"] = "display_p3" },
         ["colorspace_black_point_compensation"] = new() { ["source_color_space"] = "srgb", ["target_color_space"] = "display_p3" },
+        // transform: resize_mode=absolute/fit need width+height; percentage needs scale_percent
+        ["transform_resize_mode"] = new() { ["scale_percent"] = 50.0, ["width"] = 128, ["height"] = 128 },
+        // colorspace: source_color_space test needs explicit target different from source
+        ["colorspace_source_color_space"] = new() { ["target_color_space"] = "linear" },
+        // colorspace: rendering_intent absolute_colorimetric needs source/target for pixel change
+        // (reuses existing companion key "colorspace_rendering_intent" already defined above)
+        // exif_rw: write_tags needs a JPEG input (handled via InputImage in matrix)
         // lut3d: intensity requires a LUT file — companion handled in PluginApiTests
         // lens_correct: needs real lens profile data; synthetic images have no distortion
         // ai_denoise: needs ONNX model files (infrastructure dependency)
@@ -67,6 +74,12 @@ public static class TestCaseCatalog
         "intensity=0", "denoise_strength=0", "detail_preservation=0",
         "crop_enabled=False", "apply_white_balance=False",
         "correct_vignetting=False", "target_color_space=srgb",
+        // transform: 360deg rotation is identity, -90 is not
+        "angle=360",
+        // colorspace: source=linear → target=linear is identity (companion sets target=linear)
+        "source_color_space=linear",
+        // exif_rw: write_tags=false is a no-op
+        "write_tags=False",
         // colorspace: sRGB→sRGB is identity (source defaults to sRGB from auto-detect)
         // lut3d: no LUT file → intensity is irrelevant (plugin needs external .cube file)
         // lens_correct: synthetic test images have no lens distortion
@@ -99,7 +112,7 @@ public static class TestCaseCatalog
             // ── colorspace: conversion, rendering ──
             ("photopipeline.plugins.colorspace", "target_color_space", new object[] { "srgb", "display_p3", "adobe_rgb" },
                 new[] { "color_bars_8bit", "pure_red_small", "gradient_horiz_rgb" }),
-            ("photopipeline.plugins.colorspace", "rendering_intent", new object[] { "relative_colorimetric", "perceptual", "photopipeline.plugins.colorspace" },
+            ("photopipeline.plugins.colorspace", "rendering_intent", new object[] { "relative_colorimetric", "perceptual", "saturation" },
                 new[] { "gradient_horiz_rgb", "pure_red_small", "color_bars_8bit" }),
             ("photopipeline.plugins.colorspace", "black_point_compensation", new object[] { false, true },
                 new[] { "color_bars_8bit", "gradient_diag_rgb", "pure_red_small" }),
@@ -141,6 +154,38 @@ public static class TestCaseCatalog
                 new[] { "color_bars_8bit", "gradient_horiz_rgb" }),
             ("photopipeline.plugins.heif_encoder", "quality", new object[] { 30.0, 60.0, 95.0 },
                 new[] { "color_bars_8bit", "gradient_horiz_rgb" }),
+
+            // ── Encoder-specific parameters ──
+            ("photopipeline.plugins.avif_encoder", "speed", new object[] { 0, 5, 10 },
+                new[] { "color_bars_8bit", "gradient_horiz_rgb" }),
+            ("photopipeline.plugins.jxl_encoder", "effort", new object[] { 1, 5, 9 },
+                new[] { "color_bars_8bit", "gradient_horiz_rgb" }),
+            ("photopipeline.plugins.jxl_encoder", "distance", new object[] { 0.0, 1.5, 3.0 },
+                new[] { "color_bars_8bit", "gradient_horiz_rgb" }),
+            ("photopipeline.plugins.heif_encoder", "encoder_type", new object[] { "hevc", "avc" },
+                new[] { "color_bars_8bit", "gradient_horiz_rgb" }),
+            ("photopipeline.plugins.png_encoder", "alpha_channel", new object[] { true, false },
+                new[] { "alpha_solid_transparent", "checkerboard_8x8" }),
+
+            // ── transform: resize mode ──
+            ("photopipeline.plugins.transform", "resize_mode", new object[] { "percentage", "absolute", "fit" },
+                new[] { "gradient_horiz_rgb", "checkerboard_8x8" }),
+
+            // ── transform: additional rotation variants (-90, 360) ──
+            ("photopipeline.plugins.transform", "angle", new object[] { -90.0, 360.0 },
+                new[] { "gradient_horiz_rgb", "checkerboard_8x8" }),
+
+            // ── colorspace: source_color_space variants ──
+            ("photopipeline.plugins.colorspace", "source_color_space", new object[] { "linear", "srgb", "adobe_rgb", "display_p3" },
+                new[] { "color_bars_8bit", "gradient_horiz_rgb", "pure_red_small" }),
+
+            // ── colorspace: rendering_intent absolute_colorimetric ──
+            ("photopipeline.plugins.colorspace", "rendering_intent", new object[] { "absolute_colorimetric" },
+                new[] { "color_bars_8bit", "gradient_horiz_rgb" }),
+
+            // ── exif_rw: write_tags ──
+            ("photopipeline.plugins.exif_rw", "write_tags", new object[] { true, false },
+                new[] { "format_jpeg", "color_bars_8bit" }),
         };
 
         foreach (var (pluginId, paramKey, values, images) in pluginParamMatrix)
@@ -244,23 +289,109 @@ public static class TestCaseCatalog
                 TolerancePerChannel = 0,
             };
         }
+
+        // ── WEBP lossless mode tests ──
+        var webpLosslessInputs = new[] { "format_png", "format_tiff", "format_bmp" };
+        foreach (var input in webpLosslessInputs)
+        {
+            foreach (var bd in new uint?[] { 8, null })
+            {
+                yield return new TestCaseDefinition
+                {
+                    Name = $"{input}_to_WEBP_lossless_{bd ?? 0}bit",
+                    Category = "format",
+                    Tags = new[] { "format_conversion", "webp", "lossless", bd == 8 ? "8bit" : "auto" },
+                    InputImage = input,
+                    OutputFormat = "WEBP",
+                    OutputBitDepth = bd,
+                    OutputLossless = true,
+                    MinSSIM = 0.999,
+                };
+            }
+        }
+
+        // ── AVIF, HEIF, JXL output formats (next-gen encoders) ──
+        var nextGenOutputs = new[] { "AVIF", "HEIF", "JXL" };
+        foreach (var input in inputFormats)
+        {
+            foreach (var output in nextGenOutputs)
+            {
+                yield return new TestCaseDefinition
+                {
+                    Name = $"{input}_to_{output.ToLowerInvariant()}",
+                    Category = "format",
+                    Tags = new[] { "format_conversion", output.ToLowerInvariant(), "next_gen_format", "8bit" },
+                    InputImage = input,
+                    OutputFormat = output,
+                    OutputBitDepth = 8,
+                    MinSSIM = 0.90,
+                };
+            }
+        }
+
+        // ── Alpha channel format conversions ──
+        var alphaInputs = new[] { "alpha_solid_transparent", "alpha_gradient_transparent", "alpha_full_opaque" };
+        var alphaOutputs = new[] { "PNG", "TIFF", "WEBP" };
+        foreach (var input in alphaInputs)
+        {
+            foreach (var output in alphaOutputs)
+            {
+                yield return new TestCaseDefinition
+                {
+                    Name = $"alpha_{input}_to_{output.ToLowerInvariant()}",
+                    Category = "format",
+                    Tags = new[] { "format_conversion", "alpha_channel", output.ToLowerInvariant() },
+                    InputImage = input,
+                    OutputFormat = output,
+                    OutputBitDepth = 8,
+                    MinSSIM = 0.95,
+                };
+            }
+        }
+
+        // ── Grayscale format conversions ──
+        var grayInputs = new[] { "gradient_horiz_gray", "gradient_vert_gray", "grayscale_256steps", "grayscale_32steps" };
+        foreach (var input in grayInputs)
+        {
+            foreach (var output in new[] { "PNG", "TIFF", "JPEG", "WEBP" })
+            {
+                bool isLossless = output is "TIFF" or "PNG";
+                yield return new TestCaseDefinition
+                {
+                    Name = $"grayscale_{input}_to_{output.ToLowerInvariant()}",
+                    Category = "format",
+                    Tags = new[] { "format_conversion", "grayscale", output.ToLowerInvariant() },
+                    InputImage = input,
+                    OutputFormat = output,
+                    OutputBitDepth = 8,
+                    OutputLossless = isLossless,
+                    MinSSIM = output is "JPEG" or "WEBP" ? 0.95 : 0.999,
+                };
+            }
+        }
     }
 
     // ── Pipeline topology tests ──
 
     private static IEnumerable<TestCaseDefinition> BuildPipelineTopologyTests()
     {
-        // Linear chains: 2, 3, 4, 5 nodes
+        // Linear chains: 2, 3, 4, 5 nodes (each node uses a distinct plugin)
+        var linearPlugins = new[] {
+            "photopipeline.plugins.raw_input",
+            "photopipeline.plugins.colorspace",
+            "photopipeline.plugins.transform",
+            "photopipeline.plugins.ai_denoise",
+            "photopipeline.plugins.lut3d"
+        };
         foreach (int length in new[] { 2, 3, 4, 5 })
         {
-            var plugins = new[] { "photopipeline.plugins.raw_input", "photopipeline.plugins.colorspace", "photopipeline.plugins.colorspace", "photopipeline.plugins.colorspace", "photopipeline.plugins.ai_denoise" };
             yield return new TestCaseDefinition
             {
                 Name = $"linear_{length}nodes",
                 Category = "pipeline",
                 Tags = new[] { "topology", "linear", $"nodes_{length}" },
                 InputImage = "color_bars_8bit",
-                Pipeline = TestPipelineBuilder.Linear(plugins.Take(length).ToArray()),
+                Pipeline = TestPipelineBuilder.Linear(linearPlugins.Take(length).ToArray()),
                 TolerancePerChannel = 0,
             };
         }
@@ -291,26 +422,113 @@ public static class TestCaseCatalog
             Pipeline = new TestPipelineBuilder()
                 .AddNode("photopipeline.plugins.raw_input", enabled: false)
                 .AddNode("photopipeline.plugins.colorspace", enabled: false)
-                .AddNode("photopipeline.plugins.colorspace", enabled: false)
+                .AddNode("photopipeline.plugins.transform", enabled: false)
                 .ConnectLinear()
                 .Build(),
             TolerancePerChannel = 0,
         };
 
-        // Single node tests for regression
-        var allSinglePlugins = new[] { "photopipeline.plugins.raw_input", "photopipeline.plugins.colorspace", "photopipeline.plugins.colorspace", "photopipeline.plugins.colorspace",
-            "photopipeline.plugins.ai_denoise", "photopipeline.plugins.ai_denoise", "photopipeline.plugins.transform", "photopipeline.plugins.transform", "photopipeline.plugins.transform", "photopipeline.plugins.transform", "photopipeline.plugins.colorspace", "photopipeline.plugins.raw_input",
-            "photopipeline.plugins.raw_input", "photopipeline.plugins.colorspace" };
+        // Single node tests (deduplicated — one entry per unique plugin)
+        var allSinglePlugins = new[] {
+            "photopipeline.plugins.raw_input",
+            "photopipeline.plugins.colorspace",
+            "photopipeline.plugins.ai_denoise",
+            "photopipeline.plugins.transform",
+            "photopipeline.plugins.lut3d",
+            "photopipeline.plugins.lens_correct",
+            "photopipeline.plugins.exif_rw",
+            "photopipeline.plugins.png_encoder",
+            "photopipeline.plugins.tiff_encoder",
+        };
 
         foreach (var plugin in allSinglePlugins)
         {
             yield return new TestCaseDefinition
             {
-                Name = $"single_{plugin}",
+                Name = $"single_{plugin.Replace("photopipeline.plugins.", "")}",
                 Category = "pipeline",
                 Tags = new[] { "topology", "single_node", "regression", plugin },
                 InputImage = "gradient_horiz_rgb",
                 Pipeline = TestPipelineBuilder.SingleNode(plugin),
+                TolerancePerChannel = 0,
+            };
+        }
+
+        // ── Fork topology: A→B, A→C (one source, two targets) ──
+        yield return new TestCaseDefinition
+        {
+            Name = "fork_topology",
+            Category = "pipeline",
+            Tags = new[] { "topology", "fork", "branching" },
+            InputImage = "color_bars_8bit",
+            Pipeline = new TestPipelineBuilder()
+                .AddNode("photopipeline.plugins.raw_input")      // A
+                .AddNode("photopipeline.plugins.colorspace")     // B
+                .AddNode("photopipeline.plugins.transform")      // C
+                .Connect(0, 1)  // A→B
+                .Connect(0, 2)  // A→C
+                .Build(),
+            TolerancePerChannel = 0,
+        };
+
+        // ── Diamond topology: A→B, A→C, B→D, C→D ──
+        yield return new TestCaseDefinition
+        {
+            Name = "diamond_topology",
+            Category = "pipeline",
+            Tags = new[] { "topology", "diamond", "branching" },
+            InputImage = "gradient_horiz_rgb",
+            Pipeline = new TestPipelineBuilder()
+                .AddNode("photopipeline.plugins.raw_input")      // A
+                .AddNode("photopipeline.plugins.colorspace")     // B
+                .AddNode("photopipeline.plugins.transform")      // C
+                .AddNode("photopipeline.plugins.colorspace")     // D
+                .Connect(0, 1)  // A→B
+                .Connect(0, 2)  // A→C
+                .Connect(1, 3)  // B→D
+                .Connect(2, 3)  // C→D
+                .Build(),
+            TolerancePerChannel = 0,
+        };
+
+        // ── Branch with disabled node in one branch ──
+        yield return new TestCaseDefinition
+        {
+            Name = "branch_disabled_one_leg",
+            Category = "pipeline",
+            Tags = new[] { "topology", "fork", "disabled_node", "branching" },
+            InputImage = "checkerboard_8x8",
+            Pipeline = new TestPipelineBuilder()
+                .AddNode("photopipeline.plugins.raw_input")                  // A
+                .AddNode("photopipeline.plugins.colorspace", enabled: false) // B (disabled)
+                .AddNode("photopipeline.plugins.transform")                  // C (active)
+                .Connect(0, 1)  // A→B (disabled leg)
+                .Connect(0, 2)  // A→C (active leg)
+                .Build(),
+            TolerancePerChannel = 0,
+        };
+
+        // ── Single node full pipeline for each encoder type ──
+        var encoderPlugins = new[]
+        {
+            "photopipeline.plugins.png_encoder",
+            "photopipeline.plugins.jpeg_encoder",
+            "photopipeline.plugins.tiff_encoder",
+            "photopipeline.plugins.webp_encoder",
+            "photopipeline.plugins.avif_encoder",
+            "photopipeline.plugins.jxl_encoder",
+            "photopipeline.plugins.heif_encoder",
+            "photopipeline.plugins.bmp_encoder",
+        };
+        foreach (var encoder in encoderPlugins)
+        {
+            yield return new TestCaseDefinition
+            {
+                Name = $"single_encoder_{encoder.Replace("photopipeline.plugins.", "")}",
+                Category = "pipeline",
+                Tags = new[] { "topology", "single_node", "encoder", encoder },
+                InputImage = "gradient_horiz_rgb",
+                Pipeline = TestPipelineBuilder.SingleNode(encoder),
                 TolerancePerChannel = 0,
             };
         }
@@ -343,46 +561,301 @@ public static class TestCaseCatalog
             Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.raw_input"),
             IsSerialOnly = true,
         };
+
+        // ── Batch pause/resume lifecycle ──
+        yield return new TestCaseDefinition
+        {
+            Name = "batch_pause_resume",
+            Category = "batch",
+            Tags = new[] { "batch", "pause_resume", "lifecycle", "is_serial_only" },
+            InputImages = new[] { "color_bars_8bit", "gradient_horiz_rgb", "checkerboard_8x8", "pure_red_small", "noise_grain" },
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.colorspace",
+                p => { p["target_color_space"] = "display_p3"; p["source_color_space"] = "srgb"; }),
+            IsSerialOnly = true,
+            SkipUiChannel = true,
+        };
+
+        // ── Batch cancel lifecycle ──
+        yield return new TestCaseDefinition
+        {
+            Name = "batch_cancel",
+            Category = "batch",
+            Tags = new[] { "batch", "cancel", "lifecycle", "is_serial_only" },
+            InputImages = Enumerable.Range(0, 8).Select(_ => "pure_white_large").ToArray(),
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.ai_denoise",
+                p => p["denoise_strength"] = 100.0),
+            IsSerialOnly = true,
+            SkipUiChannel = true,
+        };
+
+        // ── Batch partial failure (mixed valid + invalid files) ──
+        yield return new TestCaseDefinition
+        {
+            Name = "batch_partial_failure",
+            Category = "batch",
+            Tags = new[] { "batch", "partial_failure", "mixed_input", "is_serial_only" },
+            InputImages = new[] { "color_bars_8bit", "nonexistent_file_xyz", "gradient_horiz_rgb", "pure_red_small" },
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.transform"),
+            IsSerialOnly = true,
+            SkipUiChannel = true,
+        };
     }
 
     // ── Error path tests ──
 
     private static IEnumerable<TestCaseDefinition> BuildErrorPathTests()
     {
-        // Invalid plugin ID
+        // 1. Invalid plugin ID
         yield return new TestCaseDefinition
         {
             Name = "error_invalid_plugin",
-            Category = "error",
-            Tags = new[] { "error_path", "invalid_plugin" },
+            Category = "error", Tags = new[] { "error_path", "invalid_plugin" },
             InputImage = "pure_red_small",
             Pipeline = new TestPipelineBuilder().AddNode("nonexistent_plugin_xyz").Build(),
-            ExpectError = true,
-            SkipUiChannel = true,
+            ExpectError = true, SkipUiChannel = true,
         };
 
-        // Invalid parameter value
+        // 2. Invalid parameter value (negative dimensions)
         yield return new TestCaseDefinition
         {
             Name = "error_invalid_param_value",
-            Category = "error",
-            Tags = new[] { "error_path", "invalid_param" },
+            Category = "error", Tags = new[] { "error_path", "invalid_param" },
             InputImage = "pure_red_small",
             Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.transform",
                 p => { p["width"] = -1; p["height"] = -1; }),
-            ExpectError = true,
-            SkipUiChannel = true,
+            ExpectError = true, SkipUiChannel = true,
         };
 
-        // Malformed spec (no nodes)
+        // 3. Empty pipeline (no nodes)
         yield return new TestCaseDefinition
         {
             Name = "error_empty_pipeline",
-            Category = "error",
-            Tags = new[] { "error_path", "empty_pipeline" },
+            Category = "error", Tags = new[] { "error_path", "empty_pipeline" },
             InputImage = "pure_red_small",
             Pipeline = new PipelineSpec { Name = "Empty" },
-            ExpectError = true,
+            ExpectError = true, SkipUiChannel = true,
+        };
+
+        // 4. Input file does not exist
+        yield return new TestCaseDefinition
+        {
+            Name = "error_missing_input_file",
+            Category = "error", Tags = new[] { "error_path", "missing_file" },
+            InputImage = "nonexistent_image_file_xyz",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.transform"),
+            ExpectError = true, SkipUiChannel = true,
+        };
+
+        // 5. Parameter type mismatch (string where int expected)
+        yield return new TestCaseDefinition
+        {
+            Name = "error_param_type_mismatch",
+            Category = "error", Tags = new[] { "error_path", "type_mismatch" },
+            InputImage = "pure_red_small",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.transform",
+                p => { p["scale_percent"] = "not_a_number"; }),
+            ExpectError = true, SkipUiChannel = true,
+        };
+
+        // 6. Parameter value out of range (above max)
+        yield return new TestCaseDefinition
+        {
+            Name = "error_param_above_maximum",
+            Category = "error", Tags = new[] { "error_path", "out_of_range" },
+            InputImage = "pure_red_small",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.transform",
+                p => { p["scale_percent"] = 999999; }),
+            ExpectError = true, SkipUiChannel = true,
+        };
+
+        // 7. All nodes disabled
+        yield return new TestCaseDefinition
+        {
+            Name = "error_all_nodes_disabled",
+            Category = "error", Tags = new[] { "error_path", "disabled" },
+            InputImage = "pure_red_small",
+            Pipeline = new TestPipelineBuilder()
+                .AddNode("photopipeline.plugins.transform", null, enabled: false)
+                .AddNode("photopipeline.plugins.colorspace", null, enabled: false)
+                .Connect(0, 1)
+                .Build(),
+            ExpectError = true, SkipUiChannel = true,
+        };
+
+        // 8. Self-loop edge
+        yield return new TestCaseDefinition
+        {
+            Name = "error_self_loop",
+            Category = "error", Tags = new[] { "error_path", "cycle" },
+            InputImage = "pure_red_small",
+            Pipeline = new TestPipelineBuilder()
+                .AddNode("photopipeline.plugins.transform")
+                .Connect(0, 0)
+                .Build(),
+            ExpectError = true, SkipUiChannel = true,
+        };
+
+        // 9. Edge to non-existent node
+        yield return new TestCaseDefinition
+        {
+            Name = "error_edge_to_nonexistent",
+            Category = "error", Tags = new[] { "error_path", "invalid_edge" },
+            InputImage = "pure_red_small",
+            Pipeline = new TestPipelineBuilder()
+                .AddNode("photopipeline.plugins.transform")
+                .Connect(0, 5)
+                .Build(),
+            ExpectError = true, SkipUiChannel = true,
+        };
+
+        // 10. Duplicate node IDs
+        yield return new TestCaseDefinition
+        {
+            Name = "error_duplicate_nodes",
+            Category = "error", Tags = new[] { "error_path", "duplicate" },
+            InputImage = "pure_red_small",
+            Pipeline = new PipelineSpec
+            {
+                Name = "DuplicateNodes",
+                Nodes = new[]
+                {
+                    new PipelineNode { Id = "n1", PluginId = "photopipeline.plugins.transform" },
+                    new PipelineNode { Id = "n1", PluginId = "photopipeline.plugins.colorspace" },
+                }
+            },
+            ExpectError = true, SkipUiChannel = true,
+        };
+
+        // 11. Unconnected sub-graph
+        yield return new TestCaseDefinition
+        {
+            Name = "error_disconnected_graph",
+            Category = "error", Tags = new[] { "error_path", "disconnected" },
+            InputImage = "pure_red_small",
+            Pipeline = new TestPipelineBuilder()
+                .AddNode("photopipeline.plugins.transform")
+                .AddNode("photopipeline.plugins.colorspace")
+                .Build(),
+            ExpectError = true, SkipUiChannel = true,
+        };
+
+        // 12. Zero-size parameter (scale_percent=0)
+        yield return new TestCaseDefinition
+        {
+            Name = "error_zero_scale",
+            Category = "error", Tags = new[] { "error_path", "zero_value" },
+            InputImage = "pure_red_small",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.transform",
+                p => { p["scale_percent"] = 0; }),
+            ExpectError = true, SkipUiChannel = true,
+        };
+
+        // 13. Unknown parameter key (different from invalid plugin)
+        yield return new TestCaseDefinition
+        {
+            Name = "error_unknown_param_key",
+            Category = "error", Tags = new[] { "error_path", "unknown_param" },
+            InputImage = "pure_red_small",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.transform",
+                p => { p["this_param_does_not_exist"] = 42; }),
+            ExpectError = true, SkipUiChannel = true,
+        };
+
+        // 14. Null parameter value
+        yield return new TestCaseDefinition
+        {
+            Name = "error_null_param",
+            Category = "error", Tags = new[] { "error_path", "null_param" },
+            InputImage = "pure_red_small",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.transform",
+                p => { p["scale_percent"] = null!; }),
+            ExpectError = true, SkipUiChannel = true,
+        };
+
+        // 15. Invalid output format
+        yield return new TestCaseDefinition
+        {
+            Name = "error_invalid_output_format",
+            Category = "error", Tags = new[] { "error_path", "invalid_format" },
+            InputImage = "pure_red_small",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.transform"),
+            OutputFormat = "INVALID_FORMAT_XYZ",
+            ExpectError = true, SkipUiChannel = true,
+        };
+
+        // 16. Corrupted input file
+        yield return new TestCaseDefinition
+        {
+            Name = "error_corrupted_input",
+            Category = "error", Tags = new[] { "error_path", "corrupted_file" },
+            InputImage = "corrupted_file_ref",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.transform"),
+            ExpectError = true, SkipUiChannel = true,
+        };
+
+        // 17. Disk full simulation (very large output dimensions)
+        yield return new TestCaseDefinition
+        {
+            Name = "error_disk_full_simulation",
+            Category = "error", Tags = new[] { "error_path", "disk_full", "resource_exhaustion" },
+            InputImage = "pure_white_large",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.transform",
+                p => { p["scale_percent"] = 10000; }),
+            OutputFormat = "TIFF",
+            ExpectError = true, SkipUiChannel = true,
+        };
+
+        // 18. Permission denied (read-only path)
+        yield return new TestCaseDefinition
+        {
+            Name = "error_permission_denied",
+            Category = "error", Tags = new[] { "error_path", "permission" },
+            InputImage = "pure_red_small",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.transform"),
+            ExpectError = true, SkipUiChannel = true,
+            ExpectedErrorMessage = "permission",
+        };
+
+        // 19. Concurrent pipeline conflict
+        yield return new TestCaseDefinition
+        {
+            Name = "error_concurrent_conflict",
+            Category = "error", Tags = new[] { "error_path", "concurrent", "is_serial_only" },
+            InputImages = new[] { "pure_white_large", "pure_black_large", "color_bars_8bit" },
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.ai_denoise",
+                p => p["denoise_strength"] = 100.0),
+            ExpectError = true, SkipUiChannel = true, IsSerialOnly = true,
+        };
+
+        // 20. Pipeline timeout simulation
+        yield return new TestCaseDefinition
+        {
+            Name = "error_timeout",
+            Category = "error", Tags = new[] { "error_path", "timeout" },
+            InputImage = "zone_plate_32hz",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.ai_denoise",
+                p => { p["denoise_strength"] = 100.0; p["detail_preservation"] = 100.0; }),
+            ExpectError = true, SkipUiChannel = true,
+        };
+
+        // 21. Invalid file path (special characters)
+        yield return new TestCaseDefinition
+        {
+            Name = "error_invalid_path_chars",
+            Category = "error", Tags = new[] { "error_path", "invalid_path" },
+            InputImage = "path/with/special/!@#$%^&()/test.png",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.transform"),
+            ExpectError = true, SkipUiChannel = true,
+        };
+
+        // 22. Unsupported format input
+        yield return new TestCaseDefinition
+        {
+            Name = "error_unsupported_format",
+            Category = "error", Tags = new[] { "error_path", "unsupported_format" },
+            InputImage = "unsupported_test_data.xyz",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.transform"),
+            ExpectError = true, SkipUiChannel = true,
         };
     }
 
@@ -390,17 +863,26 @@ public static class TestCaseCatalog
 
     private static IEnumerable<TestCaseDefinition> BuildMetadataTests()
     {
-        var metadataPlugins = new[] { "photopipeline.plugins.raw_input", "photopipeline.plugins.transform", "photopipeline.plugins.transform", "photopipeline.plugins.transform", "photopipeline.plugins.transform" };
+        var metadataPlugins = new[]
+        {
+            "photopipeline.plugins.raw_input",
+            "photopipeline.plugins.colorspace",
+            "photopipeline.plugins.transform",
+            "photopipeline.plugins.exif_rw",
+            "photopipeline.plugins.gps_set",
+            "photopipeline.plugins.time_shift",
+        };
         foreach (var plugin in metadataPlugins)
         {
             yield return new TestCaseDefinition
             {
-                Name = $"metadata_passthrough_{plugin}",
+                Name = $"metadata_passthrough_{plugin.Replace("photopipeline.plugins.", "")}",
                 Category = "metadata",
                 Tags = new[] { "metadata", "passthrough", plugin },
                 InputImage = "format_jpeg",
                 Pipeline = TestPipelineBuilder.SingleNode(plugin),
                 TolerancePerChannel = 0,
+                // Metadata tests must verify EXIF fields survive pipeline processing
             };
         }
     }
@@ -410,22 +892,41 @@ public static class TestCaseCatalog
     private static IEnumerable<TestCaseDefinition> BuildRegressionTests()
     {
         var inputImages = new[] { "gradient_horiz_rgb", "checkerboard_8x8", "color_bars_8bit",
-                                   "grayscale_32steps", "mid_gray_128_small" };
-        var plugins = new[] { "photopipeline.plugins.raw_input", "photopipeline.plugins.colorspace", "photopipeline.plugins.colorspace", "photopipeline.plugins.ai_denoise", "photopipeline.plugins.ai_denoise",
-                                "photopipeline.plugins.colorspace", "photopipeline.plugins.colorspace", "photopipeline.plugins.transform" };
+                                   "grayscale_32steps", "mid_gray_128_small", "noise_grain" };
+        // Deduplicated plugin list including lut3d, lens_correct, and encoders
+        var plugins = new[] {
+            "photopipeline.plugins.raw_input",
+            "photopipeline.plugins.colorspace",
+            "photopipeline.plugins.ai_denoise",
+            "photopipeline.plugins.transform",
+            "photopipeline.plugins.lut3d",
+            "photopipeline.plugins.lens_correct",
+            "photopipeline.plugins.png_encoder",
+            "photopipeline.plugins.tiff_encoder",
+        };
 
         foreach (var image in inputImages)
         {
             foreach (var plugin in plugins)
             {
+                var shortName = plugin.Replace("photopipeline.plugins.", "");
+                // Use quality metrics for lossy/output-heavy plugins
+                bool isEncoder = plugin.Contains("_encoder");
+                double? minSSIM = isEncoder ? 0.92 : null;
+                double? minPSNR = isEncoder ? 30.0 : null;
+                double? maxDeltaE = plugin.Contains("colorspace") ? 8.0 : null;
+
                 yield return new TestCaseDefinition
                 {
-                    Name = $"regression_{plugin}_{image}",
+                    Name = $"regression_{shortName}_{image}",
                     Category = "regression",
                     Tags = new[] { "regression", "golden", plugin },
                     InputImage = image,
                     Pipeline = TestPipelineBuilder.SingleNode(plugin),
                     TolerancePerChannel = 0,
+                    MinSSIM = minSSIM,
+                    MinPSNR = minPSNR,
+                    MaxDeltaE = maxDeltaE,
                 };
             }
         }
@@ -451,6 +952,76 @@ public static class TestCaseCatalog
                 TolerancePerChannel = 0,
             };
         }
+
+        // ── Boundary/edge-case content tests ──
+        var boundaryImages = new[] { "boundary_1x1", "boundary_1x100", "boundary_2x2", "boundary_3x3" };
+        foreach (var image in boundaryImages)
+        {
+            yield return new TestCaseDefinition
+            {
+                Name = $"content_boundary_{image}",
+                Category = "content",
+                Tags = new[] { "content", "boundary", "edge_case", "passthrough" },
+                InputImage = image,
+                OutputFormat = "PNG",
+                TolerancePerChannel = 0,
+            };
+        }
+
+        // ── Content assertion tests (verify specific pixel properties) ──
+        yield return new TestCaseDefinition
+        {
+            Name = "content_assert_pure_white_is_white",
+            Category = "content",
+            Tags = new[] { "content", "assertion", "histogram" },
+            InputImage = "pure_white_small",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.colorspace",
+                p => { p["target_color_space"] = "srgb"; p["source_color_space"] = "srgb"; }),
+            OutputFormat = "PNG",
+            TolerancePerChannel = 0,
+            MinSSIM = 0.999,
+            // Reference against itself — output should be near-identical to input
+            // since sRGB→sRGB is identity
+        };
+
+        yield return new TestCaseDefinition
+        {
+            Name = "content_assert_gradient_has_range",
+            Category = "content",
+            Tags = new[] { "content", "assertion", "histogram" },
+            InputImage = "gradient_horiz_rgb",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.colorspace",
+                p => { p["target_color_space"] = "srgb"; p["source_color_space"] = "srgb"; }),
+            OutputFormat = "PNG",
+            TolerancePerChannel = 0,
+            MinSSIM = 0.999,
+        };
+
+        yield return new TestCaseDefinition
+        {
+            Name = "content_assert_checkerboard_equal_pixels",
+            Category = "content",
+            Tags = new[] { "content", "assertion", "pixel_count" },
+            InputImage = "checkerboard_8x8",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.colorspace",
+                p => { p["target_color_space"] = "srgb"; p["source_color_space"] = "srgb"; }),
+            OutputFormat = "PNG",
+            TolerancePerChannel = 0,
+            MinSSIM = 0.999,
+        };
+
+        // DeltaE content quality test
+        yield return new TestCaseDefinition
+        {
+            Name = "content_deltae_srgb_identity",
+            Category = "content",
+            Tags = new[] { "content", "deltae", "colorspace" },
+            InputImage = "color_bars_8bit",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.colorspace",
+                p => { p["target_color_space"] = "srgb"; p["source_color_space"] = "srgb"; }),
+            OutputFormat = "PNG",
+            MaxDeltaE = 3.0,
+        };
     }
 
     // ── UI interaction tests (UI only, no API equivalent) ──

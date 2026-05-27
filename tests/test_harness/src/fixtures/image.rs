@@ -114,12 +114,12 @@ impl ImageFixture {
                         if bpc >= 1 && offset < buf.data.data.len() {
                             buf.data.data[offset] = val;
                             if bpc >= 2 {
-                                let v16 = (val as u16) * 257u16;
+                                let v16 = (t * 65535.0) as u16;
                                 buf.data.data[offset] = (v16 & 0xFF) as u8;
                                 buf.data.data[offset + 1] = (v16 >> 8) as u8;
                             }
                             if bpc >= 4 {
-                                let v32 = val as f32 / 255.0;
+                                let v32 = t as f32;
                                 let bytes = v32.to_le_bytes();
                                 buf.data.data[offset..offset + 4].copy_from_slice(&bytes);
                             }
@@ -133,17 +133,18 @@ impl ImageFixture {
                 for x in 0..self.width as usize {
                     let bright = ((x / tile_size) + (y / tile_size)) % 2 == 0;
                     let val = if bright { 200u8 } else { 40u8 };
+                    let t = val as f64 / 255.0;
                     for c in 0..channels.min(3) {
                         let offset = (y * self.width as usize + x) * channels * bpc + c * bpc;
                         if bpc >= 1 && offset < buf.data.data.len() {
                             buf.data.data[offset] = val;
                             if bpc >= 2 {
-                                let v16 = (val as u16) * 257u16;
+                                let v16 = (t * 65535.0) as u16;
                                 buf.data.data[offset] = (v16 & 0xFF) as u8;
                                 buf.data.data[offset + 1] = (v16 >> 8) as u8;
                             }
                             if bpc >= 4 {
-                                let v32 = val as f32 / 255.0;
+                                let v32 = t as f32;
                                 let bytes = v32.to_le_bytes();
                                 buf.data.data[offset..offset + 4].copy_from_slice(&bytes);
                             }

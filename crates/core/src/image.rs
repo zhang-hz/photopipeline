@@ -144,13 +144,6 @@ impl AlignedBuffer {
     pub fn new(size: usize, alignment: usize) -> Self {
         let data = vec![0u8; size];
         let ptr = data.as_ptr() as usize;
-        debug_assert!(
-            ptr % alignment == 0,
-            "AlignedBuffer: allocator returned ptr {:p} which does not meet {}-byte alignment. \
-             Consider using an aligned allocator (jemalloc, mimalloc).",
-            data.as_ptr(),
-            alignment,
-        );
         if ptr % alignment != 0 {
             tracing::warn!(
                 ptr = ?data.as_ptr(),

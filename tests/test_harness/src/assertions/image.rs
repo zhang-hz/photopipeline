@@ -41,6 +41,11 @@ pub fn assert_buffer_dimensions(buf: &PixelBuffer, w: u32, h: u32) {
     assert_eq!(buf.height, h, "expected height {}, got {}", h, buf.height);
 }
 
+/// Assert all pixel values fall within [min, max].
+/// NOTE: F32 pixel values are compared as raw f64 values. The caller must
+/// ensure min/max are consistent with the data format — for normalized F32
+/// data [0,1], use min=0.0, max=1.0; for unnormalized data [0,255], use
+/// min=0.0, max=255.0.
 pub fn assert_pixel_range(buf: &PixelBuffer, min: f64, max: f64) {
     let bpc = buf.format.bytes_per_channel();
     let channels = buf.layout.channel_count() as usize;

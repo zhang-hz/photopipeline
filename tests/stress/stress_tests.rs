@@ -70,18 +70,20 @@ fn test_stress_pipeline_execution_100x() {
 }
 
 #[test]
-fn test_stress_random_parameter_values_on_plugins() {
+fn test_stress_all_plugins_default_parameters_validate() {
     let reg = Arc::new(Registry::new());
     photopipeline_plugins::register_all(&reg);
 
-    for plugin in &reg.all() {
+    let plugins = reg.all();
+    assert!(!plugins.is_empty(), "at least one plugin must be registered");
+    for plugin in &plugins {
         let defaults = plugin.parameter_schema().defaults();
         let rt = tokio::runtime::Runtime::new().unwrap();
         let result = rt.block_on(async { plugin.validate(&defaults).await });
         assert!(
             result.is_ok(),
-            "default validation failed for {}",
-            plugin.id()
+            "default parameter validation failed for {}: {:?}",
+            plugin.id(), result
         );
     }
 }
@@ -107,7 +109,7 @@ fn test_stress_concurrent_registry_access_16_threads() {
                 assert!(!manifests.is_empty());
                 let cats = r.categories();
                 assert!(!cats.is_empty());
-                if let Some(p) = r.get(&"exif_rw".into()) {
+                if let Some(p) = r.get("exif_rw") {
                     let _ = p.id();
                     let _ = p.name();
                 }
@@ -136,7 +138,7 @@ fn test_stress_concurrent_registry_write_16_threads() {
                     let _ = r.categories();
                     let _ = r.manifests();
                     let _ = r.query(&PluginQuery::default());
-                    if let Some(p) = r.get(&"photopipeline.plugins.exif_rw".into()) {
+                    if let Some(p) = r.get("photopipeline.plugins.exif_rw") {
                         let _ = p.name();
                         let _ = p.version();
                     }

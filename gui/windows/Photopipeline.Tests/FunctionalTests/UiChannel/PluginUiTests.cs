@@ -12,7 +12,6 @@ public sealed class PluginUiTests : UiTestBase
     public static IEnumerable<object[]> PluginUiTestCases =>
         TestCaseCatalog.GetByCategory("plugin")
             .Where(t => !t.SkipUiChannel)
-            .Take(20) // Limit UI tests to keep runtime manageable
             .Select(t => new object[] { t });
 
     [Theory]
@@ -21,17 +20,22 @@ public sealed class PluginUiTests : UiTestBase
     {
         if (!File.Exists(AppPath))
         {
-            _output.WriteLine($"App not found at {AppPath} — skipping UI test");
-            return;
+            throw new FileNotFoundException(
+                $"UI test cannot run: App not found at {AppPath}. Build the project first.");
         }
 
         if (ResourceMonitor.ShouldSkipLargeTest())
-            return;
+            throw new InvalidOperationException(
+                "Insufficient resources to run UI test; refusing to silently skip per Iron Rule 2.");
 
-        using var driver = new UiTestDriver();
+        using var driver = new UiTestDriver(
+            AppPath,
+            TestDataCatalog.GetInputDir(),
+            Path.Combine(Path.GetTempPath(), "photopipeline_ui_tests"),
+            _output);
         var outputPath = await driver.RunFullWorkflowAsync(
             TestDataCatalog.Instance.GetPath(tc.InputImage),
-            tc.Pipeline!,
+            tc.Pipeline!.Nodes.Select(n => n.PluginId).ToArray(),
             outputFormat: tc.OutputFormat);
 
         Assert.True(File.Exists(outputPath), $"UI output not found: {outputPath}");

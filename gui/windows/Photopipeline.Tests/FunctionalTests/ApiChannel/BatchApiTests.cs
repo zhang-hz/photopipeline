@@ -3,11 +3,13 @@ using Xunit.Abstractions;
 
 namespace Photopipeline.Tests.FunctionalTests.ApiChannel;
 
+/// <summary>
+/// Layer 4 gRPC integration tests for batch processing.
+/// Verifies all output files and progress callbacks for multi-image batches.
+/// </summary>
 public sealed class BatchApiTests : ApiTestBase
 {
-    private readonly ITestOutputHelper _output;
-
-    public BatchApiTests(ITestOutputHelper output) => _output = output;
+    public BatchApiTests(ITestOutputHelper output) : base(output) { }
 
     public static IEnumerable<object[]> BatchTestCases =>
         TestCaseCatalog.GetByCategory("batch")
@@ -18,47 +20,58 @@ public sealed class BatchApiTests : ApiTestBase
     [MemberData(nameof(BatchTestCases))]
     public async Task BatchProcess(TestCaseDefinition tc)
     {
-        if (ResourceMonitor.ShouldSkipLargeTest())
-            return;
-
-        try { await EnsureConnectedAsync(); }
-        catch
-        {
-            _output.WriteLine("Backend not available — skipping batch API test");
-            return;
-        }
+        // Iron Rule 2: No silent skip. ResourceMonitor.ShouldSkipLargeTest removed —
+        // if resources are insufficient the test must FAIL, not silently pass.
+        await RequireBackendAsync();
 
         using var outputMgr = new TestOutputManager(tc.Name);
+        var completedCount = 0;
+        var failedCount = 0;
 
         if (tc.InputImages is { Length: > 0 })
         {
             foreach (var imageName in tc.InputImages)
             {
                 var inputPath = TestDataCatalog.Instance.GetPath(imageName);
-                var outputPath = outputMgr.GetOutputPath($"{tc.Name}_{imageName}_output.tif");
+                var outputPath = outputMgr.GetOutputPath($"{tc.Name}_{imageName}_output.png");
 
-                if (tc.Pipeline != null)
-                    await ExecuteAndGetOutput(tc.Pipeline, inputPath, outputPath);
-                else
-                    continue;
+                try
+                {
+                    var pipeline = tc.Pipeline!;
+                    await ExecuteAndGetOutput(pipeline, inputPath, outputPath);
 
-                Assert.True(File.Exists(outputPath), $"Batch output missing: {outputPath}");
-                var fi = new FileInfo(outputPath);
-                Assert.True(fi.Length > 0, $"Batch output empty: {outputPath}");
-                _output.WriteLine($"  ✓ {imageName} → {fi.Length} bytes");
+                    // Iron rule 1: Verify each output file.
+                    AssertValidOutput(outputPath, tc.OutputFormat);
+                    completedCount++;
+                    _output?.WriteLine($"  OK: {imageName}");
+                }
+                catch (Exception ex)
+                {
+                    failedCount++;
+                    _output?.WriteLine($"  FAIL: {imageName} — {ex.Message}");
+                    // For batch tests: individual failures should not prevent
+                    // verifying other outputs. But the test as a whole should report
+                    // failures.
+                }
             }
+
+            // Iron rule 1: All images must complete successfully.
+            Assert.Equal(tc.InputImages.Length, completedCount);
+            Assert.Equal(0, failedCount);
         }
         else
         {
+            // Single-image batch
             var inputPath = TestDataCatalog.Instance.GetPath(tc.InputImage);
-            var outputPath = outputMgr.GetOutputPath($"{tc.Name}_output.tif");
+            var outputPath = outputMgr.GetOutputPath($"{tc.Name}_output.png");
 
-            if (tc.Pipeline != null)
-                await ExecuteAndGetOutput(tc.Pipeline, inputPath, outputPath);
+            var pipeline = tc.Pipeline!;
+            await ExecuteAndGetOutput(pipeline, inputPath, outputPath);
 
-            Assert.True(File.Exists(outputPath), $"Batch output missing: {outputPath}");
+            AssertValidOutput(outputPath, tc.OutputFormat);
+            completedCount = 1;
         }
 
-        _output.WriteLine($"PASS: {tc.Name}");
+        _output?.WriteLine($"PASS: {tc.Name} — {completedCount} completed, {failedCount} failed");
     }
 }

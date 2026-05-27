@@ -21,14 +21,18 @@
 
         <!-- Controls -->
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="8,8,8,4">
-            <ui:Button Content="Start" Command="{Binding StartBatchCommand}"
+            <ui:Button AutomationProperties.AutomationId="BatchStartButton"
+                       Content="Start" Command="{Binding StartBatchCommand}"
                        Icon="{ui:SymbolIcon Play24}" Margin="0,0,4,0" FontSize="11" />
-            <ui:Button Content="Pause" Command="{Binding PauseBatchCommand}"
+            <ui:Button AutomationProperties.AutomationId="BatchPauseButton"
+                       Content="Pause" Command="{Binding PauseBatchCommand}"
                        Icon="{ui:SymbolIcon Pause24}" Margin="0,0,4,0" Appearance="Secondary" FontSize="11" />
-            <ui:Button Content="Resume" Command="{Binding ResumeBatchCommand}"
+            <ui:Button AutomationProperties.AutomationId="BatchResumeButton"
+                       Content="Resume" Command="{Binding ResumeBatchCommand}"
                        Icon="{ui:SymbolIcon PlayCircle24}" Margin="0,0,4,0" Appearance="Secondary" FontSize="11"
                        Visibility="{Binding IsPaused, Converter={StaticResource BoolToVisibility}}" />
-            <ui:Button Content="Stop" Command="{Binding StopBatchCommand}"
+            <ui:Button AutomationProperties.AutomationId="BatchStopButton"
+                       Content="Stop" Command="{Binding StopBatchCommand}"
                        Icon="{ui:SymbolIcon Stop24}" Margin="0,0,4,0" Appearance="Secondary" FontSize="11" />
             <ui:Button Content="Clear Done" Command="{Binding ClearCompletedCommand}"
                        Appearance="Transparent" FontSize="11" />
@@ -115,7 +119,8 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                <ProgressBar Value="{Binding OverallProgress}" Maximum="100" Height="6" Margin="0,0,8,0" />
+                <ProgressBar AutomationProperties.AutomationId="BatchProgressBar"
+                             Value="{Binding OverallProgress}" Maximum="100" Height="6" Margin="0,0,8,0" />
                 <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                     <TextBlock FontSize="10" Foreground="{DynamicResource TextFillColorSecondaryBrush}">
                         <Run Text="{Binding CompletedItems, Mode=OneWay}" /><Run Text=" done, " />

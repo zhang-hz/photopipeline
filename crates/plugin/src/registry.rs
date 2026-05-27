@@ -77,35 +77,37 @@ impl Registry {
         Ok(())
     }
 
-    pub fn unregister(&self, id: &PluginId) -> Option<Arc<dyn Plugin>> {
+    pub fn unregister(&self, id: &str) -> Option<Arc<dyn Plugin>> {
+        let id = id.to_string();
         tracing::info!(plugin_id = %id, "Unregistering plugin: {}", id);
-        self.manifests.remove(id);
-        self.load_order.write().retain(|i| i != id);
-        self.metadata_processors.remove(id);
-        self.pixel_processors.remove(id);
-        self.format_processors.remove(id);
-        self.ai_processors.remove(id);
-        self.entries.remove(id).map(|(_, entry)| entry.plugin)
+        self.manifests.remove(&id);
+        self.load_order.write().retain(|i| *i != id);
+        self.metadata_processors.remove(&id);
+        self.pixel_processors.remove(&id);
+        self.format_processors.remove(&id);
+        self.ai_processors.remove(&id);
+        self.entries.remove(&id).map(|(_, entry)| entry.plugin)
     }
 
-    pub fn get(&self, id: &PluginId) -> Option<Arc<dyn Plugin>> {
-        let result = self.entries.get(id).map(|e| e.value().plugin.clone());
+    pub fn get(&self, id: &str) -> Option<Arc<dyn Plugin>> {
+        let id = id.to_string();
+        let result = self.entries.get(&id).map(|e| e.value().plugin.clone());
         if result.is_none() {
             tracing::trace!(plugin_id = %id, "Plugin lookup miss: {}", id);
         }
         result
     }
 
-    pub fn get_metadata_processor(&self, id: &PluginId) -> Option<Arc<dyn MetadataProcessor>> {
-        self.metadata_processors.get(id).map(|e| e.value().clone())
+    pub fn get_metadata_processor(&self, id: &str) -> Option<Arc<dyn MetadataProcessor>> {
+        self.metadata_processors.get(&id.to_string()).map(|e| e.value().clone())
     }
 
-    pub fn get_pixel_processor(&self, id: &PluginId) -> Option<Arc<dyn PixelProcessor>> {
-        self.pixel_processors.get(id).map(|e| e.value().clone())
+    pub fn get_pixel_processor(&self, id: &str) -> Option<Arc<dyn PixelProcessor>> {
+        self.pixel_processors.get(&id.to_string()).map(|e| e.value().clone())
     }
 
-    pub fn get_format_processor(&self, id: &PluginId) -> Option<Arc<dyn FormatProcessor>> {
-        self.format_processors.get(id).map(|e| e.value().clone())
+    pub fn get_format_processor(&self, id: &str) -> Option<Arc<dyn FormatProcessor>> {
+        self.format_processors.get(&id.to_string()).map(|e| e.value().clone())
     }
 
     pub fn iter_format_processors(&self) -> impl Iterator<Item = Arc<dyn FormatProcessor>> + '_ {
@@ -175,8 +177,8 @@ impl Registry {
         plugins
     }
 
-    pub fn manifest(&self, id: &PluginId) -> Option<PluginManifest> {
-        self.manifests.get(id).map(|m| m.clone())
+    pub fn manifest(&self, id: &str) -> Option<PluginManifest> {
+        self.manifests.get(&id.to_string()).map(|m| m.clone())
     }
 
     pub fn manifests(&self) -> Vec<PluginManifest> {
@@ -194,8 +196,8 @@ impl Registry {
         cats
     }
 
-    pub fn is_loaded(&self, id: &PluginId) -> bool {
-        self.entries.contains_key(id)
+    pub fn is_loaded(&self, id: &str) -> bool {
+        self.entries.contains_key(&id.to_string())
     }
 
     pub fn register_metadata_processor(
@@ -335,7 +337,7 @@ mod tests {
         ));
         reg.register(plugin.clone()).unwrap();
 
-        let found = reg.get(&"test.plugin".into());
+        let found = reg.get("test.plugin");
         assert!(found.is_some());
         assert_eq!(found.unwrap().name(), "Test Plugin");
     }
@@ -350,16 +352,16 @@ mod tests {
         ));
         reg.register(plugin).unwrap();
 
-        let removed = reg.unregister(&"test.plugin".into());
+        let removed = reg.unregister("test.plugin");
         assert!(removed.is_some());
-        assert!(reg.get(&"test.plugin".into()).is_none());
-        assert!(!reg.is_loaded(&"test.plugin".into()));
+        assert!(reg.get("test.plugin").is_none());
+        assert!(!reg.is_loaded("test.plugin"));
     }
 
     #[test]
     fn registry_unregister_nonexistent() {
         let reg = Registry::new();
-        assert!(reg.unregister(&"nonexistent".into()).is_none());
+        assert!(reg.unregister("nonexistent").is_none());
     }
 
     #[test]
@@ -446,10 +448,10 @@ mod tests {
     #[test]
     fn registry_is_loaded() {
         let reg = Registry::new();
-        assert!(!reg.is_loaded(&"p1".into()));
+        assert!(!reg.is_loaded("p1"));
         reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input)))
             .unwrap();
-        assert!(reg.is_loaded(&"p1".into()));
+        assert!(reg.is_loaded("p1"));
     }
 
     #[test]
@@ -462,7 +464,7 @@ mod tests {
         )))
         .unwrap();
 
-        let manifest = reg.manifest(&"p1".into());
+        let manifest = reg.manifest("p1");
         assert!(manifest.is_some());
         let m = manifest.unwrap();
         assert_eq!(m.name, "MyPlugin");
@@ -477,7 +479,7 @@ mod tests {
         let p2 = Arc::new(MockPlugin::new("dup", "Second", PluginCategory::Enhance));
         reg.register(p1).unwrap();
         reg.register(p2).unwrap();
-        let found = reg.get(&"dup".into());
+        let found = reg.get("dup");
         assert!(found.is_some());
         assert_eq!(found.unwrap().name(), "Second");
     }
@@ -487,8 +489,8 @@ mod tests {
         let reg = Registry::new();
         reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input)))
             .unwrap();
-        reg.unregister(&"p1".into());
-        assert!(reg.get(&"p1".into()).is_none());
+        reg.unregister("p1");
+        assert!(reg.get("p1").is_none());
     }
 
     #[test]
@@ -542,8 +544,8 @@ mod tests {
         let reg = Registry::new();
         reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input)))
             .unwrap();
-        reg.unregister(&"p1".into());
-        assert!(reg.manifest(&"p1".into()).is_none());
+        reg.unregister("p1");
+        assert!(reg.manifest("p1").is_none());
     }
 
     #[test]
@@ -575,7 +577,7 @@ mod tests {
     #[test]
     fn registry_is_loaded_before_register() {
         let reg = Registry::new();
-        assert!(!reg.is_loaded(&"nope".into()));
+        assert!(!reg.is_loaded("nope"));
     }
 
     #[test]
@@ -583,8 +585,8 @@ mod tests {
         let reg = Registry::new();
         reg.register(Arc::new(MockPlugin::new("p1", "P1", PluginCategory::Input)))
             .unwrap();
-        reg.unregister(&"p1".into());
-        assert!(!reg.is_loaded(&"p1".into()));
+        reg.unregister("p1");
+        assert!(!reg.is_loaded("p1"));
     }
 
     #[test]

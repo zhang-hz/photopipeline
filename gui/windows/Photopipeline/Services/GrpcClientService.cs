@@ -17,6 +17,7 @@ public sealed class GrpcClientService : IDisposable
     private int _reconnectAttempts;
 
     public bool IsConnected => _isConnected;
+    public string Address => _serverAddress;
 
     public GrpcClientService(string serverAddress = "http://localhost:50051",
         ILogger<GrpcClientService>? logger = null)

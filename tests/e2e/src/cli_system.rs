@@ -31,8 +31,9 @@ fn photopipeline_binary() -> Option<String> {
     None
 }
 
-fn skip_if_no_binary() -> Option<String> {
+fn require_binary() -> String {
     photopipeline_binary()
+        .expect("SKIP: photopipeline binary not found — cannot run CLI test. Build the project first.")
 }
 
 fn make_minimal_png() -> Vec<u8> {
@@ -129,11 +130,7 @@ plugin = "nonexistent.plugin.zzz"
 
 #[test]
 fn e2e_cli_pipeline_run_valid_config() {
-    let binary = skip_if_no_binary();
-    let Some(bin) = binary else {
-        eprintln!("SKIP: photopipeline binary not found");
-        return;
-    };
+    let bin = require_binary();
 
     let temp_dir = TempDir::new().unwrap();
     let config_path = write_valid_config(&temp_dir);
@@ -170,11 +167,7 @@ fn e2e_cli_pipeline_run_valid_config() {
 
 #[test]
 fn e2e_cli_pipeline_validate_valid_config() {
-    let binary = skip_if_no_binary();
-    let Some(bin) = binary else {
-        eprintln!("SKIP: photopipeline binary not found");
-        return;
-    };
+    let bin = require_binary();
 
     let temp_dir = TempDir::new().unwrap();
     let config_path = write_valid_config(&temp_dir);
@@ -199,11 +192,7 @@ fn e2e_cli_pipeline_validate_valid_config() {
 
 #[test]
 fn e2e_cli_pipeline_validate_invalid_config() {
-    let binary = skip_if_no_binary();
-    let Some(bin) = binary else {
-        eprintln!("SKIP: photopipeline binary not found");
-        return;
-    };
+    let bin = require_binary();
 
     let temp_dir = TempDir::new().unwrap();
     let config_path = write_invalid_config(&temp_dir);
@@ -228,11 +217,7 @@ fn e2e_cli_pipeline_validate_invalid_config() {
 
 #[test]
 fn e2e_cli_plugin_list_shows_14_plugins() {
-    let binary = skip_if_no_binary();
-    let Some(bin) = binary else {
-        eprintln!("SKIP: photopipeline binary not found");
-        return;
-    };
+    let bin = require_binary();
 
     let output = Command::new(&bin).arg("plugin").arg("list").output();
 
@@ -249,11 +234,7 @@ fn e2e_cli_plugin_list_shows_14_plugins() {
 
 #[test]
 fn e2e_cli_plugin_info_valid_id() {
-    let binary = skip_if_no_binary();
-    let Some(bin) = binary else {
-        eprintln!("SKIP: photopipeline binary not found");
-        return;
-    };
+    let bin = require_binary();
 
     for id in &["exif_rw", "photopipeline.plugins.exif_rw"] {
         let output = Command::new(&bin)
@@ -280,11 +261,7 @@ fn e2e_cli_plugin_info_valid_id() {
 
 #[test]
 fn e2e_cli_plugin_info_invalid_id() {
-    let binary = skip_if_no_binary();
-    let Some(bin) = binary else {
-        eprintln!("SKIP: photopipeline binary not found");
-        return;
-    };
+    let bin = require_binary();
 
     let output = Command::new(&bin)
         .arg("plugin")
@@ -305,11 +282,7 @@ fn e2e_cli_plugin_info_invalid_id() {
 
 #[test]
 fn e2e_cli_batch_run_with_glob_pattern() {
-    let binary = skip_if_no_binary();
-    let Some(bin) = binary else {
-        eprintln!("SKIP: photopipeline binary not found");
-        return;
-    };
+    let bin = require_binary();
 
     let temp_dir = TempDir::new().unwrap();
     let config_path = write_valid_config(&temp_dir);
@@ -345,11 +318,7 @@ fn e2e_cli_batch_run_with_glob_pattern() {
 
 #[test]
 fn e2e_cli_batch_validate() {
-    let binary = skip_if_no_binary();
-    let Some(bin) = binary else {
-        eprintln!("SKIP: photopipeline binary not found");
-        return;
-    };
+    let bin = require_binary();
 
     let temp_dir = TempDir::new().unwrap();
     let config_path = write_valid_config(&temp_dir);
@@ -374,11 +343,7 @@ fn e2e_cli_batch_validate() {
 
 #[test]
 fn e2e_cli_missing_required_args() {
-    let binary = skip_if_no_binary();
-    let Some(bin) = binary else {
-        eprintln!("SKIP: photopipeline binary not found");
-        return;
-    };
+    let bin = require_binary();
 
     let output = Command::new(&bin).arg("pipeline").arg("run").output();
 
@@ -395,11 +360,7 @@ fn e2e_cli_missing_required_args() {
 
 #[test]
 fn e2e_cli_help_output() {
-    let binary = skip_if_no_binary();
-    let Some(bin) = binary else {
-        eprintln!("SKIP: photopipeline binary not found");
-        return;
-    };
+    let bin = require_binary();
 
     let output = Command::new(&bin).arg("--help").output();
 
@@ -420,11 +381,7 @@ fn e2e_cli_help_output() {
 
 #[test]
 fn e2e_cli_version_output() {
-    let binary = skip_if_no_binary();
-    let Some(bin) = binary else {
-        eprintln!("SKIP: photopipeline binary not found");
-        return;
-    };
+    let bin = require_binary();
 
     let output = Command::new(&bin).arg("--version").output();
 
@@ -441,11 +398,7 @@ fn e2e_cli_version_output() {
 
 #[test]
 fn e2e_cli_log_level_flag_accepted() {
-    let binary = skip_if_no_binary();
-    let Some(bin) = binary else {
-        eprintln!("SKIP: photopipeline binary not found");
-        return;
-    };
+    let bin = require_binary();
 
     let output = Command::new(&bin)
         .arg("--log-level")

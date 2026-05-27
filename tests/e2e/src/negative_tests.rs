@@ -2,8 +2,8 @@
 #![allow(unused_imports)]
 
 use photopipeline_core::{
-    ColorSpace, ImageFormat, ImageInfo, Metadata, PixelBuffer, PixelFormat, PluginError,
-    ValidationIssue,
+    ColorSpace, EncodeOptions, ImageFormat, ImageInfo, Metadata, PixelBuffer, PixelFormat,
+    PluginError, ValidationIssue,
 };
 use photopipeline_engine::{
     ParameterResolver, PipelineGraph, PipelineTemplate, TemplateEdge, TemplateNode,
@@ -37,14 +37,18 @@ fn e2e_invalid_toml_syntax() {
     let invalid_toml = b"[[invalid section\n  key = value with no quotes\n  [[nested broken\n";
     let result: Result<PipelineTemplate, _> =
         toml::from_str(std::str::from_utf8(invalid_toml).unwrap_or(""));
-    assert!(result.is_err() || std::str::from_utf8(invalid_toml).is_err());
+    assert!(result.is_err(), "invalid TOML syntax must produce parse error");
 }
 
 #[test]
 fn e2e_empty_toml_file() {
-    let _empty: &[u8] = b"";
     let result: Result<PipelineTemplate, _> = toml::from_str("");
-    assert!(result.is_err());
+    assert!(result.is_err(), "empty TOML must produce parse error");
+    let err_msg = result.unwrap_err().to_string();
+    assert!(
+        !err_msg.is_empty(),
+        "parse error should have a non-empty message"
+    );
 }
 
 #[test]
@@ -100,7 +104,17 @@ fn e2e_duplicate_edge_rejected() {
 
     assert!(graph.connect(out1, in2).is_ok());
     let result = graph.connect(out1, in2);
-    assert!(result.is_err());
+    assert!(result.is_err(), "duplicate edge must be rejected");
+    match result {
+        Err(PluginError::ValidationFailed(msg)) => {
+            assert!(
+                msg.contains("duplicate") || msg.contains("already") || msg.contains("exists"),
+                "error message should mention duplicate/already/exists, got: {}",
+                msg
+            );
+        }
+        other => panic!("expected ValidationFailed for duplicate edge, got {:?}", other),
+    }
 }
 
 #[test]
@@ -110,7 +124,17 @@ fn e2e_edge_to_nonexistent_node() {
     let out1 = graph.node(n1).unwrap().outputs[0];
     let fake_port = Uuid::new_v4();
     let result = graph.connect(out1, fake_port);
-    assert!(result.is_err());
+    assert!(result.is_err(), "edge to nonexistent port must fail");
+    match result {
+        Err(PluginError::ValidationFailed(msg)) => {
+            assert!(
+                msg.contains("not found") || msg.contains("nonexistent") || msg.contains("unknown"),
+                "error should indicate port not found, got: {}",
+                msg
+            );
+        }
+        other => panic!("expected ValidationFailed for nonexistent port, got {:?}", other),
+    }
 }
 
 #[test]
@@ -295,28 +319,64 @@ fn e2e_max_length_string_parameter_exceeded() {
 
 #[test]
 fn e2e_path_traversal_in_file_parameter() {
+    use std::path::{Component, Path};
+
     let traversal_paths = vec![
         "../../../etc/passwd",
-        "/etc/passwd",
         "..\\..\\..\\windows\\system32",
         "../../.ssh/id_rsa",
     ];
 
     for path in &traversal_paths {
-        let has_traversal =
-            path.contains("..") || path.contains("/etc/") || path.contains("\\windows\\");
+        // String-level detection: any path containing ".." is suspicious
         assert!(
-            has_traversal,
-            "path '{path}' should be detected as suspicious"
+            path.contains(".."),
+            "path '{path}' should be detected as suspicious at string level"
+        );
+
+        // Filesystem-level verification: use std::path to detect ParentDir components
+        let p = Path::new(path);
+        let components: Vec<_> = p.components().collect();
+        let has_parent_dir = components.iter().any(|c| matches!(c, Component::ParentDir));
+        assert!(
+            has_parent_dir,
+            "path '{path}' must contain parent-dir traversal components (fs-level check), got: {:?}",
+            components
         );
     }
 
+    // Also test an absolute path that tries to access a system file
+    let absolute_traversal = if cfg!(windows) {
+        "C:\\Windows\\System32\\config\\SAM"
+    } else {
+        "/etc/passwd"
+    };
+    let p = Path::new(absolute_traversal);
+    // Absolute paths to system files are suspicious in file-parameter contexts
+    assert!(p.is_absolute(), "system file path '{}' should be absolute", absolute_traversal);
+    assert!(!p.to_string_lossy().is_empty(), "suspicious path should not be empty");
+
+    // Safe path verification
     let safe_path = "photos/vacation/img_001.jpg";
-    let no_traversal =
-        !safe_path.contains("..") && !safe_path.contains("/etc/") && !safe_path.contains("\\");
+    let safe_p = Path::new(safe_path);
     assert!(
-        no_traversal,
-        "safe path should not trigger traversal detection"
+        !safe_path.contains(".."),
+        "safe path should not contain '..'"
+    );
+    // Filesystem-level: safe path must not contain parent references and must be relative
+    let safe_components: Vec<_> = safe_p.components().collect();
+    assert!(
+        !safe_components.iter().any(|c| matches!(c, Component::ParentDir)),
+        "safe path must not contain parent directory references"
+    );
+    assert!(
+        !safe_p.is_absolute(),
+        "safe path should be relative, not absolute"
+    );
+    assert_eq!(
+        safe_components.len(),
+        3,
+        "safe path should have 3 normal components (photos/vacation/img_001.jpg)"
     );
 }
 
@@ -341,19 +401,37 @@ fn e2e_unicode_in_plugin_id() {
 }
 
 #[test]
-fn e2e_zero_bytes_input_file() {
+fn e2e_zero_dimension_image_rejected() {
+    let reg = Arc::new(Registry::new());
+    photopipeline_plugins::register_all(&reg);
+
+    // A zero-dimension buffer has no valid pixel content
     let buf = PixelBuffer::new(
-        0,
-        0,
+        0, 0,
         photopipeline_core::ChannelLayout::RGB,
         PixelFormat::U8,
     );
     assert_eq!(buf.data.data.len(), 0);
-    assert_eq!(buf.width, 0);
-    assert_eq!(buf.height, 0);
+    assert_eq!(buf.width, 0, "zero-width buffer is invalid");
+    assert_eq!(buf.height, 0, "zero-height buffer is invalid");
+    // Pixel count must be zero
+    assert_eq!(buf.width as usize * buf.height as usize, 0);
 
-    let empty_data: Vec<u8> = Vec::new();
-    assert!(empty_data.is_empty());
+    // Verify the system rejects zero-dimension encoding
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    if let Some(processor) = reg.get_format_processor("photopipeline.plugins.png_encoder") {
+        let options = photopipeline_core::EncodeOptions {
+            format: ImageFormat::PNG,
+            ..Default::default()
+        };
+        let result = rt.block_on(async {
+            processor.encode(&buf, &Metadata::default(), &options).await
+        });
+        assert!(
+            result.is_err(),
+            "zero-dimension image encoding must be rejected with an error, not silently succeed"
+        );
+    }
 }
 
 #[test]
@@ -394,72 +472,97 @@ fn e2e_empty_nodes_in_template_rejected() {
         batch: None,
     };
     let result = template.validate();
-    assert!(result.is_err());
+    assert!(result.is_err(), "empty nodes must be rejected");
+    let msg = result.unwrap_err().to_lowercase();
+    assert!(
+        msg.contains("node") || msg.contains("one") || msg.contains("empty"),
+        "error should mention nodes/one/empty, got: {}",
+        msg
+    );
 }
 
 #[test]
 fn e2e_circular_dependency_in_template() {
-    let template = PipelineTemplate {
-        metadata: Default::default(),
-        nodes: vec![
-            TemplateNode {
-                id: "a".into(),
-                plugin: "photopipeline.plugins.exif_rw".into(),
-                label: None,
-                enabled: true,
-                params: None,
-            },
-            TemplateNode {
-                id: "b".into(),
-                plugin: "photopipeline.plugins.exif_rw".into(),
-                label: None,
-                enabled: true,
-                params: None,
-            },
-        ],
-        edges: vec![
-            TemplateEdge {
-                from: "a".into(),
-                to: "b".into(),
-            },
-            TemplateEdge {
-                from: "b".into(),
-                to: "a".into(),
-            },
-        ],
-        overrides: vec![],
-        groups: vec![],
-        batch: None,
-    };
+    // into_graph() uses PipelineGraph::connect() which rejects cycle-creating
+    // edges at construction time. So we build the graph manually and inject
+    // the cycle edge to verify topological_order detects it.
+    let mut graph = PipelineGraph::new();
+    let n1 = graph.add_node("photopipeline.plugins.exif_rw".into(), "a".into());
+    let n2 = graph.add_node("photopipeline.plugins.exif_rw".into(), "b".into());
 
-    let graph = template.into_graph();
-    assert_eq!(graph.nodes.len(), 2);
-    assert!(graph.edges.len() <= 2);
-    // Verify nodes exist; cycle handling is impl-specific
-    assert_eq!(graph.nodes.len(), 2);
+    let out_a = graph.node(n1).unwrap().outputs[0];
+    let in_b = graph.node(n2).unwrap().inputs[0];
+    let out_b = graph.node(n2).unwrap().outputs[0];
+    let in_a = graph.node(n1).unwrap().inputs[0];
+
+    // Forward edge A→B is valid
+    assert!(graph.connect(out_a, in_b).is_ok());
+    // Back edge B→A creates a cycle — connect() rejects it
+    let back_edge = graph.connect(out_b, in_a);
+    assert!(back_edge.is_err(), "B→A should be rejected as cycle-creating");
+
+    // Manually add the cycle edge to prove topological_order detects it
+    graph.edges.push((out_b, in_a));
+    assert!(graph.has_cycle(), "circular dependency A→B→A must be detected by has_cycle");
+    assert!(graph.topological_order().is_err(), "circular dependency A→B→A must fail topological sort");
+
+    let validation = graph.validate_graph();
+    assert!(validation.is_err(), "validate_graph must detect the cycle");
+    let issues = validation.unwrap_err();
+    let has_cycle = issues.iter().any(|i| i.contains("cycle"));
+    assert!(has_cycle, "validation issues must mention 'cycle': {:?}", issues);
 }
 
 #[test]
 fn e2e_duplicate_node_ids_in_graph() {
+    use photopipeline_engine::PipelineNode;
+
     let mut graph = PipelineGraph::new();
     for _ in 0..10 {
         graph.add_node("p1".into(), "dup_label".into());
     }
     assert_eq!(graph.nodes.len(), 10);
-    let validate_result = graph.validate_graph();
-    if let Err(issues) = validate_result {
-        let has_dup = issues.iter().any(|i| i.contains("duplicate"));
-        if has_dup {
-            return;
-        }
-    }
 
+    // UUIDs from add_node() are always unique, so manually create a duplicate
+    let dup_id = graph.nodes[0].id;
+    graph.nodes.push(PipelineNode {
+        id: dup_id,
+        plugin_id: "p2".into(),
+        label: "dup_id_node".into(),
+        enabled: true,
+        position: (0.0, 0.0),
+        inputs: vec![],
+        outputs: vec![],
+        parameter_overrides: None,
+    });
+
+    // validate_graph must detect duplicate UUIDs
+    let validate_result = graph.validate_graph();
+    assert!(
+        validate_result.is_err(),
+        "graph with duplicate node UUIDs must fail validation"
+    );
+    let issues = validate_result.unwrap_err();
+    assert!(!issues.is_empty(), "validation must return at least one issue");
+    let has_dup = issues.iter().any(|i| i.contains("duplicate"));
+    assert!(
+        has_dup,
+        "validation errors must mention 'duplicate' node IDs, got: {:?}",
+        issues
+    );
+
+    // Also verify that normally, all IDs are unique
     let ids: Vec<Uuid> = graph.nodes.iter().map(|n| n.id).collect();
     let mut seen = std::collections::HashSet::new();
     for id in &ids {
         seen.insert(*id);
     }
-    assert_eq!(ids.len(), seen.len(), "all node ids should be unique");
+    // With our manual duplicate, seen should have one less entry than ids
+    assert_eq!(
+        ids.len(),
+        seen.len() + 1,
+        "manually inserted duplicate means seen count should be ids.len() - 1"
+    );
 }
 
 #[test]

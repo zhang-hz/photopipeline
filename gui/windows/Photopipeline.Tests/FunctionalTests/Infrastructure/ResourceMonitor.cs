@@ -15,7 +15,7 @@ public static class ResourceMonitor
         }
         catch
         {
-            return true; // Don't block tests on monitor failure
+            return false; // If monitoring fails, assume resources may be insufficient
         }
     }
 
@@ -28,7 +28,7 @@ public static class ResourceMonitor
         }
         catch
         {
-            return true;
+            return false;
         }
     }
 

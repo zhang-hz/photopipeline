@@ -1,24 +1,54 @@
 using Microsoft.Extensions.Logging;
 using Moq;
+using Photopipeline.Helpers;
+using Photopipeline.Models;
+using Photopipeline.Services;
+using Photopipeline.ViewModels;
+using SkiaSharp;
 
 namespace Photopipeline.Tests.UnitTests.ViewModels;
 
-public sealed class PreviewViewModelTests
+/// <summary>
+/// Layer 3 unit tests for PreviewViewModel.
+/// Uses MockBehavior.Strict for service mocks. Every test has a FAIL-able assertion.
+/// </summary>
+public sealed class PreviewViewModelTests : IDisposable
 {
-    private static PreviewViewModel Create(
-        Mock<IImageService>? imageServiceMock = null,
-        Mock<IPipelineService>? pipelineServiceMock = null)
+    private readonly List<Mock> _strictMocks = new();
+
+    public void Dispose()
     {
-        var logger = Mock.Of<ILogger<PreviewViewModel>>();
-        var imageService = imageServiceMock?.Object ?? Mock.Of<IImageService>();
-        var pipelineService = pipelineServiceMock?.Object ?? Mock.Of<IPipelineService>();
-        return new PreviewViewModel(logger, imageService, pipelineService, null!);
+        foreach (var mock in _strictMocks)
+            mock.VerifyAll();
     }
 
-    [Fact]
-    public void InitialState_DefaultValues()
+    private Mock<T> Strict<T>() where T : class
     {
-        var vm = Create();
+        var mock = new Mock<T>(MockBehavior.Strict);
+        _strictMocks.Add(mock);
+        return mock;
+    }
+
+    private static ILogger<T> AnyLogger<T>() => Mock.Of<ILogger<T>>();
+
+    private PreviewViewModel CreateVm(
+        Mock<IImageService>? imageMock = null,
+        Mock<IPipelineService>? pipelineMock = null,
+        Mock<IDialogService>? dialogMock = null)
+    {
+        var img = imageMock?.Object ?? Mock.Of<IImageService>();
+        var pl = pipelineMock?.Object ?? Mock.Of<IPipelineService>();
+        var dlg = dialogMock?.Object ?? Mock.Of<IDialogService>();
+        return new PreviewViewModel(AnyLogger<PreviewViewModel>(), img, pl, dlg);
+    }
+
+    // ═════════════════════════════════════════════════════════════
+    // Test 001: InitialState_DefaultValues
+    // ═════════════════════════════════════════════════════════════
+    [Fact]
+    public void Test_001_InitialState_DefaultValues()
+    {
+        var vm = CreateVm();
 
         vm.ZoomLevel.Should().Be(1.0);
         vm.SplitPosition.Should().Be(0.5);
@@ -30,54 +60,78 @@ public sealed class PreviewViewModelTests
         vm.PixelInfo.Should().BeEmpty();
     }
 
+    // ═════════════════════════════════════════════════════════════
+    // Test 002: ZoomIn selects next discrete step
+    // ═════════════════════════════════════════════════════════════
     [Fact]
-    public void ZoomIn_IncreasesLevel()
+    public void Test_002_ZoomIn_IncreasesLevel()
     {
-        var vm = Create();
+        var vm = CreateVm();
+        var raised = false;
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(PreviewViewModel.ZoomLevel))
+                raised = true;
+        };
 
         vm.ZoomInCommand.Execute(null);
 
-        vm.ZoomLevel.Should().BeGreaterThan(1.0);
+        vm.ZoomLevel.Should().Be(1.5); // next step after default 1.0
         vm.IsFitToWindow.Should().BeFalse();
+        raised.Should().BeTrue("ZoomLevel PropertyChanged must be raised");
     }
 
+    // ═════════════════════════════════════════════════════════════
+    // Test 003: ZoomOut selects previous discrete step
+    // ═════════════════════════════════════════════════════════════
     [Fact]
-    public void ZoomOut_DecreasesLevel()
+    public void Test_003_ZoomOut_DecreasesLevel()
     {
-        var vm = Create();
+        var vm = CreateVm();
         vm.ZoomLevel = 2.0;
 
         vm.ZoomOutCommand.Execute(null);
 
-        vm.ZoomLevel.Should().BeLessThan(2.0);
+        vm.ZoomLevel.Should().Be(1.5); // previous step before 2.0
+        vm.IsFitToWindow.Should().BeFalse();
     }
 
+    // ═════════════════════════════════════════════════════════════
+    // Test 004: ZoomIn stops at maximum discrete step (8.0)
+    // ═════════════════════════════════════════════════════════════
     [Fact]
-    public void ZoomOut_AtMinimum_DoesNotExceed()
+    public void Test_004_ZoomIn_AtMaximum_DoesNotExceed()
     {
-        var vm = Create();
+        var vm = CreateVm();
 
+        for (int i = 0; i < 100; i++)
+            vm.ZoomInCommand.Execute(null);
+
+        vm.ZoomLevel.Should().Be(8.0, "zoom must stop at max discrete step");
+    }
+
+    // ═════════════════════════════════════════════════════════════
+    // Test 005: ZoomOut_AtMinimum_DoesNotExceed
+    // ═════════════════════════════════════════════════════════════
+    [Fact]
+    public void Test_005_ZoomOut_AtMinimum_DoesNotExceed()
+    {
+        var vm = CreateVm();
+
+        // Execute ZoomOut 100 times — should never go below MinZoom (0.0625)
         for (int i = 0; i < 100; i++)
             vm.ZoomOutCommand.Execute(null);
 
         vm.ZoomLevel.Should().BeGreaterOrEqualTo(0.0625);
     }
 
+    // ═════════════════════════════════════════════════════════════
+    // Test 006: ResetZoom_ReturnsToOne
+    // ═════════════════════════════════════════════════════════════
     [Fact]
-    public void ZoomIn_AtMaximum_DoesNotExceed()
+    public void Test_006_ResetZoom_ReturnsToOne()
     {
-        var vm = Create();
-
-        for (int i = 0; i < 100; i++)
-            vm.ZoomInCommand.Execute(null);
-
-        vm.ZoomLevel.Should().BeLessOrEqualTo(32.0);
-    }
-
-    [Fact]
-    public void ResetZoom_ReturnsToOne()
-    {
-        var vm = Create();
+        var vm = CreateVm();
         vm.ZoomLevel = 4.0;
 
         vm.ResetZoomCommand.Execute(null);
@@ -86,10 +140,13 @@ public sealed class PreviewViewModelTests
         vm.IsFitToWindow.Should().BeFalse();
     }
 
+    // ═════════════════════════════════════════════════════════════
+    // Test 007: FitToWindow_SetsFitTrue
+    // ═════════════════════════════════════════════════════════════
     [Fact]
-    public void FitToWindow_SetsFitTrue()
+    public void Test_007_FitToWindow_SetsFitTrue()
     {
-        var vm = Create();
+        var vm = CreateVm();
         vm.ZoomLevel = 4.0;
         vm.IsFitToWindow = false;
 
@@ -98,10 +155,14 @@ public sealed class PreviewViewModelTests
         vm.IsFitToWindow.Should().BeTrue();
     }
 
+    // ═════════════════════════════════════════════════════════════
+    // Test 008: ToggleSplit_FlipsSplitView
+    // ═════════════════════════════════════════════════════════════
     [Fact]
-    public void ToggleSplit_FlipsSplitView()
+    public void Test_008_ToggleSplit_FlipsSplitView()
     {
-        var vm = Create();
+        var vm = CreateVm();
+        vm.IsSplitView.Should().BeTrue();
 
         vm.ToggleSplitCommand.Execute(null);
         vm.IsSplitView.Should().BeFalse();
@@ -110,10 +171,13 @@ public sealed class PreviewViewModelTests
         vm.IsSplitView.Should().BeTrue();
     }
 
+    // ═════════════════════════════════════════════════════════════
+    // Test 009: OneToOne_ResetsZoom
+    // ═════════════════════════════════════════════════════════════
     [Fact]
-    public void OneToOne_ResetsZoom()
+    public void Test_009_OneToOne_ResetsZoom()
     {
-        var vm = Create();
+        var vm = CreateVm();
         vm.ZoomLevel = 3.0;
         vm.IsFitToWindow = true;
 
@@ -123,10 +187,13 @@ public sealed class PreviewViewModelTests
         vm.IsFitToWindow.Should().BeFalse();
     }
 
+    // ═════════════════════════════════════════════════════════════
+    // Test 010: Pan_UpdatesOffset
+    // ═════════════════════════════════════════════════════════════
     [Fact]
-    public void Pan_UpdatesOffset()
+    public void Test_010_Pan_UpdatesOffset()
     {
-        var vm = Create();
+        var vm = CreateVm();
 
         vm.Pan(10, -5);
 
@@ -134,14 +201,34 @@ public sealed class PreviewViewModelTests
         vm.PanOffset.Y.Should().Be(-5f);
     }
 
+    // ═════════════════════════════════════════════════════════════
+    // Test 011: Pan_AccumulatesMultipleCalls
+    // ═════════════════════════════════════════════════════════════
     [Fact]
-    public void Pan_AccumulatesMultipleCalls()
+    public void Test_011_Pan_AccumulatesMultipleCalls()
     {
-        var vm = Create();
+        var vm = CreateVm();
 
         vm.Pan(10, 0);
         vm.Pan(20, 0);
+        vm.Pan(0, 5);
 
         vm.PanOffset.X.Should().Be(30f);
+        vm.PanOffset.Y.Should().Be(5f);
+    }
+
+    // ═════════════════════════════════════════════════════════════
+    // Test 012: Export_NoImage_ShowsError
+    // ═════════════════════════════════════════════════════════════
+    [Fact]
+    public void Test_012_Export_NoImage_ShowsError()
+    {
+        var vm = CreateVm();
+
+        // Export when BeforeBitmap and AfterBitmap are both null
+        vm.ExportCommand.Execute(null);
+
+        vm.ErrorMessage.Should().NotBeNull();
+        vm.ErrorMessage.Should().Be("No image to export");
     }
 }

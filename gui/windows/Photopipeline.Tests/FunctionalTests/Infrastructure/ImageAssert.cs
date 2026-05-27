@@ -1,3 +1,6 @@
+using MetadataExtractor;
+using MetadataExtractor.Formats.Exif;
+using MetadataExtractor.Formats.Xmp;
 using SkiaSharp;
 
 namespace Photopipeline.Tests.FunctionalTests.Infrastructure;
@@ -16,8 +19,8 @@ public static class ImageAssert
                 $"Size mismatch: actual={actualBmp.Width}x{actualBmp.Height}, expected={expectedBmp.Width}x{expectedBmp.Height}");
 
         int diffCount = 0, firstDiffX = -1, firstDiffY = -1;
-        byte firstActualR = 0, firstActualG = 0, firstActualB = 0;
-        byte firstExpectedR = 0, firstExpectedG = 0, firstExpectedB = 0;
+        byte firstActualR = 0, firstActualG = 0, firstActualB = 0, firstActualA = 0;
+        byte firstExpectedR = 0, firstExpectedG = 0, firstExpectedB = 0, firstExpectedA = 0;
 
         int w = actualBmp.Width, h = actualBmp.Height;
         for (int y = 0; y < h; y++)
@@ -35,8 +38,8 @@ public static class ImageAssert
                     if (firstDiffX < 0)
                     {
                         firstDiffX = x; firstDiffY = y;
-                        firstActualR = ap.Red; firstActualG = ap.Green; firstActualB = ap.Blue;
-                        firstExpectedR = ep.Red; firstExpectedG = ep.Green; firstExpectedB = ep.Blue;
+                        firstActualR = ap.Red; firstActualG = ap.Green; firstActualB = ap.Blue; firstActualA = ap.Alpha;
+                        firstExpectedR = ep.Red; firstExpectedG = ep.Green; firstExpectedB = ep.Blue; firstExpectedA = ep.Alpha;
                     }
                 }
             }
@@ -48,8 +51,8 @@ public static class ImageAssert
             throw new Xunit.Sdk.XunitException(
                 $"Pixel mismatch: {diffCount}/{totalPixels} pixels differ. " +
                 $"First diff at ({firstDiffX},{firstDiffY}): " +
-                $"actual=({firstActualR},{firstActualG},{firstActualB}) " +
-                $"expected=({firstExpectedR},{firstExpectedG},{firstExpectedB})");
+                $"actual=({firstActualR},{firstActualG},{firstActualB},{firstActualA}) " +
+                $"expected=({firstExpectedR},{firstExpectedG},{firstExpectedB},{firstExpectedA})");
         }
     }
 
@@ -63,14 +66,15 @@ public static class ImageAssert
                 $"Size mismatch: actual={actualBmp.Width}x{actualBmp.Height}, expected={refBmp.Width}x{refBmp.Height}");
 
         double mse = ComputeMSE(actualBmp, refBmp);
-        double psnr = mse < 1e-10 ? 100.0 : 10.0 * Math.Log10(255.0 * 255.0 / mse);
+        double maxVal = GetMaxValueForColorType(actualBmp.ColorType);
+        double psnr = mse < 1e-10 ? double.PositiveInfinity : 10.0 * Math.Log10(maxVal * maxVal / mse);
 
         if (psnr < minPSNR_dB)
             throw new Xunit.Sdk.XunitException(
                 $"PSNR too low: {psnr:F2}dB < minimum {minPSNR_dB:F2}dB");
     }
 
-    public static void SSIMAbove(string actualPath, string referencePath, double minSSIM)
+    public static void SSIMAbove(string actualPath, string referencePath, double minSSIM, bool useWindowed = false)
     {
         using var actualBmp = LoadBitmap(actualPath);
         using var refBmp = LoadBitmap(referencePath);
@@ -79,7 +83,7 @@ public static class ImageAssert
             throw new Xunit.Sdk.XunitException(
                 $"Size mismatch: actual={actualBmp.Width}x{actualBmp.Height}, expected={refBmp.Width}x{refBmp.Height}");
 
-        double ssim = ComputeSSIM(actualBmp, refBmp);
+        double ssim = useWindowed ? ComputeWindowedSSIM(actualBmp, refBmp) : ComputeSSIM(actualBmp, refBmp);
         if (ssim < minSSIM)
             throw new Xunit.Sdk.XunitException(
                 $"SSIM too low: {ssim:F4} < minimum {minSSIM:F4}");
@@ -124,6 +128,9 @@ public static class ImageAssert
             throw new Xunit.Sdk.XunitException(
                 $"Format mismatch: expected {expectedFormat}, got {ext}");
 
+        // Verify file magic bytes match the extension (defense against format forgery)
+        VerifyFileHeader(path, ext);
+
         if (expectedWidth.HasValue && bmp.Width != expectedWidth.Value)
             throw new Xunit.Sdk.XunitException(
                 $"Width mismatch: expected {expectedWidth}, got {bmp.Width}");
@@ -144,11 +151,114 @@ public static class ImageAssert
 
     public static void MetadataMatches(string path, Action<ImageMetadata> assertions)
     {
-        assertions(new ImageMetadata());
+        if (!File.Exists(path))
+            throw new FileNotFoundException($"Image not found: {path}");
+
+        var metadata = ReadImageMetadata(path);
+        assertions(metadata);
+    }
+
+    /// <summary>
+    /// Reads EXIF and XMP metadata from an image file using MetadataExtractor.
+    /// Populates an <see cref="ImageMetadata"/> object with camera, exposure, and GPS data.
+    /// </summary>
+    public static ImageMetadata ReadImageMetadata(string path)
+    {
+        var directories = ImageMetadataReader.ReadMetadata(path);
+        var metadata = new ImageMetadata();
+
+        // ── EXIF IFD0 (camera maker / model) ──
+        var ifd0 = directories.OfType<ExifIfd0Directory>().FirstOrDefault();
+        if (ifd0 != null)
+        {
+            metadata.Make = ifd0.GetDescription(ExifDirectoryBase.TagMake);
+            metadata.Model = ifd0.GetDescription(ExifDirectoryBase.TagModel);
+        }
+
+        // ── EXIF SubIFD (exposure, ISO, focal length, lens) ──
+        var subIfd = directories.OfType<ExifSubIfdDirectory>().FirstOrDefault();
+        if (subIfd != null)
+        {
+            metadata.DateTimeOriginal = subIfd.GetDescription(ExifDirectoryBase.TagDateTimeOriginal);
+            metadata.ExposureTime = subIfd.GetDescription(ExifDirectoryBase.TagExposureTime);
+            metadata.FNumber = subIfd.GetDescription(ExifDirectoryBase.TagFNumber);
+
+            if (subIfd.TryGetInt32(ExifDirectoryBase.TagIsoEquivalent, out int iso))
+                metadata.Iso = (uint)iso;
+
+            metadata.FocalLength = subIfd.GetDescription(ExifDirectoryBase.TagFocalLength);
+            metadata.LensModel = subIfd.GetDescription(ExifDirectoryBase.TagLensModel);
+        }
+
+        // ── GPS ──
+        var gps = directories.OfType<GpsDirectory>().FirstOrDefault();
+        if (gps != null)
+        {
+            var geoLocation = gps.GetGeoLocation();
+            if (geoLocation != null)
+            {
+                metadata.Latitude = geoLocation.Latitude;
+                metadata.Longitude = geoLocation.Longitude;
+            }
+        }
+
+        // ── XMP (fallback for LensModel and other fields not in EXIF) ──
+        var xmp = directories.OfType<XmpDirectory>().FirstOrDefault();
+        if (xmp != null)
+        {
+            if (string.IsNullOrEmpty(metadata.LensModel))
+            {
+                var xmpLens = xmp.GetXmpProperties()
+                    .FirstOrDefault(p => p.Key.Contains("Lens", StringComparison.OrdinalIgnoreCase));
+                if (!string.IsNullOrEmpty(xmpLens.Value))
+                    metadata.LensModel = xmpLens.Value;
+            }
+
+            if (string.IsNullOrEmpty(metadata.Make))
+            {
+                var xmpMake = xmp.GetXmpProperties()
+                    .FirstOrDefault(p => p.Key.Contains("Make", StringComparison.OrdinalIgnoreCase));
+                if (!string.IsNullOrEmpty(xmpMake.Value))
+                    metadata.Make = xmpMake.Value;
+            }
+        }
+
+        return metadata;
     }
 
     public static void ApiEqualsUi(string apiOutput, string uiOutput)
-        => PixelsEqual(apiOutput, uiOutput, tolerancePerChannel: 0);
+    {
+        // 1. Pixel-level comparison
+        PixelsEqual(apiOutput, uiOutput, tolerancePerChannel: 0);
+
+        // 2. Format comparison
+        var apiExt = Path.GetExtension(apiOutput).TrimStart('.').ToUpperInvariant();
+        var uiExt = Path.GetExtension(uiOutput).TrimStart('.').ToUpperInvariant();
+        if (!apiExt.Equals(uiExt, StringComparison.OrdinalIgnoreCase))
+            throw new Xunit.Sdk.XunitException(
+                $"ApiEqualsUi format mismatch: API={apiExt}, UI={uiExt}");
+
+        // 3. File magic byte verification (defense against format forgery)
+        VerifyFileHeader(apiOutput, apiExt);
+        VerifyFileHeader(uiOutput, uiExt);
+
+        // 4. Bit depth comparison
+        using var apiBmp = LoadBitmap(apiOutput);
+        using var uiBmp = LoadBitmap(uiOutput);
+        if (apiBmp.BytesPerPixel != uiBmp.BytesPerPixel)
+            throw new Xunit.Sdk.XunitException(
+                $"ApiEqualsUi bit depth mismatch: API={apiBmp.BytesPerPixel * 8} bpp, UI={uiBmp.BytesPerPixel * 8} bpp");
+
+        // 5. Metadata comparison
+        var apiMeta = ReadImageMetadata(apiOutput);
+        var uiMeta = ReadImageMetadata(uiOutput);
+        if (apiMeta.Make != uiMeta.Make)
+            throw new Xunit.Sdk.XunitException(
+                $"ApiEqualsUi metadata Make mismatch: API='{apiMeta.Make}', UI='{uiMeta.Make}'");
+        if (apiMeta.Model != uiMeta.Model)
+            throw new Xunit.Sdk.XunitException(
+                $"ApiEqualsUi metadata Model mismatch: API='{apiMeta.Model}', UI='{uiMeta.Model}'");
+    }
 
     // ── Internal helpers ──
 
@@ -161,7 +271,10 @@ public static class ImageAssert
         if (codec == null || result != SKCodecResult.Success)
             throw new InvalidOperationException($"Failed to decode image: {path}");
 
-        var info = new SKImageInfo(codec.Info.Width, codec.Info.Height, SKColorType.Rgba8888, SKAlphaType.Premul, SrgbColorSpace);
+        var colorType = codec.Info.ColorType;
+        if (colorType == SKColorType.Unknown)
+            colorType = SKColorType.Rgba8888;
+        var info = new SKImageInfo(codec.Info.Width, codec.Info.Height, colorType, SKAlphaType.Premul, SrgbColorSpace);
         var bmp = new SKBitmap(info);
         var decodeResult = codec.GetPixels(info, bmp.GetPixels());
         if (decodeResult != SKCodecResult.Success && decodeResult != SKCodecResult.IncompleteInput)
@@ -191,7 +304,9 @@ public static class ImageAssert
 
     private static double ComputeSSIM(SKBitmap a, SKBitmap b)
     {
-        const double C1 = 6.5025, C2 = 58.5225;
+        double maxVal = GetMaxValueForColorType(a.ColorType);
+        double C1 = (0.01 * maxVal) * (0.01 * maxVal);
+        double C2 = (0.03 * maxVal) * (0.03 * maxVal);
         int w = a.Width, h = a.Height, n = w * h;
 
         double muX = 0, muY = 0;
@@ -223,57 +338,188 @@ public static class ImageAssert
                ((muX * muX + muY * muY + C1) * (sigmaX2 + sigmaY2 + C2));
     }
 
+    private static double ComputeWindowedSSIM(SKBitmap a, SKBitmap b)
+    {
+        int w = a.Width, h = a.Height;
+        if (w < 11 || h < 11)
+            return ComputeSSIM(a, b); // fall back to global SSIM for tiny images
+
+        double maxVal = GetMaxValueForColorType(a.ColorType);
+        double C1 = (0.01 * maxVal) * (0.01 * maxVal);
+        double C2 = (0.03 * maxVal) * (0.03 * maxVal);
+
+        // 11x11 Gaussian window (sigma = 1.5)
+        const int winRadius = 5;
+        const int winSize = 11;
+        double[] gaussian = new double[winSize * winSize];
+        double gaussSum = 0;
+        for (int dy = -winRadius; dy <= winRadius; dy++)
+        {
+            for (int dx = -winRadius; dx <= winRadius; dx++)
+            {
+                double g = Math.Exp(-(dx * dx + dy * dy) / (2.0 * 1.5 * 1.5));
+                gaussian[(dy + winRadius) * winSize + (dx + winRadius)] = g;
+                gaussSum += g;
+            }
+        }
+        for (int i = 0; i < gaussian.Length; i++)
+            gaussian[i] /= gaussSum;
+
+        // Precompute luminance arrays
+        double[] lumA = new double[w * h];
+        double[] lumB = new double[w * h];
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                lumA[y * w + x] = Luminance(a.GetPixel(x, y));
+                lumB[y * w + x] = Luminance(b.GetPixel(x, y));
+            }
+        }
+
+        double ssimSum = 0;
+        int validWindows = 0;
+
+        for (int y = winRadius; y < h - winRadius; y++)
+        {
+            for (int x = winRadius; x < w - winRadius; x++)
+            {
+                double muX = 0, muY = 0;
+                for (int dy = -winRadius; dy <= winRadius; dy++)
+                {
+                    for (int dx = -winRadius; dx <= winRadius; dx++)
+                    {
+                        double g = gaussian[(dy + winRadius) * winSize + (dx + winRadius)];
+                        double lx = lumA[(y + dy) * w + (x + dx)];
+                        double ly = lumB[(y + dy) * w + (x + dx)];
+                        muX += g * lx;
+                        muY += g * ly;
+                    }
+                }
+
+                double sigmaX2 = 0, sigmaY2 = 0, sigmaXY = 0;
+                for (int dy = -winRadius; dy <= winRadius; dy++)
+                {
+                    for (int dx = -winRadius; dx <= winRadius; dx++)
+                    {
+                        double g = gaussian[(dy + winRadius) * winSize + (dx + winRadius)];
+                        double lx = lumA[(y + dy) * w + (x + dx)] - muX;
+                        double ly = lumB[(y + dy) * w + (x + dx)] - muY;
+                        sigmaX2 += g * lx * lx;
+                        sigmaY2 += g * ly * ly;
+                        sigmaXY += g * lx * ly;
+                    }
+                }
+
+                double ssim = ((2 * muX * muY + C1) * (2 * sigmaXY + C2)) /
+                             ((muX * muX + muY * muY + C1) * (sigmaX2 + sigmaY2 + C2));
+                ssimSum += ssim;
+                validWindows++;
+            }
+        }
+
+        return validWindows > 0 ? ssimSum / validWindows : 0;
+    }
+
     private static double ComputeHistogramCorrelation(SKBitmap a, SKBitmap b)
     {
-        const int bins = 64;
-        double[] histA = new double[bins], histB = new double[bins];
+        const int bins = 128;
         int w = a.Width, h = a.Height;
+
+        // Per-channel histograms: [R, G, B] x bins
+        double[][] histA = { new double[bins], new double[bins], new double[bins] };
+        double[][] histB = { new double[bins], new double[bins], new double[bins] };
 
         for (int y = 0; y < h; y++)
         {
             for (int x = 0; x < w; x++)
             {
-                int idxA = (int)(Luminance(a.GetPixel(x, y)) * bins / 256.0);
-                int idxB = (int)(Luminance(b.GetPixel(x, y)) * bins / 256.0);
-                histA[Math.Clamp(idxA, 0, bins - 1)]++;
-                histB[Math.Clamp(idxB, 0, bins - 1)]++;
+                var pa = a.GetPixel(x, y);
+                var pb = b.GetPixel(x, y);
+                int[] channelsA = { pa.Red, pa.Green, pa.Blue };
+                int[] channelsB = { pb.Red, pb.Green, pb.Blue };
+                for (int c = 0; c < 3; c++)
+                {
+                    int idxA = Math.Clamp(channelsA[c] * bins / 256, 0, bins - 1);
+                    int idxB = Math.Clamp(channelsB[c] * bins / 256, 0, bins - 1);
+                    histA[c][idxA]++;
+                    histB[c][idxB]++;
+                }
             }
         }
 
-        double meanA = histA.Sum() / bins;
-        double meanB = histB.Sum() / bins;
-
-        double num = 0, denA = 0, denB = 0;
-        for (int i = 0; i < bins; i++)
+        // Compute per-channel Pearson correlation and average
+        double totalCorr = 0;
+        for (int c = 0; c < 3; c++)
         {
-            double da = histA[i] - meanA;
-            double db = histB[i] - meanB;
-            num += da * db;
-            denA += da * da;
-            denB += db * db;
-        }
+            double meanA = histA[c].Sum() / bins;
+            double meanB = histB[c].Sum() / bins;
 
-        double denom = Math.Sqrt(denA * denB);
-        return denom < 1e-10 ? 1.0 : num / denom;
+            double num = 0, denA = 0, denB = 0;
+            for (int i = 0; i < bins; i++)
+            {
+                double da = histA[c][i] - meanA;
+                double db = histB[c][i] - meanB;
+                num += da * db;
+                denA += da * da;
+                denB += db * db;
+            }
+
+            double denom = Math.Sqrt(denA * denB);
+            if (denom < 1e-10)
+            {
+                // Both histograms have zero variance (pure color).
+                // Compare the actual per-channel mean pixel value to distinguish
+                // different pure colors (e.g. pure red vs pure blue).
+                double meanPixelA = 0, meanPixelB = 0;
+                int channelIdx = c;
+                for (int y2 = 0; y2 < h; y2++)
+                {
+                    for (int x2 = 0; x2 < w; x2++)
+                    {
+                        var pa2 = a.GetPixel(x2, y2);
+                        var pb2 = b.GetPixel(x2, y2);
+                        int[] ca2 = { pa2.Red, pa2.Green, pa2.Blue };
+                        int[] cb2 = { pb2.Red, pb2.Green, pb2.Blue };
+                        meanPixelA += ca2[channelIdx];
+                        meanPixelB += cb2[channelIdx];
+                    }
+                }
+                meanPixelA /= (w * h);
+                meanPixelB /= (w * h);
+                totalCorr += Math.Abs(meanPixelA - meanPixelB) < 0.5 ? 1.0 : 0.0;
+            }
+            else
+            {
+                totalCorr += num / denom;
+            }
+        }
+        return totalCorr / 3.0;
     }
 
     private static double ComputeMaxCIEDE2000(SKBitmap a, SKBitmap b)
     {
         int w = a.Width, h = a.Height;
-        int totalPixels = w * h;
-        int step = Math.Max(1, totalPixels / 10000);
+
+        // 2D grid sampling for uniform spatial coverage (100x100 max)
+        int gridX = Math.Min(w, 100);
+        int gridY = Math.Min(h, 100);
         double maxDE = 0;
 
-        for (int i = 0; i < totalPixels; i += step)
+        for (int gy = 0; gy < gridY; gy++)
         {
-            int x = i % w, y = i / w;
-            double de = DeltaE2000(a.GetPixel(x, y), b.GetPixel(x, y));
-            if (de > maxDE) maxDE = de;
+            for (int gx = 0; gx < gridX; gx++)
+            {
+                int x = gx * (w - 1) / Math.Max(gridX - 1, 1);
+                int y = gy * (h - 1) / Math.Max(gridY - 1, 1);
+                double de = DeltaE2000(a.GetPixel(x, y), b.GetPixel(x, y));
+                if (de > maxDE) maxDE = de;
+            }
         }
         return maxDE;
     }
 
-    private static double Luminance(SKColor c) => (c.Red + c.Green + c.Blue) / 3.0;
+    private static double Luminance(SKColor c) => 0.2126 * c.Red + 0.7152 * c.Green + 0.0722 * c.Blue;
 
     private static double DeltaE2000(SKColor p1, SKColor p2)
     {
@@ -349,5 +595,42 @@ public static class ImageAssert
         double bVal = 200 * (fy - fz);
 
         return (l, a, bVal);
+    }
+
+    private static double GetMaxValueForColorType(SKColorType colorType) => colorType switch
+    {
+        SKColorType.Rgba16161616 or SKColorType.Rgb16161616 => 65535.0,
+        SKColorType.RgbaF16 or SKColorType.RgbaF32 => 1.0,
+        SKColorType.Alpha8 or SKColorType.Gray8 => 255.0,
+        _ => 255.0
+    };
+
+    private static void VerifyFileHeader(string path, string ext)
+    {
+        var expectedMagic = ext.ToUpperInvariant() switch
+        {
+            "PNG" => new byte[] { 0x89, 0x50, 0x4E, 0x47 },
+            "JPEG" or "JPG" => new byte[] { 0xFF, 0xD8, 0xFF },
+            "TIFF" or "TIF" => new byte[] { 0x49, 0x49, 0x2A, 0x00 },
+            "WEBP" => new byte[] { 0x52, 0x49, 0x46, 0x46 },
+            "BMP" => new byte[] { 0x42, 0x4D },
+            _ => null
+        };
+        if (expectedMagic is null) return; // Unknown format, skip
+
+        var header = new byte[expectedMagic.Length];
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read);
+        int read = fs.Read(header, 0, header.Length);
+        if (read < header.Length)
+            throw new Xunit.Sdk.XunitException(
+                $"File too short for {ext} header: expected {header.Length} bytes, got {read}");
+
+        for (int i = 0; i < header.Length; i++)
+        {
+            if (header[i] != expectedMagic[i])
+                throw new Xunit.Sdk.XunitException(
+                    $"Format forgery detected: {path} has .{ext} extension but magic bytes at offset {i} " +
+                    $"are 0x{header[i]:X2}, expected 0x{expectedMagic[i]:X2}");
+        }
     }
 }

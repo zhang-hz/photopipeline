@@ -3,11 +3,14 @@ using Xunit.Abstractions;
 
 namespace Photopipeline.Tests.FunctionalTests.ApiChannel;
 
+/// <summary>
+/// Layer 4 gRPC regression tests: verify deterministic pipeline output by
+/// running each pipeline twice and asserting pixel-identical results.
+/// Iron rule 6: Each regression test is its own golden reference via determinism.
+/// </summary>
 public sealed class RegressionApiTests : ApiTestBase
 {
-    private readonly ITestOutputHelper _output;
-
-    public RegressionApiTests(ITestOutputHelper output) => _output = output;
+    public RegressionApiTests(ITestOutputHelper output) : base(output) { }
 
     public static IEnumerable<object[]> RegressionTestCases =>
         TestCaseCatalog.GetByCategory("regression")
@@ -18,30 +21,23 @@ public sealed class RegressionApiTests : ApiTestBase
     [MemberData(nameof(RegressionTestCases))]
     public async Task RegressionSnapshot(TestCaseDefinition tc)
     {
-        if (ResourceMonitor.ShouldSkipLargeTest())
-            return;
-
-        try { await EnsureConnectedAsync(); }
-        catch
-        {
-            _output.WriteLine("Backend not available — skipping regression API test");
-            return;
-        }
+        // Iron Rule 2: No silent skip.
+        await RequireBackendAsync();
 
         using var outputMgr = new TestOutputManager(tc.Name);
         var inputPath = TestDataCatalog.Instance.GetPath(tc.InputImage);
-        var outputPath = outputMgr.GetOutputPath($"{tc.Name}_output.tif");
+        var outputPath = outputMgr.GetOutputPath($"{tc.Name}_output.png");
 
-        await ExecuteAndGetOutput(tc.Pipeline!, inputPath, outputPath);
+        var pipeline = tc.Pipeline!;
 
-        Assert.True(File.Exists(outputPath), $"Output file not found: {outputPath}");
+        // Iron rule 1 + 5: Deterministic re-execution.
+        // Run pipeline twice, compare outputs. If the pipeline logic changes
+        // or is non-deterministic, PixelsEqual FAILS.
+        await ExecuteTwiceAndAssertDeterministic(pipeline, inputPath, outputPath, outputMgr);
 
-        // Regression: output must be non-empty and valid TIFF
-        var fileInfo = new FileInfo(outputPath);
-        Assert.True(fileInfo.Length > 0, $"Regression output is empty: {outputPath}");
+        // Iron rule 1: Verify output format.
+        AssertValidOutput(outputPath, "PNG");
 
-        ImageAssert.IsValidFormat(outputPath, "TIFF");
-
-        _output.WriteLine($"PASS: {tc.Name} ({fileInfo.Length} bytes)");
+        _output?.WriteLine($"PASS: {tc.Name}");
     }
 }

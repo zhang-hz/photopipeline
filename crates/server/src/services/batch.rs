@@ -445,10 +445,10 @@ impl BatchService for BatchServiceImpl {
                     ),
                 };
 
-                let _ = tx.send(Ok(progress));
+                let _ = tx.try_send(Ok(progress));
             }
             None => {
-                let _ = tx.send(Err(Status::not_found(format!(
+                let _ = tx.try_send(Err(Status::not_found(format!(
                     "batch job not found: {}",
                     bid
                 ))));

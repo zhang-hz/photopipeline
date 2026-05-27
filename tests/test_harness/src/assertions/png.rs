@@ -18,6 +18,7 @@ pub fn assert_valid_png(data: &[u8]) {
     let mut pos = 8;
     let mut chunks_seen = 0;
     let mut has_ihdr = false;
+    let mut has_idat = false;
     let mut last_chunk_type: Option<[u8; 4]> = None;
 
     while pos + 12 <= data.len() {
@@ -57,6 +58,23 @@ pub fn assert_valid_png(data: &[u8]) {
             has_ihdr = true;
         }
 
+        if &chunk_type == b"IDAT" {
+            has_idat = true;
+            // IDAT must contain actual compressed data, not be empty
+            assert!(length > 0, "IDAT chunk at offset {} is empty (invalid)", pos);
+            assert!(
+                crc_pos < chunk_end,
+                "IDAT data integrity: CRC position {} must be before chunk end {}",
+                crc_pos,
+                chunk_end
+            );
+        }
+
+        // IDAT must not appear before IHDR
+        if &chunk_type == b"IDAT" && !has_ihdr {
+            panic!("IDAT chunk at {} appears before IHDR (invalid PNG structure)", pos);
+        }
+
         last_chunk_type = Some(chunk_type);
         chunks_seen += 1;
 
@@ -69,6 +87,7 @@ pub fn assert_valid_png(data: &[u8]) {
     }
 
     assert!(has_ihdr, "PNG missing IHDR chunk");
+    assert!(has_idat, "PNG missing IDAT chunk(s) — must contain at least one IDAT chunk");
     assert_eq!(
         last_chunk_type,
         Some(*b"IEND"),
@@ -173,6 +192,23 @@ mod tests {
         let crc = crc32(&chunk[4..]);
         chunk.extend_from_slice(&crc.to_be_bytes());
         data.extend_from_slice(&chunk);
+
+        // Minimal IDAT chunk: zlib header (2 bytes) + empty deflate stream (5 bytes) + adler32 (4 bytes)
+        let idat_content: Vec<u8> = vec![
+            0x78, 0x01, // zlib header (default compression)
+            0x01, // deflate: BFINAL=1, BTYPE=0 (stored)
+            0x00, 0x00, // LEN=0 (little-endian)
+            0xFF, 0xFF, // NLEN=~0 (little-endian)
+            0x00, 0x00, 0x00, 0x01, // adler32 of empty stream
+        ];
+
+        let mut idat_chunk = Vec::new();
+        idat_chunk.extend_from_slice(&(idat_content.len() as u32).to_be_bytes());
+        idat_chunk.extend_from_slice(b"IDAT");
+        idat_chunk.extend_from_slice(&idat_content);
+        let crc = crc32(&idat_chunk[4..]);
+        idat_chunk.extend_from_slice(&crc.to_be_bytes());
+        data.extend_from_slice(&idat_chunk);
 
         let mut iend_chunk = Vec::new();
         iend_chunk.extend_from_slice(&0u32.to_be_bytes());

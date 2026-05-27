@@ -6,7 +6,7 @@ namespace Photopipeline.Tests.ScenarioTests;
 public sealed class EndToEndScenarioTests
 {
     [Fact]
-    public void FullWorkflow_ImportToBatch_AllViewModels()
+    public void FullWorkflow_ImportToBatch_VerifiesCrossVmWiring()
     {
         // Setup all services
         var logger = Mock.Of<ILogger<MainViewModel>>();
@@ -30,13 +30,32 @@ public sealed class EndToEndScenarioTests
         var mainVm = new MainViewModel(logger, settingsMock.Object, backendMock.Object,
             filmstrip, preview, pipelineEditor, pluginBrowser, batch, settingsVm);
 
-        // Verify all VMs are connected
+        // Verify all child VMs are assigned
         mainVm.Filmstrip.Should().Be(filmstrip);
         mainVm.Preview.Should().Be(preview);
         mainVm.PipelineEditor.Should().Be(pipelineEditor);
         mainVm.PluginBrowser.Should().Be(pluginBrowser);
         mainVm.Batch.Should().Be(batch);
         mainVm.Settings.Should().Be(settingsVm);
+
+        // Verify cross-VM wiring: image selection propagates to pipeline editor
+        var img = new ImageEntry { FilePath = @"C:\photos\test.dng", FileName = "test.dng" };
+        filmstrip.SelectedImage = img;
+        pipelineEditor.SelectedImagePath.Should().Be(img.FilePath,
+            "Filmstrip image selection should propagate to PipelineEditor.SelectedImagePath");
+
+        // Verify cross-VM wiring: pipeline ID change propagates to batch
+        pipelineEditor.PipelineId = "test-pipeline-id";
+        batch.PipelineConfigPath.Should().Be("test-pipeline-id",
+            "PipelineEditor.PipelineId change should propagate to Batch.PipelineConfigPath");
+
+        // Verify cross-VM wiring: plugin addition notifies pipeline editor
+        var plugin = new PluginInfo { Id = "denoise", Name = "Denoise", Category = "Enhance" };
+        var nodeCountBefore = pipelineEditor.Nodes.Count;
+        pluginBrowser.AddToPipelineCommand.Execute(plugin);
+        pipelineEditor.Nodes.Should().HaveCount(nodeCountBefore + 1,
+            "PluginBrowser.AddToPipeline should add a node to PipelineEditor");
+        pipelineEditor.Nodes.Last().PluginId.Should().Be("denoise");
     }
 
     [Fact]

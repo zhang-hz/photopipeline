@@ -1,0 +1,1044 @@
+{
+  "$schema": "./schema.json",
+  "title": "Cross-Channel Verification Test Cases",
+  "description": "Layer 6 CCV test cases shared between Rust gRPC, C# gRPC, and C# GUI channels.",
+  "expected_total_cases": 60,
+  "cases": [
+    {
+      "id": "CCV-001",
+      "layer": 6,
+      "name": "RawInput AutoExposure Cross-Channel",
+      "category": "plugin",
+      "description": "Verify that all three channels (Rust Engine, gRPC C#, GUI FlaUI) produce identical output for raw_input plugin with auto exposure and white balance applied, output to TIFF.",
+      "skip": false,
+      "tags": ["raw_input", "plugin", "auto_exposure", "cross_channel"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.raw_input",
+            "label": "Raw Input",
+            "enabled": true,
+            "params": {
+              "raw_mode": "auto",
+              "apply_white_balance": true
+            }
+          },
+          {
+            "id": "n2",
+            "plugin": "photopipeline.plugins.tiff_encoder",
+            "label": "TIFF Output",
+            "enabled": true,
+            "params": {
+              "compression": "deflate",
+              "pixel_format": "u8"
+            }
+          }
+        ],
+        "edges": [
+          { "from": "n1", "to": "n2" }
+        ]
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "pixel_exact",
+        "expected_format": "TIFF",
+        "expected_width": 1920,
+        "expected_height": 1080,
+        "expected_bit_depth": 8,
+        "golden_reference": "golden/ccv001_raw_auto_tiff.png"
+      }
+    },
+    {
+      "id": "CCV-002",
+      "layer": 6,
+      "name": "Transform Scale 50% Cross-Channel",
+      "category": "plugin",
+      "description": "Verify that all three channels produce identical output for transform plugin with 50% scale using percentage mode.",
+      "skip": false,
+      "tags": ["transform", "plugin", "resize", "percentage", "cross_channel"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.transform",
+            "label": "Scale 50%",
+            "enabled": true,
+            "params": {
+              "resize_mode": "percentage",
+              "scale_percent": 50.0
+            }
+          },
+          {
+            "id": "n2",
+            "plugin": "photopipeline.plugins.png_encoder",
+            "label": "PNG Output",
+            "enabled": true,
+            "params": { "compression_level": 6 }
+          }
+        ],
+        "edges": [
+          { "from": "n1", "to": "n2" }
+        ]
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "pixel_exact",
+        "expected_format": "PNG",
+        "expected_width": 960,
+        "expected_height": 540,
+        "golden_reference": "golden/ccv002_scale50_png.png"
+      }
+    },
+    {
+      "id": "CCV-003",
+      "layer": 6,
+      "name": "Transform Rotate 180 Degrees Cross-Channel",
+      "category": "plugin",
+      "description": "Verify that all three channels produce identical output for 180-degree rotation.",
+      "skip": false,
+      "tags": ["transform", "plugin", "rotate", "cross_channel"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.transform",
+            "label": "Rotate 180",
+            "enabled": true,
+            "params": { "angle": 180.0 }
+          },
+          {
+            "id": "n2",
+            "plugin": "photopipeline.plugins.png_encoder",
+            "label": "PNG Output",
+            "enabled": true,
+            "params": { "compression_level": 6 }
+          }
+        ],
+        "edges": [
+          { "from": "n1", "to": "n2" }
+        ]
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "pixel_exact",
+        "expected_format": "PNG",
+        "expected_width": 1920,
+        "expected_height": 1080,
+        "golden_reference": "golden/ccv003_rotate180_png.png"
+      }
+    },
+    {
+      "id": "CCV-004",
+      "layer": 6,
+      "name": "Colorspace sRGB to Adobe RGB Cross-Channel",
+      "category": "plugin",
+      "description": "Verify that all three channels produce identical colorspace conversion output from sRGB to Adobe RGB.",
+      "skip": false,
+      "tags": ["colorspace", "plugin", "adobe_rgb", "cross_channel"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.colorspace",
+            "label": "sRGB to Adobe RGB",
+            "enabled": true,
+            "params": {
+              "source_color_space": "srgb",
+              "target_color_space": "adobe_rgb",
+              "rendering_intent": "relative_colorimetric",
+              "bp_comp": true
+            }
+          },
+          {
+            "id": "n2",
+            "plugin": "photopipeline.plugins.png_encoder",
+            "label": "PNG Output",
+            "enabled": true,
+            "params": { "compression_level": 6 }
+          }
+        ],
+        "edges": [
+          { "from": "n1", "to": "n2" }
+        ]
+      },
+      "assertions": {
+        "tolerance_per_channel": 2,
+        "assertion_type": "ssim",
+        "expected_format": "PNG",
+        "expected_width": 1920,
+        "expected_height": 1080,
+        "min_ssim": 0.98,
+        "golden_reference": "golden/ccv004_srgb_adobe_png.png"
+      }
+    },
+    {
+      "id": "CCV-005",
+      "layer": 6,
+      "name": "PNG Encoder Compression Level 9 Cross-Channel",
+      "category": "plugin",
+      "description": "Verify that all three channels produce identical PNG output at maximum compression.",
+      "skip": false,
+      "tags": ["png_encoder", "plugin", "encoder", "cross_channel"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.png_encoder",
+            "label": "PNG Level 9",
+            "enabled": true,
+            "params": {
+              "compression_level": 9,
+              "bit_depth": "8"
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "pixel_exact",
+        "expected_format": "PNG",
+        "expected_width": 1920,
+        "expected_height": 1080,
+        "expected_bit_depth": 8,
+        "golden_reference": "golden/ccv005_png9.png"
+      }
+    },
+    {
+      "id": "CCV-006",
+      "layer": 6,
+      "name": "JPEG Encoder Quality 92 Cross-Channel",
+      "category": "plugin",
+      "description": "Verify that all three channels produce identical JPEG output at quality 92.",
+      "skip": false,
+      "tags": ["jpeg_encoder", "plugin", "encoder", "cross_channel"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.jpeg_encoder",
+            "label": "JPEG Q92",
+            "enabled": true,
+            "params": { "quality": 92 }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "ssim",
+        "expected_format": "JPEG",
+        "expected_width": 1920,
+        "expected_height": 1080,
+        "min_ssim": 0.96,
+        "golden_reference": "golden/ccv006_jpeg92.jpg"
+      }
+    },
+    {
+      "id": "CCV-007",
+      "layer": 6,
+      "name": "TIFF Encoder Deflate Cross-Channel",
+      "category": "plugin",
+      "description": "Verify that all three channels produce identical TIFF output with deflate compression.",
+      "skip": false,
+      "tags": ["tiff_encoder", "plugin", "encoder", "cross_channel"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.tiff_encoder",
+            "label": "TIFF Deflate",
+            "enabled": true,
+            "params": {
+              "compression": "deflate",
+              "pixel_format": "u8"
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "pixel_exact",
+        "expected_format": "TIFF",
+        "expected_width": 1920,
+        "expected_height": 1080,
+        "expected_bit_depth": 8,
+        "golden_reference": "golden/ccv007_tiff_deflate.tiff"
+      }
+    },
+    {
+      "id": "CCV-008",
+      "layer": 6,
+      "name": "AVIF Encoder Quality 80 Cross-Channel",
+      "category": "plugin",
+      "description": "Verify that all three channels produce identical AVIF output at quality 80.",
+      "skip": false,
+      "tags": ["avif_encoder", "plugin", "encoder", "next_gen", "cross_channel"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.avif_encoder",
+            "label": "AVIF Q80",
+            "enabled": true,
+            "params": {
+              "quality": 80.0,
+              "speed": 5
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "ssim",
+        "expected_format": "AVIF",
+        "expected_width": 1920,
+        "expected_height": 1080,
+        "min_ssim": 0.92,
+        "golden_reference": "golden/ccv008_avif80.png"
+      }
+    },
+    {
+      "id": "CCV-009",
+      "layer": 6,
+      "name": "JXL Encoder Effort 7 Cross-Channel",
+      "category": "plugin",
+      "description": "Verify that all three channels produce identical JXL output at effort level 7.",
+      "skip": false,
+      "tags": ["jxl_encoder", "plugin", "encoder", "next_gen", "cross_channel"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.jxl_encoder",
+            "label": "JXL Effort 7",
+            "enabled": true,
+            "params": {
+              "quality": 90.0,
+              "effort": 7,
+              "distance": 0.5
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "ssim",
+        "expected_format": "JXL",
+        "expected_width": 1920,
+        "expected_height": 1080,
+        "min_ssim": 0.93,
+        "golden_reference": "golden/ccv009_jxl_effort7.png"
+      }
+    },
+    {
+      "id": "CCV-010",
+      "layer": 6,
+      "name": "HEIF Encoder HEVC Cross-Channel",
+      "category": "plugin",
+      "description": "Verify that all three channels produce identical HEIF output using HEVC codec.",
+      "skip": false,
+      "tags": ["heif_encoder", "plugin", "encoder", "next_gen", "cross_channel"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.heif_encoder",
+            "label": "HEIF HEVC",
+            "enabled": true,
+            "params": {
+              "quality": 80.0,
+              "encoder_type": "hevc"
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "ssim",
+        "expected_format": "HEIF",
+        "expected_width": 1920,
+        "expected_height": 1080,
+        "min_ssim": 0.91,
+        "golden_reference": "golden/ccv010_heif_hevc.png"
+      }
+    },
+    {
+      "id": "CCV-011",
+      "layer": 6,
+      "name": "Linear 5-Node Pipeline Cross-Channel",
+      "category": "pipeline",
+      "description": "Verify that all three channels produce identical output for a 5-node linear pipeline: raw→cs→transform→cs→tiff.",
+      "skip": false,
+      "tags": ["multi_plugin", "pipeline", "5_node", "linear", "cross_channel"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.raw_input",
+            "label": "Raw Input",
+            "enabled": true,
+            "params": {
+              "raw_mode": "auto",
+              "apply_white_balance": true
+            }
+          },
+          {
+            "id": "n2",
+            "plugin": "photopipeline.plugins.colorspace",
+            "label": "Color Space 1",
+            "enabled": true,
+            "params": {
+              "source_color_space": "srgb",
+              "target_color_space": "display_p3",
+              "rendering_intent": "perceptual"
+            }
+          },
+          {
+            "id": "n3",
+            "plugin": "photopipeline.plugins.transform",
+            "label": "Transform",
+            "enabled": true,
+            "params": {
+              "resize_mode": "percentage",
+              "scale_percent": 80.0
+            }
+          },
+          {
+            "id": "n4",
+            "plugin": "photopipeline.plugins.colorspace",
+            "label": "Color Space 2",
+            "enabled": true,
+            "params": {
+              "source_color_space": "display_p3",
+              "target_color_space": "srgb",
+              "rendering_intent": "relative_colorimetric",
+              "bp_comp": true
+            }
+          },
+          {
+            "id": "n5",
+            "plugin": "photopipeline.plugins.tiff_encoder",
+            "label": "TIFF Output",
+            "enabled": true,
+            "params": {
+              "compression": "deflate",
+              "pixel_format": "u8"
+            }
+          }
+        ],
+        "edges": [
+          { "from": "n1", "to": "n2" },
+          { "from": "n2", "to": "n3" },
+          { "from": "n3", "to": "n4" },
+          { "from": "n4", "to": "n5" }
+        ]
+      },
+      "assertions": {
+        "tolerance_per_channel": 2,
+        "assertion_type": "ssim",
+        "expected_format": "TIFF",
+        "expected_width": 1536,
+        "expected_height": 864,
+        "expected_bit_depth": 8,
+        "min_ssim": 0.96,
+        "golden_reference": "golden/ccv011_5node_tiff.png"
+      }
+    },
+    {
+      "id": "CCV-012",
+      "layer": 6,
+      "name": "Diamond Topology Cross-Channel",
+      "category": "pipeline",
+      "description": "Verify that all three channels produce identical output for diamond topology: A→B,A→C, B→D, C→D.",
+      "skip": false,
+      "tags": ["multi_plugin", "pipeline", "diamond", "topology", "cross_channel"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "a",
+            "plugin": "photopipeline.plugins.raw_input",
+            "label": "A: Source",
+            "enabled": true,
+            "params": { "raw_mode": "auto" }
+          },
+          {
+            "id": "b",
+            "plugin": "photopipeline.plugins.colorspace",
+            "label": "B: Colorspace",
+            "enabled": true,
+            "params": {
+              "source_color_space": "srgb",
+              "target_color_space": "srgb"
+            }
+          },
+          {
+            "id": "c",
+            "plugin": "photopipeline.plugins.transform",
+            "label": "C: Transform",
+            "enabled": true,
+            "params": { "flip_horizontal": true }
+          },
+          {
+            "id": "d",
+            "plugin": "photopipeline.plugins.png_encoder",
+            "label": "D: PNG Merge",
+            "enabled": true,
+            "params": { "compression_level": 6 }
+          }
+        ],
+        "edges": [
+          { "from": "a", "to": "b" },
+          { "from": "a", "to": "c" },
+          { "from": "b", "to": "d" },
+          { "from": "c", "to": "d" }
+        ]
+      },
+      "assertions": {
+        "tolerance_per_channel": 2,
+        "assertion_type": "ssim",
+        "expected_format": "PNG",
+        "expected_width": 1920,
+        "expected_height": 1080,
+        "min_ssim": 0.95,
+        "golden_reference": "golden/ccv012_diamond_png.png"
+      }
+    },
+    {
+      "id": "CCV-013",
+      "layer": 6,
+      "name": "Fork Topology Cross-Channel",
+      "category": "pipeline",
+      "description": "Verify that all three channels produce identical output for fork topology: source→branch1 + source→branch2.",
+      "skip": false,
+      "tags": ["multi_plugin", "pipeline", "fork", "topology", "cross_channel"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "src",
+            "plugin": "photopipeline.plugins.raw_input",
+            "label": "Source",
+            "enabled": true,
+            "params": {
+              "raw_mode": "auto",
+              "apply_white_balance": true
+            }
+          },
+          {
+            "id": "b1",
+            "plugin": "photopipeline.plugins.colorspace",
+            "label": "Branch 1 Colorspace",
+            "enabled": true,
+            "params": {
+              "source_color_space": "srgb",
+              "target_color_space": "display_p3",
+              "rendering_intent": "perceptual"
+            }
+          },
+          {
+            "id": "b2",
+            "plugin": "photopipeline.plugins.transform",
+            "label": "Branch 2 Transform",
+            "enabled": true,
+            "params": { "angle": 90.0 }
+          }
+        ],
+        "edges": [
+          { "from": "src", "to": "b1" },
+          { "from": "src", "to": "b2" }
+        ]
+      },
+      "assertions": {
+        "tolerance_per_channel": 2,
+        "assertion_type": "ssim",
+        "expected_format": "PNG",
+        "min_ssim": 0.95,
+        "golden_reference": "golden/ccv013_fork.png"
+      }
+    },
+    {
+      "id": "CCV-014",
+      "layer": 6,
+      "name": "Batch 3 Files Colorspace Cross-Channel",
+      "category": "batch",
+      "description": "Verify that all three channels produce identical output when batch-processing 3 images through colorspace conversion.",
+      "skip": false,
+      "tags": ["batch", "multi_file", "colorspace", "cross_channel"],
+      "input_images": ["I01", "I02", "I03"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.colorspace",
+            "label": "sRGB to P3",
+            "enabled": true,
+            "params": {
+              "source_color_space": "srgb",
+              "target_color_space": "display_p3",
+              "rendering_intent": "relative_colorimetric",
+              "bp_comp": true
+            }
+          },
+          {
+            "id": "n2",
+            "plugin": "photopipeline.plugins.png_encoder",
+            "label": "PNG",
+            "enabled": true,
+            "params": { "compression_level": 6 }
+          }
+        ],
+        "edges": [
+          { "from": "n1", "to": "n2" }
+        ]
+      },
+      "assertions": {
+        "tolerance_per_channel": 2,
+        "assertion_type": "ssim",
+        "expected_format": "PNG",
+        "min_ssim": 0.97
+      }
+    },
+    {
+      "id": "CCV-015",
+      "layer": 6,
+      "name": "PNG to TIFF Format Conversion Cross-Channel",
+      "category": "format",
+      "description": "Verify that all three channels produce identical output when converting from PNG to 16-bit TIFF.",
+      "skip": false,
+      "tags": ["format_conversion", "png", "tiff", "16bit", "cross_channel"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.tiff_encoder",
+            "label": "TIFF 16-bit",
+            "enabled": true,
+            "params": {
+              "compression": "deflate",
+              "pixel_format": "u16"
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "pixel_exact",
+        "expected_format": "TIFF",
+        "expected_bit_depth": 16,
+        "golden_reference": "golden/ccv015_png_tiff16.tiff"
+      }
+    },
+    {
+      "id": "CCV-016",
+      "layer": 6,
+      "name": "JPEG to PNG Format Conversion Cross-Channel",
+      "category": "format",
+      "description": "Verify that all three channels produce identical output when converting JPEG to PNG (re-encoding).",
+      "skip": false,
+      "tags": ["format_conversion", "jpeg", "png", "cross_channel"],
+      "input_images": ["I08"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.png_encoder",
+            "label": "PNG Encoder",
+            "enabled": true,
+            "params": {
+              "compression_level": 6,
+              "bit_depth": "8"
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "pixel_exact",
+        "expected_format": "PNG",
+        "expected_width": 256,
+        "expected_height": 128,
+        "expected_bit_depth": 8,
+        "golden_reference": "golden/ccv016_jpeg_png.png"
+      }
+    },
+    {
+      "id": "CCV-017",
+      "layer": 6,
+      "name": "Alpha Channel Preservation Cross-Channel",
+      "category": "format",
+      "description": "Verify that all three channels preserve alpha channel data when processing RGBA images.",
+      "skip": false,
+      "tags": ["format_conversion", "alpha", "rgba", "cross_channel"],
+      "input_images": ["I06"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.png_encoder",
+            "label": "PNG Alpha",
+            "enabled": true,
+            "params": {
+              "compression_level": 6,
+              "alpha_channel": true
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "pixel_exact",
+        "expected_format": "PNG",
+        "min_ssim": 0.999,
+        "check_metadata": true,
+        "golden_reference": "golden/ccv017_alpha_png.png"
+      }
+    },
+    {
+      "id": "CCV-018",
+      "layer": 6,
+      "name": "Grayscale Image Processing Cross-Channel",
+      "category": "format",
+      "description": "Verify that all three channels handle grayscale input images identically.",
+      "skip": false,
+      "tags": ["format_conversion", "grayscale", "cross_channel"],
+      "input_images": ["I07"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.png_encoder",
+            "label": "PNG Grayscale",
+            "enabled": true,
+            "params": {
+              "compression_level": 6,
+              "bit_depth": "8"
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "pixel_exact",
+        "expected_format": "PNG",
+        "min_ssim": 0.999,
+        "golden_reference": "golden/ccv018_grayscale_png.png"
+      }
+    },
+    {
+      "id": "CCV-019",
+      "layer": 6,
+      "name": "EXIF Metadata Passthrough Cross-Channel",
+      "category": "plugin",
+      "description": "Verify that all three channels preserve EXIF metadata fields through a pipeline with exif_rw plugin.",
+      "skip": false,
+      "tags": ["exif_rw", "metadata", "cross_channel"],
+      "input_images": ["I08"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.exif_rw",
+            "label": "EXIF RW",
+            "enabled": true,
+            "params": { "write_tags": true }
+          },
+          {
+            "id": "n2",
+            "plugin": "photopipeline.plugins.tiff_encoder",
+            "label": "TIFF",
+            "enabled": true,
+            "params": { "compression": "deflate" }
+          }
+        ],
+        "edges": [
+          { "from": "n1", "to": "n2" }
+        ]
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "pixel_exact",
+        "expected_format": "TIFF",
+        "check_metadata": true,
+        "golden_reference": "golden/ccv019_exif_tiff.png"
+      },
+      "metadata": {
+        "exif_fields": {
+          "ColorSpace": "sRGB"
+        }
+      }
+    },
+    {
+      "id": "CCV-020",
+      "layer": 6,
+      "name": "All Nodes Disabled Error Cross-Channel",
+      "category": "pipeline",
+      "description": "Verify that all three channels consistently return an error when all pipeline nodes are disabled.",
+      "skip": false,
+      "tags": ["error_path", "disabled", "cross_channel"],
+      "input_images": ["I09"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.transform",
+            "label": "Transform (disabled)",
+            "enabled": false,
+            "params": { "angle": 90.0 }
+          },
+          {
+            "id": "n2",
+            "plugin": "photopipeline.plugins.png_encoder",
+            "label": "PNG (disabled)",
+            "enabled": false,
+            "params": { "compression_level": 6 }
+          }
+        ],
+        "edges": [
+          { "from": "n1", "to": "n2" }
+        ]
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "file_exists",
+        "expect_error": true
+      }
+    },
+    {
+      "id": "CCV-021",
+      "layer": 6,
+      "name": "MultiPlugin 3-Node RAW Pipeline Cross-Channel",
+      "category": "pipeline",
+      "description": "Verify three-node pipeline (raw_input -> colorspace -> tiff_encoder) produces identical output across all three channels. RAW development to sRGB with TIFF output.",
+      "skip": false,
+      "tags": ["multi_plugin", "pipeline", "3_node", "raw_workflow", "cross_channel"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.raw_input",
+            "label": "Raw Input",
+            "enabled": true,
+            "params": {
+              "raw_mode": "auto",
+              "apply_white_balance": true
+            }
+          },
+          {
+            "id": "n2",
+            "plugin": "photopipeline.plugins.colorspace",
+            "label": "Color Space",
+            "enabled": true,
+            "params": {
+              "source_color_space": "srgb",
+              "target_color_space": "srgb",
+              "rendering_intent": "perceptual",
+              "bp_comp": true,
+              "embed_icc": true
+            }
+          },
+          {
+            "id": "n3",
+            "plugin": "photopipeline.plugins.tiff_encoder",
+            "label": "TIFF Output",
+            "enabled": true,
+            "params": {
+              "compression": "deflate",
+              "pixel_format": "u8"
+            }
+          }
+        ],
+        "edges": [
+          { "from": "n1", "to": "n2" },
+          { "from": "n2", "to": "n3" }
+        ]
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "pixel_exact",
+        "expected_format": "TIFF",
+        "expected_width": 1920,
+        "expected_height": 1080,
+        "expected_bit_depth": 8,
+        "golden_reference": "golden/ccv021_raw_colorspace_tiff.png"
+      },
+      "metadata": {
+        "exif_fields": {
+          "ColorSpace": "sRGB"
+        }
+      }
+    },
+    {
+      "id": "CCV-022",
+      "layer": 6,
+      "name": "WEBP to PNG Format Conversion Cross-Channel",
+      "category": "format",
+      "description": "Verify that all three channels produce identical output when converting WEBP to PNG format.",
+      "skip": false,
+      "tags": ["format_conversion", "webp", "png", "cross_channel"],
+      "input_images": ["I10"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.png_encoder",
+            "label": "PNG",
+            "enabled": true,
+            "params": {
+              "compression_level": 6,
+              "bit_depth": "8"
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "pixel_exact",
+        "expected_format": "PNG",
+        "expected_bit_depth": 8,
+        "min_ssim": 0.999,
+        "golden_reference": "golden/ccv022_webp_png.png"
+      }
+    },
+    {
+      "id": "CCV-023",
+      "layer": 6,
+      "name": "16-bit Gradient High Bitdepth Cross-Channel",
+      "category": "format",
+      "description": "Verify that all three channels produce identical output for a 16-bit gradient image converted to 16-bit TIFF.",
+      "skip": false,
+      "tags": ["format_conversion", "16bit", "gradient", "cross_channel"],
+      "input_images": ["I11"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.tiff_encoder",
+            "label": "TIFF 16-bit",
+            "enabled": true,
+            "params": {
+              "compression": "deflate",
+              "pixel_format": "u16"
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "pixel_exact",
+        "expected_format": "TIFF",
+        "expected_bit_depth": 16,
+        "golden_reference": "golden/ccv023_16bit_tiff.tiff"
+      }
+    },
+    {
+      "id": "CCV-024",
+      "layer": 6,
+      "name": "Disabled Node in Chain Cross-Channel",
+      "category": "pipeline",
+      "description": "Verify that all three channels handle a disabled node in the middle of a pipeline identically.",
+      "skip": false,
+      "tags": ["pipeline", "disabled_node", "linear", "cross_channel"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.raw_input",
+            "label": "Raw Input",
+            "enabled": true,
+            "params": { "raw_mode": "auto" }
+          },
+          {
+            "id": "n2",
+            "plugin": "photopipeline.plugins.colorspace",
+            "label": "Colorspace (disabled)",
+            "enabled": false,
+            "params": {
+              "source_color_space": "srgb",
+              "target_color_space": "display_p3"
+            }
+          },
+          {
+            "id": "n3",
+            "plugin": "photopipeline.plugins.png_encoder",
+            "label": "PNG",
+            "enabled": true,
+            "params": { "compression_level": 6 }
+          }
+        ],
+        "edges": [
+          { "from": "n1", "to": "n2" },
+          { "from": "n2", "to": "n3" }
+        ]
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "pixel_exact",
+        "expected_format": "PNG",
+        "expected_width": 1920,
+        "expected_height": 1080,
+        "golden_reference": "golden/ccv024_disabled_mid_png.png"
+      }
+    },
+    {
+      "id": "CCV-025",
+      "layer": 6,
+      "name": "WEBP Encoder Lossless Cross-Channel",
+      "category": "plugin",
+      "description": "Verify that all three channels produce identical lossless WEBP output.",
+      "skip": false,
+      "tags": ["webp_encoder", "plugin", "encoder", "lossless", "cross_channel"],
+      "input_images": ["I01"],
+      "pipeline_spec": {
+        "nodes": [
+          {
+            "id": "n1",
+            "plugin": "photopipeline.plugins.webp_encoder",
+            "label": "WEBP Lossless",
+            "enabled": true,
+            "params": {
+              "lossless": true,
+              "quality": 100
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assertions": {
+        "tolerance_per_channel": 0,
+        "assertion_type": "ssim",
+        "expected_format": "WEBP",
+        "expected_width": 1920,
+        "expected_height": 1080,
+        "min_ssim": 0.999,
+        "golden_reference": "golden/ccv025_webp_lossless.webp"
+      }
+    }
+  ]
+}

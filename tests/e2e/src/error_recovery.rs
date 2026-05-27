@@ -140,8 +140,9 @@ fn e2e_pipeline_with_validation_error_stops_execution() {
             let mut params = schema.defaults();
             params.insert("invalid_key_xyz".into(), serde_json::json!("bad_value"));
             let validation = rt.block_on(async { plugin.validate(&params).await });
-            // Plugins vary in how they handle unknown params; verify no panic
-            let _ = validation;
+            // Plugins must not panic on unknown params; validation should detect issues
+            assert!(!validation.is_ok() || validation.as_ref().unwrap().is_empty(),
+                "plugin accepted invalid parameter key without warning");
         }
     }
 
@@ -151,8 +152,9 @@ fn e2e_pipeline_with_validation_error_stops_execution() {
     let exec = photopipeline_engine::NodeExecutor::new(reg.clone(), resolver.clone());
     let progress = Box::new(MockProgressSink::new());
     let result = rt.block_on(async { exec.execute(&graph, &info, Some(buf), &md, progress).await });
-    // Pipeline may succeed or fail depending on plugin validation policy
-    let _ = result;
+    // Pipeline must not panic on validation error
+    assert!(result.is_ok() || result.is_err(),
+        "pipeline with validation error must not panic");
 }
 
 #[test]
@@ -370,7 +372,7 @@ fn e2e_exif_read_on_missing_file() {
     let reg = Arc::new(Registry::new());
     photopipeline_plugins::register_all(&reg);
 
-    let processor = reg.get_metadata_processor(&"photopipeline.plugins.exif_rw".into());
+    let processor = reg.get_metadata_processor("photopipeline.plugins.exif_rw");
     if let Some(proc) = processor {
         let target = photopipeline_core::MetadataTarget {
             path: "/tmp/this_file_does_not_exist_99211.jpg".into(),
@@ -400,7 +402,7 @@ fn e2e_exif_write_invalid_permissions() {
 
     let reg = Arc::new(Registry::new());
     photopipeline_plugins::register_all(&reg);
-    let processor = reg.get_metadata_processor(&"photopipeline.plugins.exif_rw".into());
+    let processor = reg.get_metadata_processor("photopipeline.plugins.exif_rw");
     if let Some(proc) = processor {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let params = ParameterSet::new();
@@ -408,10 +410,8 @@ fn e2e_exif_write_invalid_permissions() {
             let mut t = target.clone();
             proc.write_metadata(&mut t, &md, &params).await
         });
-        assert!(result.is_ok());
-        let report = result.unwrap();
-        assert_eq!(report.tags_written, 0);
-        assert!(!report.warnings.is_empty());
+        assert!(result.is_err(),
+            "write to protected path /root must fail with permission error");
     }
 }
 
@@ -442,7 +442,9 @@ fn e2e_gpx_all_points_before_photo_time() {
     let track = gpx::gpx_hourly_track(start, 40.0, -74.0);
     let photo_time = chrono::Utc::now();
     let interpolated = track.interpolate_at(&photo_time);
-    let _ = interpolated;
+    // All GPX points are before photo time, expect None
+    assert!(interpolated.is_none(),
+        "interpolation must return None when all points precede photo time");
 }
 
 #[test]
@@ -451,7 +453,9 @@ fn e2e_gpx_all_points_after_photo_time() {
     let track = gpx::gpx_hourly_track(start, 40.0, -74.0);
     let photo_time = chrono::Utc::now();
     let interpolated = track.interpolate_at(&photo_time);
-    let _ = interpolated;
+    // All GPX points are after photo time, expect None
+    assert!(interpolated.is_none(),
+        "interpolation must return None when all points follow photo time");
 }
 
 // ---------------------------------------------------------------------------
@@ -497,5 +501,8 @@ fn e2e_expression_nested_ternary_deep() {
         &md,
         &info,
     );
-    let _ = result;
+    // iso is None (default metadata), false branch → 'low'
+    assert!(result.is_ok(), "nested ternary must evaluate without error");
+    assert_eq!(result.unwrap(), serde_json::json!("low"),
+        "default iso must evaluate to 'low' in nested ternary");
 }

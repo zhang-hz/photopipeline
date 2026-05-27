@@ -83,10 +83,9 @@ fn e2e_1000_image_batch_processing() {
     }
 
     assert_eq!(success + failures, 1000);
-    assert!(
-        success > 0 || failures > 0,
-        "expected either successes or failures"
-    );
+    assert!(success > 0,
+        "expected at least some batch tasks to succeed, got {} successes, {} failures",
+        success, failures);
 }
 
 #[test]
