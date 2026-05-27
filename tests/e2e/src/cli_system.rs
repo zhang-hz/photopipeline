@@ -14,13 +14,14 @@ use test_harness::mocks::encoder::MockEncoder;
 use uuid::Uuid;
 
 fn photopipeline_binary() -> Option<String> {
+    let bin_name = if cfg!(target_os = "windows") { "photopipeline-cli.exe" } else { "photopipeline-cli" };
     let candidates = vec![
-        "./target/debug/photopipeline",
-        "./target/release/photopipeline",
-        "../target/debug/photopipeline",
-        "../target/release/photopipeline",
-        "../../target/debug/photopipeline",
-        "../../target/release/photopipeline",
+        format!("./target/debug/{}", bin_name),
+        format!("./target/release/{}", bin_name),
+        format!("../target/debug/{}", bin_name),
+        format!("../target/release/{}", bin_name),
+        format!("../../target/debug/{}", bin_name),
+        format!("../../target/release/{}", bin_name),
     ];
     for c in &candidates {
         if std::path::Path::new(c).exists() {

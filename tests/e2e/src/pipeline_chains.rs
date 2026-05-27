@@ -155,7 +155,7 @@ fn e2e_metadata_pipeline_gps_and_time_shift() {
 
     match result {
         Ok(exec_result) => {
-            assert!(!exec_result.output_data.is_empty(),
+            assert!(exec_result.buffer.is_some(),
                 "metadata pipeline must produce non-empty output");
         }
         Err(e) => {

@@ -81,9 +81,9 @@ fn e2e_jxl_encoder_effort_parameter() {
     if let Some(p) = plugin {
         let schema = p.parameter_schema();
         let defaults = schema.defaults();
-        assert!(!defaults.is_empty(),
+        assert!(!defaults.values.is_empty(),
             "jxl_encoder must have default parameters");
-        assert!(defaults.contains_key("effort"),
+        assert!(defaults.values.contains_key("effort"),
             "jxl_encoder schema must include effort parameter");
     }
 }
@@ -114,9 +114,9 @@ fn e2e_tiff_encoder_compression_options() {
     if let Some(p) = plugin {
         let schema = p.parameter_schema();
         let defaults = schema.defaults();
-        assert!(!defaults.is_empty(),
+        assert!(!defaults.values.is_empty(),
             "tiff_encoder must have default parameters");
-        assert!(defaults.contains_key("compression"),
+        assert!(defaults.values.contains_key("compression"),
             "tiff_encoder schema must include compression parameter");
     }
 }
