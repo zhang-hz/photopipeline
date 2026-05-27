@@ -68,7 +68,15 @@ pub fn prost_value_to_json(val: &prost_types::Value) -> serde_json::Value {
     match &val.kind {
         Some(Kind::NullValue(_)) => serde_json::Value::Null,
         Some(Kind::NumberValue(n)) => {
-            serde_json::json!(n)
+            // Preserve integer types: protobuf NumberValue is always f64,
+            // but if the value is a lossless integer, store it as i64 so
+            // plugins using get_i64() can read it correctly.
+            let n_int = *n as i64;
+            if n_int as f64 == *n {
+                serde_json::json!(n_int)
+            } else {
+                serde_json::json!(n)
+            }
         }
         Some(Kind::StringValue(s)) => serde_json::Value::String(s.clone()),
         Some(Kind::BoolValue(b)) => serde_json::Value::Bool(*b),

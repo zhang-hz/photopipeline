@@ -75,6 +75,21 @@ fn build_image_info(path: &str) -> ImageInfo {
 
     let file_size_bytes = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
 
+    // Try to load the image to get real dimensions
+    if let Ok(loaded) = load_image_from_disk(path) {
+        return ImageInfo {
+            id: Uuid::new_v4(),
+            path: path.to_string(),
+            filename,
+            format,
+            width: loaded.width,
+            height: loaded.height,
+            file_size_bytes,
+            pixel_format: photopipeline_core::PixelFormat::U8,
+            color_space: photopipeline_core::ColorSpace::default(),
+        };
+    }
+
     ImageInfo {
         id: Uuid::new_v4(),
         path: path.to_string(),
@@ -88,6 +103,27 @@ fn build_image_info(path: &str) -> ImageInfo {
     }
 }
 
+/// Load an image from disk and convert to PixelBuffer (RGB U8).
+fn load_image_from_disk(path: &str) -> Result<photopipeline_core::PixelBuffer, String> {
+    use photopipeline_core::{PixelBuffer, ChannelLayout, PixelFormat, ColorSpace, AlignedBuffer};
+    let img = image::open(path).map_err(|e| format!("Failed to open image {}: {}", path, e))?;
+    let rgb = img.to_rgb8();
+    let (width, height) = rgb.dimensions();
+    let raw = rgb.into_raw();
+    let len = raw.len();
+    let mut aligned = AlignedBuffer::new(len, 64);
+    aligned.data[..len].copy_from_slice(&raw);
+    Ok(PixelBuffer {
+        width,
+        height,
+        data: aligned,
+        layout: ChannelLayout::RGB,
+        format: PixelFormat::U8,
+        color_space: ColorSpace::SRGB,
+        icc_profile: None,
+    })
+}
+
 
 struct ChannelProgressSink {
     sender: mpsc::Sender<Result<ExecuteProgress, Status>>,
@@ -99,7 +135,7 @@ struct ChannelProgressSink {
 
 impl ProgressSink for ChannelProgressSink {
     fn set_progress(&self, fraction: f32, message: &str) {
-        let _ = self.sender.send(Ok(ExecuteProgress {
+        let _ = self.sender.try_send(Ok(ExecuteProgress {
             stage: ProtoStage::Processing as i32,
             node_id: self.node_id.clone(),
             node_label: self.node_label.clone(),
@@ -153,7 +189,8 @@ impl PipelineService for PipelineServiceImpl {
         let req = request.into_inner();
         let pipeline_id = req.pipeline_id.clone();
         let image_path = req.image_path.clone();
-        tracing::info!("execute: pipeline={}, image={}", pipeline_id, image_path);
+        let output_path = req.output_path.clone();
+        tracing::info!("execute: pipeline={}, image={}, output={}", pipeline_id, image_path, output_path);
 
         let graph_id = Uuid::parse_str(&pipeline_id)
             .map_err(|e| Status::invalid_argument(format!("invalid pipeline id: {}", e)))?;
@@ -186,7 +223,7 @@ impl PipelineService for PipelineServiceImpl {
             canceled: Some(cancel_flag.clone()),
         };
 
-        let _ = tx.send(Ok(ExecuteProgress {
+        let _ = tx.try_send(Ok(ExecuteProgress {
             stage: ProtoStage::Loading as i32,
             node_id: String::new(),
             node_label: format!("Loading {}", image_path),
@@ -195,15 +232,68 @@ impl PipelineService for PipelineServiceImpl {
             elapsed_ms: 0,
         }));
 
+        // Load input image from disk
+        let input_buffer = match load_image_from_disk(&image_path) {
+            Ok(buf) => Some(buf),
+            Err(e) => {
+                let _ = tx.try_send(Ok(ExecuteProgress {
+                    stage: ProtoStage::Error as i32,
+                    node_id: String::new(),
+                    node_label: "LoadError".into(),
+                    fraction: 0.0,
+                    message: format!("Failed to load input image: {}", e),
+                    elapsed_ms: 0,
+                }));
+                drop(tx);
+                return Err(Status::internal(format!("Failed to load image: {}", e)));
+            }
+        };
+
         let executor = NodeExecutor::new(self.state.registry.clone(), self.state.resolver.clone());
 
         tokio::spawn(async move {
             match executor
-                .execute(&graph, &image_info, None, &metadata, Box::new(progress))
+                .execute(&graph, &image_info, input_buffer, &metadata, Box::new(progress))
                 .await
             {
-                Ok(_result) => {
-                    let _ = tx.send(Ok(ExecuteProgress {
+                Ok(result) => {
+                    // Save output to the requested output path.
+                    // Format-processor pipelines produce encoded bytes; other pipelines produce
+                    // a PixelBuffer that we save with save_buffer_to_file.
+                    if !output_path.is_empty() {
+                        if let Some(ref encoded) = result.encoded_output {
+                            if let Err(e) = std::fs::write(&output_path, encoded) {
+                                let _ = tx.try_send(Ok(ExecuteProgress {
+                                    stage: ProtoStage::Error as i32,
+                                    node_id: String::new(),
+                                    node_label: "SaveError".into(),
+                                    fraction: 1.0,
+                                    message: format!("Failed to save encoded output: {}", e),
+                                    elapsed_ms: start.elapsed().as_millis() as i64,
+                                }));
+                                return;
+                            }
+                            tracing::info!(
+                                "Encoded output saved to {} ({} bytes)",
+                                output_path,
+                                encoded.len()
+                            );
+                        } else if let Some(buffer) = &result.buffer {
+                            let save_result = save_buffer_to_file(buffer, &output_path);
+                            if let Err(e) = &save_result {
+                                let _ = tx.try_send(Ok(ExecuteProgress {
+                                    stage: ProtoStage::Error as i32,
+                                    node_id: String::new(),
+                                    node_label: "SaveError".into(),
+                                    fraction: 1.0,
+                                    message: format!("Failed to save output: {}", e),
+                                    elapsed_ms: start.elapsed().as_millis() as i64,
+                                }));
+                                return;
+                            }
+                        }
+                    }
+                    let _ = tx.try_send(Ok(ExecuteProgress {
                         stage: ProtoStage::Done as i32,
                         node_id: String::new(),
                         node_label: "Complete".into(),
@@ -218,7 +308,7 @@ impl PipelineService for PipelineServiceImpl {
                     tracing::info!("Pipeline {} completed successfully", pipeline_id);
                 }
                 Err(e) => {
-                    let _ = tx.send(Ok(ExecuteProgress {
+                    let _ = tx.try_send(Ok(ExecuteProgress {
                         stage: ProtoStage::Error as i32,
                         node_id: String::new(),
                         node_label: "Error".into(),
@@ -340,4 +430,68 @@ impl PipelineService for PipelineServiceImpl {
             gui_schema,
         }))
     }
+}
+
+/// Encode a PixelBuffer to a TIFF file and write it to the given path.
+fn save_buffer_to_file(buffer: &photopipeline_core::PixelBuffer, output_path: &str) -> Result<(), String> {
+    use image::{ImageBuffer, RgbImage, RgbaImage};
+    use photopipeline_core::ChannelLayout;
+    use std::path::Path;
+
+    let parent = Path::new(output_path).parent().unwrap_or(Path::new("."));
+    std::fs::create_dir_all(parent)
+        .map_err(|e| format!("Failed to create output directory {}: {}", parent.display(), e))?;
+
+    let width = buffer.width;
+    let height = buffer.height;
+
+    match buffer.layout {
+        ChannelLayout::RGB => {
+            let mut img: RgbImage = ImageBuffer::new(width, height);
+            for y in 0..height {
+                for x in 0..width {
+                    let idx = (y * width + x) as usize;
+                    let r = buffer.data.data.get(idx * 3).copied().unwrap_or(0);
+                    let g = buffer.data.data.get(idx * 3 + 1).copied().unwrap_or(0);
+                    let b = buffer.data.data.get(idx * 3 + 2).copied().unwrap_or(0);
+                    img.put_pixel(x, y, image::Rgb([r, g, b]));
+                }
+            }
+            img.save(output_path)
+                .map_err(|e| format!("Failed to save TIFF: {}", e))?;
+        }
+        ChannelLayout::RGBA => {
+            let mut img: RgbaImage = ImageBuffer::new(width, height);
+            for y in 0..height {
+                for x in 0..width {
+                    let idx = (y * width + x) as usize;
+                    let r = buffer.data.data.get(idx * 4).copied().unwrap_or(0);
+                    let g = buffer.data.data.get(idx * 4 + 1).copied().unwrap_or(0);
+                    let b = buffer.data.data.get(idx * 4 + 2).copied().unwrap_or(0);
+                    let a = buffer.data.data.get(idx * 4 + 3).copied().unwrap_or(255);
+                    img.put_pixel(x, y, image::Rgba([r, g, b, a]));
+                }
+            }
+            img.save(output_path)
+                .map_err(|e| format!("Failed to save TIFF: {}", e))?;
+        }
+        ChannelLayout::Gray | ChannelLayout::GrayAlpha
+        | ChannelLayout::Planar(_) | ChannelLayout::Custom(_) => {
+            // Simplify: save as RGB
+            let mut img: RgbImage = ImageBuffer::new(width, height);
+            let channels = buffer.layout.channel_count() as usize;
+            for y in 0..height {
+                for x in 0..width {
+                    let idx = (y * width + x) as usize;
+                    let v = buffer.data.data.get(idx * channels).copied().unwrap_or(0);
+                    img.put_pixel(x, y, image::Rgb([v, v, v]));
+                }
+            }
+            img.save(output_path)
+                .map_err(|e| format!("Failed to save TIFF: {}", e))?;
+        }
+    }
+
+    tracing::info!("Output saved to {}", output_path);
+    Ok(())
 }

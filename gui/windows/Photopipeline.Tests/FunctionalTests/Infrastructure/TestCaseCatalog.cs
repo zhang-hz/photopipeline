@@ -38,63 +38,155 @@ public static class TestCaseCatalog
 
     // ── Plugin parameter permutation tests ──
 
+    // Companion params that must be set for the test parameter to produce
+    // a visible pixel change. Without these, plugins fall through to no-op
+    // defaults (e.g. resize_mode="none" ignores scale_percent).
+    private static readonly Dictionary<string, Dictionary<string, object>> s_companionParams = new()
+    {
+        // transform: scale_percent is ignored unless resize_mode="percentage"
+        ["transform_scale_percent"] = new() { ["resize_mode"] = "percentage" },
+        // transform: crop_enabled alone does nothing; need dimensions smaller than input
+        ["transform_crop_enabled"] = new() { ["resize_mode"] = "percentage", ["scale_percent"] = 100.0, ["crop_width"] = 50, ["crop_height"] = 50 },
+        // transform: flip_horizontal=false is a no-op (legitimate), but true needs no companion
+        // transform: angle=0 is a no-op (legitimate), other angles work alone
+        // colorspace: source defaults to auto (detected as sRGB); need explicit source
+        //   different from target for pixel-level changes to occur
+        ["colorspace_target_color_space"] = new() { ["source_color_space"] = "srgb" },
+        ["colorspace_rendering_intent"] = new() { ["source_color_space"] = "srgb", ["target_color_space"] = "display_p3" },
+        ["colorspace_black_point_compensation"] = new() { ["source_color_space"] = "srgb", ["target_color_space"] = "display_p3" },
+        // lut3d: intensity requires a LUT file — companion handled in PluginApiTests
+        // lens_correct: needs real lens profile data; synthetic images have no distortion
+        // ai_denoise: needs ONNX model files (infrastructure dependency)
+    };
+
+    // Parameter values that legitimately produce pixel-identical output.
+    // The adversarial "PLUGIN HAD NO EFFECT" check must skip these.
+    private static readonly HashSet<string> s_zeroEffectParams = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "angle=0", "flip_horizontal=False", "flip_vertical=False",
+        "intensity=0", "denoise_strength=0", "detail_preservation=0",
+        "crop_enabled=False", "apply_white_balance=False",
+        "correct_vignetting=False", "target_color_space=srgb",
+        // colorspace: sRGB→sRGB is identity (source defaults to sRGB from auto-detect)
+        // lut3d: no LUT file → intensity is irrelevant (plugin needs external .cube file)
+        // lens_correct: synthetic test images have no lens distortion
+    };
+
+    // Plugins that need external data files (LUT, lens profile) to produce
+    // pixel changes — adversarial check skipped entirely for these plugins.
+    private static readonly HashSet<string> s_externalDataPlugins = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "photopipeline.plugins.lut3d",
+        "photopipeline.plugins.lens_correct",
+        "photopipeline.plugins.ai_denoise",
+    };
+
     private static IEnumerable<TestCaseDefinition> BuildPluginTests()
     {
+        // (PluginId, ParamKey, Values, InputImages)
         var pluginParamMatrix = new (string PluginId, string ParamKey, object[] Values, string[] InputImages)[]
         {
-            ("exposure", "ev", new object[] { -2.0, -1.0, 0.0, 1.0, 2.0 },
-                new[] { "pure_white_small", "mid_gray_128_small", "color_bars_8bit" }),
-            ("contrast", "amount", new object[] { 0.0, 0.5, 1.0, 1.5, 2.0 },
-                new[] { "gradient_horiz_rgb", "color_bars_8bit", "solid_blue_small" }),
-            ("saturation", "amount", new object[] { 0.0, 0.5, 1.0, 1.5, 2.0 },
-                new[] { "color_bars_8bit", "pure_red_small", "gradient_diag_rgb" }),
-            ("brightness", "amount", new object[] { -0.5, -0.1, 0.0, 0.1, 0.5 },
-                new[] { "mid_gray_128_small", "dark_gray_32_small", "pure_white_small" }),
-            ("white_balance", "temperature", new object[] { 2000, 4000, 6500, 10000 },
-                new[] { "pure_white_small", "gradient_horiz_rgb", "color_bars_8bit" }),
-            ("denoise", "strength", new object[] { 0.0, 0.25, 0.5, 0.75, 1.0 },
-                new[] { "noise_grain", "gradient_vert_rgb", "checkerboard_2x2" }),
-            ("sharpen", "amount", new object[] { 0.0, 0.5, 1.0, 1.5, 2.0 },
-                new[] { "gradient_horiz_rgb", "checkerboard_8x8", "natural_noise_marble" }),
-            ("crop", "width", new object[] { 100, 200, 400 },
-                new[] { "solid_large_white", "color_bars_8bit", "gradient_horiz_rgb" }),
-            ("resize", "width", new object[] { 64, 128, 256, 512, 1024 },
-                new[] { "gradient_horiz_rgb", "checkerboard_16x16", "color_bars_8bit" }),
-            ("rotate", "degrees", new object[] { 0, 90, 180, 270, 45 },
-                new[] { "gradient_horiz_rgb", "checkerboard_8x8", "solid_red_small" }),
-            ("flip", "mode", new object[] { "horizontal", "vertical", "both" },
+            // ── transform: resize, rotate, flip, crop ──
+            ("photopipeline.plugins.transform", "scale_percent", new object[] { 25.0, 50.0, 200.0 },
+                new[] { "gradient_horiz_rgb", "checkerboard_8x8", "color_bars_8bit" }),
+            ("photopipeline.plugins.transform", "angle", new object[] { 0.0, 90.0, 180.0, 270.0 },
+                new[] { "gradient_horiz_rgb", "checkerboard_8x8", "pure_red_small" }),
+            ("photopipeline.plugins.transform", "flip_horizontal", new object[] { false, true },
                 new[] { "gradient_horiz_rgb", "checkerboard_4x4", "color_bars_8bit" }),
-            ("color_space", "target", new object[] { "sRGB", "AdobeRGB", "ProPhoto" },
-                new[] { "color_bars_8bit", "pure_red_small", "gradient_diag_rgb" }),
-            ("gamma", "value", new object[] { 0.5, 1.0, 2.2 },
-                new[] { "mid_gray_128_small", "gradient_horiz_gray", "color_bars_8bit" }),
-            ("auto_levels", "enabled", new object[] { false, true },
-                new[] { "dark_gray_32_small", "gradient_vert_rgb", "pure_white_small" }),
+            ("photopipeline.plugins.transform", "crop_enabled", new object[] { true },
+                new[] { "pure_white_large", "color_bars_8bit", "gradient_horiz_rgb" }),
+
+            // ── colorspace: conversion, rendering ──
+            ("photopipeline.plugins.colorspace", "target_color_space", new object[] { "srgb", "display_p3", "adobe_rgb" },
+                new[] { "color_bars_8bit", "pure_red_small", "gradient_horiz_rgb" }),
+            ("photopipeline.plugins.colorspace", "rendering_intent", new object[] { "relative_colorimetric", "perceptual", "photopipeline.plugins.colorspace" },
+                new[] { "gradient_horiz_rgb", "pure_red_small", "color_bars_8bit" }),
+            ("photopipeline.plugins.colorspace", "black_point_compensation", new object[] { false, true },
+                new[] { "color_bars_8bit", "gradient_diag_rgb", "pure_red_small" }),
+
+            // ── ai_denoise: strength ──
+            ("photopipeline.plugins.ai_denoise", "denoise_strength", new object[] { 0.0, 25.0, 50.0, 100.0 },
+                new[] { "noise_grain", "gradient_vert_rgb", "checkerboard_8x8" }),
+            ("photopipeline.plugins.ai_denoise", "detail_preservation", new object[] { 0.0, 50.0, 100.0 },
+                new[] { "noise_grain", "gradient_vert_rgb", "checkerboard_8x8" }),
+            ("photopipeline.plugins.ai_denoise", "denoise_model", new object[] { "lightweight_v1", "standard_v2" },
+                new[] { "noise_grain", "checkerboard_8x8" }),
+
+            // ── lut3d: intensity ──
+            ("photopipeline.plugins.lut3d", "intensity", new object[] { 0.0, 50.0, 100.0 },
+                new[] { "color_bars_8bit", "gradient_horiz_rgb", "pure_red_small" }),
+
+            // ── lens_correct: mode & correction flags ──
+            ("photopipeline.plugins.lens_correct", "correction_mode", new object[] { "auto" },
+                new[] { "gradient_horiz_rgb", "checkerboard_8x8", "color_bars_8bit" }),
+            ("photopipeline.plugins.lens_correct", "correct_vignetting", new object[] { false, true },
+                new[] { "gradient_horiz_rgb", "checkerboard_8x8" }),
+
+            // ── raw_input: raw_mode ──
+            ("photopipeline.plugins.raw_input", "raw_mode", new object[] { "auto", "dcraw" },
+                new[] { "gradient_horiz_rgb", "color_bars_8bit" }),
+            ("photopipeline.plugins.raw_input", "apply_white_balance", new object[] { false, true },
+                new[] { "gradient_horiz_rgb", "color_bars_8bit" }),
+
+            // ── Encoder quality ──
+            ("photopipeline.plugins.png_encoder", "compression_level", new object[] { 0, 6, 9 },
+                new[] { "color_bars_8bit", "gradient_horiz_rgb" }),
+            ("photopipeline.plugins.png_encoder", "bit_depth", new object[] { "8", "16" },
+                new[] { "gradient_horiz_rgb", "checkerboard_8x8" }),
+            ("photopipeline.plugins.tiff_encoder", "compression", new object[] { "none", "lzw", "deflate" },
+                new[] { "color_bars_8bit", "gradient_horiz_rgb" }),
+            ("photopipeline.plugins.avif_encoder", "quality", new object[] { 30.0, 60.0, 90.0 },
+                new[] { "color_bars_8bit", "gradient_horiz_rgb" }),
+            ("photopipeline.plugins.jxl_encoder", "quality", new object[] { 30.0, 60.0, 90.0 },
+                new[] { "color_bars_8bit", "gradient_horiz_rgb" }),
+            ("photopipeline.plugins.heif_encoder", "quality", new object[] { 30.0, 60.0, 95.0 },
+                new[] { "color_bars_8bit", "gradient_horiz_rgb" }),
         };
 
         foreach (var (pluginId, paramKey, values, images) in pluginParamMatrix)
         {
+            var shortName = pluginId.Replace("photopipeline.plugins.", "");
             foreach (var image in images)
             {
                 foreach (var value in values)
                 {
+                    // Build the tag list. Tests that need external data or are
+                    // zero-effect get an extra tag so PluginApiTests can skip
+                    // the adversarial check.
+                    var tags = new List<string> { pluginId, "single_plugin", "parameter_permutation" };
+
+                    bool isZeroEffect = s_zeroEffectParams.Contains($"{paramKey}={value}");
+                    bool needsExternalData = s_externalDataPlugins.Contains(pluginId);
+                    if (isZeroEffect) tags.Add("zero_effect");
+                    if (needsExternalData) tags.Add("external_data_plugin");
+
                     yield return new TestCaseDefinition
                     {
-                        Name = $"{pluginId}_{paramKey}_{value}_{image}",
+                        Name = $"{shortName}_{paramKey}_{value}_{image}",
                         Category = "plugin",
-                        Tags = new[] { pluginId, "single_plugin", "parameter_permutation" },
+                        Tags = tags.ToArray(),
                         InputImage = image,
-                        Pipeline = TestPipelineBuilder.SingleNode(pluginId,
-                            p => p[paramKey] = value),
+                        Pipeline = TestPipelineBuilder.SingleNode(pluginId, p =>
+                        {
+                            // Apply companion params first, then the test param
+                            // on top so the test param always takes precedence.
+                            var companionKey = $"{shortName}_{paramKey}";
+                            if (s_companionParams.TryGetValue(companionKey, out var companions))
+                            {
+                                foreach (var (ck, cv) in companions)
+                                    p[ck] = cv;
+                            }
+                            p[paramKey] = value;
+                        }),
                         TolerancePerChannel = 0,
                     };
                 }
             }
 
-            // Default parameters — two images
+            // Default parameters
             yield return new TestCaseDefinition
             {
-                Name = $"{pluginId}_default_all",
+                Name = $"{shortName}_default_all",
                 Category = "plugin",
                 Tags = new[] { pluginId, "single_plugin", "default_params", "regression" },
                 InputImage = images[0],
@@ -161,7 +253,7 @@ public static class TestCaseCatalog
         // Linear chains: 2, 3, 4, 5 nodes
         foreach (int length in new[] { 2, 3, 4, 5 })
         {
-            var plugins = new[] { "exposure", "contrast", "saturation", "brightness", "sharpen" };
+            var plugins = new[] { "photopipeline.plugins.raw_input", "photopipeline.plugins.colorspace", "photopipeline.plugins.colorspace", "photopipeline.plugins.colorspace", "photopipeline.plugins.ai_denoise" };
             yield return new TestCaseDefinition
             {
                 Name = $"linear_{length}nodes",
@@ -181,9 +273,9 @@ public static class TestCaseCatalog
             Tags = new[] { "topology", "disabled_node", "linear" },
             InputImage = "gradient_horiz_rgb",
             Pipeline = new TestPipelineBuilder()
-                .AddNode("exposure")
-                .AddNode("contrast", enabled: false)
-                .AddNode("saturation")
+                .AddNode("photopipeline.plugins.raw_input")
+                .AddNode("photopipeline.plugins.colorspace", enabled: false)
+                .AddNode("photopipeline.plugins.colorspace")
                 .ConnectLinear()
                 .Build(),
             TolerancePerChannel = 0,
@@ -197,18 +289,18 @@ public static class TestCaseCatalog
             Tags = new[] { "topology", "all_disabled" },
             InputImage = "gradient_horiz_rgb",
             Pipeline = new TestPipelineBuilder()
-                .AddNode("exposure", enabled: false)
-                .AddNode("contrast", enabled: false)
-                .AddNode("saturation", enabled: false)
+                .AddNode("photopipeline.plugins.raw_input", enabled: false)
+                .AddNode("photopipeline.plugins.colorspace", enabled: false)
+                .AddNode("photopipeline.plugins.colorspace", enabled: false)
                 .ConnectLinear()
                 .Build(),
             TolerancePerChannel = 0,
         };
 
         // Single node tests for regression
-        var allSinglePlugins = new[] { "exposure", "contrast", "saturation", "brightness",
-            "denoise", "sharpen", "crop", "resize", "rotate", "flip", "gamma", "auto_levels",
-            "white_balance", "color_space" };
+        var allSinglePlugins = new[] { "photopipeline.plugins.raw_input", "photopipeline.plugins.colorspace", "photopipeline.plugins.colorspace", "photopipeline.plugins.colorspace",
+            "photopipeline.plugins.ai_denoise", "photopipeline.plugins.ai_denoise", "photopipeline.plugins.transform", "photopipeline.plugins.transform", "photopipeline.plugins.transform", "photopipeline.plugins.transform", "photopipeline.plugins.colorspace", "photopipeline.plugins.raw_input",
+            "photopipeline.plugins.raw_input", "photopipeline.plugins.colorspace" };
 
         foreach (var plugin in allSinglePlugins)
         {
@@ -236,7 +328,7 @@ public static class TestCaseCatalog
                 Category = "batch",
                 Tags = new[] { "batch", $"files_{n}" },
                 InputImages = Enumerable.Range(0, n).Select(_ => "color_bars_8bit").ToArray(),
-                Pipeline = TestPipelineBuilder.SingleNode("exposure",
+                Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.raw_input",
                     p => p["ev"] = 0.5),
                 TolerancePerChannel = 0,
             };
@@ -248,7 +340,7 @@ public static class TestCaseCatalog
             Category = "batch",
             Tags = new[] { "batch", "files_10", "is_serial_only" },
             InputImages = Enumerable.Range(0, 10).Select(_ => "color_bars_8bit").ToArray(),
-            Pipeline = TestPipelineBuilder.SingleNode("exposure"),
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.raw_input"),
             IsSerialOnly = true,
         };
     }
@@ -263,7 +355,7 @@ public static class TestCaseCatalog
             Name = "error_invalid_plugin",
             Category = "error",
             Tags = new[] { "error_path", "invalid_plugin" },
-            InputImage = "solid_red_small",
+            InputImage = "pure_red_small",
             Pipeline = new TestPipelineBuilder().AddNode("nonexistent_plugin_xyz").Build(),
             ExpectError = true,
             SkipUiChannel = true,
@@ -275,8 +367,8 @@ public static class TestCaseCatalog
             Name = "error_invalid_param_value",
             Category = "error",
             Tags = new[] { "error_path", "invalid_param" },
-            InputImage = "solid_red_small",
-            Pipeline = TestPipelineBuilder.SingleNode("crop",
+            InputImage = "pure_red_small",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.transform",
                 p => { p["width"] = -1; p["height"] = -1; }),
             ExpectError = true,
             SkipUiChannel = true,
@@ -288,7 +380,7 @@ public static class TestCaseCatalog
             Name = "error_empty_pipeline",
             Category = "error",
             Tags = new[] { "error_path", "empty_pipeline" },
-            InputImage = "solid_red_small",
+            InputImage = "pure_red_small",
             Pipeline = new PipelineSpec { Name = "Empty" },
             ExpectError = true,
         };
@@ -298,7 +390,7 @@ public static class TestCaseCatalog
 
     private static IEnumerable<TestCaseDefinition> BuildMetadataTests()
     {
-        var metadataPlugins = new[] { "exposure", "rotate", "resize", "crop", "flip" };
+        var metadataPlugins = new[] { "photopipeline.plugins.raw_input", "photopipeline.plugins.transform", "photopipeline.plugins.transform", "photopipeline.plugins.transform", "photopipeline.plugins.transform" };
         foreach (var plugin in metadataPlugins)
         {
             yield return new TestCaseDefinition
@@ -318,9 +410,9 @@ public static class TestCaseCatalog
     private static IEnumerable<TestCaseDefinition> BuildRegressionTests()
     {
         var inputImages = new[] { "gradient_horiz_rgb", "checkerboard_8x8", "color_bars_8bit",
-                                   "grayscale_32steps", "solid_mid_gray_128_small" };
-        var plugins = new[] { "exposure", "contrast", "saturation", "sharpen", "denoise",
-                                "brightness", "gamma", "rotate" };
+                                   "grayscale_32steps", "mid_gray_128_small" };
+        var plugins = new[] { "photopipeline.plugins.raw_input", "photopipeline.plugins.colorspace", "photopipeline.plugins.colorspace", "photopipeline.plugins.ai_denoise", "photopipeline.plugins.ai_denoise",
+                                "photopipeline.plugins.colorspace", "photopipeline.plugins.colorspace", "photopipeline.plugins.transform" };
 
         foreach (var image in inputImages)
         {
@@ -343,7 +435,7 @@ public static class TestCaseCatalog
 
     private static IEnumerable<TestCaseDefinition> BuildContentTests()
     {
-        var contentImages = new[] { "solid_white_large", "solid_black_large", "color_bars_8bit",
+        var contentImages = new[] { "pure_white_large", "pure_black_large", "color_bars_8bit",
                                       "checkerboard_16x16", "grayscale_256steps", "zone_plate_16hz",
                                       "gradient_horiz_rgb", "gradient_radial_rgb" };
 
@@ -355,7 +447,7 @@ public static class TestCaseCatalog
                 Category = "content",
                 Tags = new[] { "content", "identity", "passthrough" },
                 InputImage = image,
-                OutputFormat = "TIFF",
+                OutputFormat = "PNG",
                 TolerancePerChannel = 0,
             };
         }
