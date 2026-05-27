@@ -26,6 +26,7 @@ public static class TestCaseCatalog
         cases.AddRange(BuildRegressionTests());
         cases.AddRange(BuildContentTests());
         cases.AddRange(BuildInteractionTests());
+        cases.AddRange(BuildAdversarialTests());
 
         for (int i = 0; i < cases.Count; i++)
         {
@@ -701,10 +702,19 @@ public static class TestCaseCatalog
             Name = "error_edge_to_nonexistent",
             Category = "error", Tags = new[] { "error_path", "invalid_edge" },
             InputImage = "pure_red_small",
-            Pipeline = new TestPipelineBuilder()
-                .AddNode("photopipeline.plugins.transform")
-                .Connect(0, 5)
-                .Build(),
+            // Build PipelineSpec directly to create edge to non-existent node
+            Pipeline = new PipelineSpec
+            {
+                Name = "EdgeToNonexistent",
+                Nodes = new List<PipelineNode>
+                {
+                    new() { Id = "n1", PluginId = "photopipeline.plugins.transform" },
+                },
+                Edges = new List<PipelineEdge>
+                {
+                    new() { From = "n1", To = "nonexistent" },
+                }
+            },
             ExpectError = true, SkipUiChannel = true,
         };
 
@@ -1047,5 +1057,139 @@ public static class TestCaseCatalog
                 SkipApiChannel = true,
             };
         }
+    }
+
+    // ── ADVERSARIAL: Boundary-value injection ──
+    // These test extreme parameter values. ExpectError tests should FAIL on
+    // production code that silently accepts invalid data = real BUG.
+
+    private static IEnumerable<TestCaseDefinition> BuildAdversarialTests()
+    {
+        // NaN angle should produce validation error
+        yield return new TestCaseDefinition {
+            Name = "adv_nan_angle", Category = "error",
+            Tags = new[] { "adversarial", "boundary" },
+            InputImage = "pure_red_small",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.transform",
+                p => { p["angle"] = double.NaN; }),
+            ExpectError = true, SkipUiChannel = true,
+        };
+        yield return new TestCaseDefinition {
+            Name = "adv_infinite_scale", Category = "error",
+            Tags = new[] { "adversarial", "boundary" },
+            InputImage = "pure_red_small",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.transform",
+                p => { p["scale_percent"] = double.PositiveInfinity; }),
+            ExpectError = true, SkipUiChannel = true,
+        };
+        yield return new TestCaseDefinition {
+            Name = "adv_zero_scale", Category = "error",
+            Tags = new[] { "adversarial", "boundary" },
+            InputImage = "pure_red_small",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.transform",
+                p => { p["scale_percent"] = 0.0; }),
+            ExpectError = true, SkipUiChannel = true,
+        };
+        yield return new TestCaseDefinition {
+            Name = "adv_maxint_crop", Category = "error",
+            Tags = new[] { "adversarial", "overflow" },
+            InputImage = "pure_red_small",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.transform",
+                p => { p["crop_width"] = int.MaxValue; p["crop_height"] = int.MaxValue; }),
+            ExpectError = true, SkipUiChannel = true,
+        };
+        yield return new TestCaseDefinition {
+            Name = "adv_negative_dimensions", Category = "error",
+            Tags = new[] { "adversarial", "boundary" },
+            InputImage = "pure_red_small",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.transform",
+                p => { p["width"] = -1; p["height"] = -1; }),
+            ExpectError = true, SkipUiChannel = true,
+        };
+        yield return new TestCaseDefinition {
+            Name = "adv_empty_colorspace", Category = "error",
+            Tags = new[] { "adversarial", "boundary" },
+            InputImage = "pure_red_small",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.colorspace",
+                p => { p["target_color_space"] = ""; }),
+            ExpectError = true, SkipUiChannel = true,
+        };
+        yield return new TestCaseDefinition {
+            Name = "adv_nonexistent_colorspace", Category = "error",
+            Tags = new[] { "adversarial", "boundary" },
+            InputImage = "pure_red_small",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.colorspace",
+                p => { p["target_color_space"] = "this_colorspace_does_not_exist"; }),
+            ExpectError = true, SkipUiChannel = true,
+        };
+        yield return new TestCaseDefinition {
+            Name = "adv_extreme_rotation", Category = "error",
+            Tags = new[] { "adversarial", "boundary" },
+            InputImage = "pure_red_small",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.transform",
+                p => { p["angle"] = 9999.0; }),
+            ExpectError = true, SkipUiChannel = true,
+        };
+        yield return new TestCaseDefinition {
+            Name = "adv_nan_denoise", Category = "error",
+            Tags = new[] { "adversarial", "boundary" },
+            InputImage = "pure_red_small",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.ai_denoise",
+                p => { p["denoise_strength"] = double.NaN; }),
+            ExpectError = true, SkipUiChannel = true,
+        };
+        yield return new TestCaseDefinition {
+            Name = "adv_borderline_zoom", Category = "error",
+            Tags = new[] { "adversarial", "borderline" },
+            InputImage = "pure_red_small",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.transform",
+                p => { p["scale_percent"] = 3200.0; }),
+            ExpectError = true, SkipUiChannel = true,
+        };
+        yield return new TestCaseDefinition {
+            Name = "adv_png_compression_out_of_range", Category = "error",
+            Tags = new[] { "adversarial", "boundary" },
+            InputImage = "pure_red_small",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.png_encoder",
+                p => { p["compression_level"] = 999; }),
+            ExpectError = true, SkipUiChannel = true,
+        };
+        yield return new TestCaseDefinition {
+            Name = "adv_disconnected_islands", Category = "error",
+            Tags = new[] { "adversarial", "topology" },
+            InputImage = "pure_red_small",
+            Pipeline = new PipelineSpec { Name = "Disconnected",
+                Nodes = new List<PipelineNode> {
+                    new() { Id = "n1", PluginId = "photopipeline.plugins.transform" },
+                    new() { Id = "n2", PluginId = "photopipeline.plugins.colorspace" },
+                    new() { Id = "n3", PluginId = "photopipeline.plugins.ai_denoise" },
+                }
+            },
+            ExpectError = true, SkipUiChannel = true,
+        };
+        yield return new TestCaseDefinition {
+            Name = "adv_self_loop", Category = "error",
+            Tags = new[] { "adversarial", "topology" },
+            InputImage = "pure_red_small",
+            Pipeline = new TestPipelineBuilder().AddNode("photopipeline.plugins.transform")
+                .Connect(0, 0).Build(),
+            ExpectError = true, SkipUiChannel = true,
+        };
+        yield return new TestCaseDefinition {
+            Name = "adv_extreme_aspect_ratio", Category = "error",
+            Tags = new[] { "adversarial", "boundary" },
+            InputImage = "pure_red_small",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.transform",
+                p => { p["width"] = 1; p["height"] = 65535; }),
+            ExpectError = true, SkipUiChannel = true,
+        };
+        yield return new TestCaseDefinition {
+            Name = "adv_all_nan_params", Category = "error",
+            Tags = new[] { "adversarial", "boundary" },
+            InputImage = "pure_red_small",
+            Pipeline = TestPipelineBuilder.SingleNode("photopipeline.plugins.transform",
+                p => { p["scale_percent"] = double.NaN; p["angle"] = double.NaN; }),
+            ExpectError = true, SkipUiChannel = true,
+        };
     }
 }
