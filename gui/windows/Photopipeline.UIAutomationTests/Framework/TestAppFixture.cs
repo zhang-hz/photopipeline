@@ -22,6 +22,7 @@ public sealed class TestAppFixture : IDisposable
     public string TestDataDir { get; }
     public string OutputDir { get; }
     public string ScreenshotDir { get; }
+    public string EvidenceDir { get; }
     public string? ResolvedRuntimeDir { get; }
 
     public TestAppFixture()
@@ -46,6 +47,9 @@ public sealed class TestAppFixture : IDisposable
 
         ScreenshotDir = Path.Combine(Path.GetTempPath(), "photopipeline_tests", "screenshots");
         Directory.CreateDirectory(ScreenshotDir);
+
+        EvidenceDir = Path.Combine(OutputDir, "evidence");
+        Directory.CreateDirectory(EvidenceDir);
     }
 
     /// <summary>
@@ -94,6 +98,10 @@ public sealed class TestAppFixture : IDisposable
 
         // Build configurations to try, in priority order
         var candidates = new List<string>();
+
+        // Candidate 0: Staging publish output (highest priority)
+        candidates.Add(Path.Combine(baseDir, "..", "..", "..", "..",
+            "Photopipeline", "bin", "publish", "staging", "Photopipeline.exe"));
 
         // Candidate 1: Published self-contained app
         foreach (var rid in new[] { "win-x64", "win-arm64" })

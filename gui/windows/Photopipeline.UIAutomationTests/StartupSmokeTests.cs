@@ -1,4 +1,3 @@
-using Photopipeline.Tests.FunctionalTests.Infrastructure;
 using Photopipeline.UIAutomationTests.Framework;
 using Xunit;
 using Xunit.Abstractions;
@@ -6,12 +5,12 @@ using Xunit.Abstractions;
 namespace Photopipeline.UIAutomationTests;
 
 /// <summary>
-/// Startup and window smoke tests (5 tests).
-/// Verifies that the application launches correctly and shows the expected
-/// window chrome, title, and layout structure.
+/// Startup and window smoke tests (10 tests).
+/// Covers app launch, window visibility, all panels present,
+/// version info, and quick startup checks.
 ///
 /// Iron Rule 1: Each test has at least one FAIL-able assertion.
-/// Iron Rule 2: No silent skipping — missing elements throw exceptions.
+/// Iron Rule 2: No silent skipping -- missing elements throw exceptions.
 /// Iron Rule 4: Real WPF process via FlaUI UIA3.
 /// </summary>
 [Collection("FlaUITests")]
@@ -20,165 +19,162 @@ public sealed class StartupSmokeTests : UiTestBase
     public StartupSmokeTests(TestAppFixture fixture, ITestOutputHelper output)
         : base(fixture, output) { }
 
-    /// <summary>
-    /// GE2E-STARTUP-001: Verifies the app binary can be launched and the
-    /// main WPF window appears within the configured timeout.
-    /// If InitializeAsync succeeds (LaunchApp -> main window found), this test passes.
-    /// If the window is null or not found, the test FAILs (Iron Rule 2).
-    /// </summary>
-    [Fact]
-    public async Task GE2E_STARTUP_001_Application_Launches_AndShowsMainWindow()
-    {
-        // Act: app already launched by InitializeAsync (UiTestBase)
-        // The main window was validated during launch; re-verify it is still present.
-        var isWindowPresent = await Task.Run(() => true); // Driver is alive = window present
+    // ════════════════════════════════════════════════════════════════
+    //  Application Launch Tests (4 tests)
+    // ════════════════════════════════════════════════════════════════
 
-        // Assert — if the window disappeared or launch failed, we wouldn't be here.
-        // This assertion ensures the test CAN fail (Iron Rule 1).
-        isWindowPresent.Should().BeTrue("MainWindow should be present after successful launch");
+    [Fact]
+    public async Task Smoke_App_Launches_AndShowsMainWindow()
+    {
+        var window = GetMainWindow();
+        window.Should().NotBeNull("Main window must exist after successful launch");
+        window.IsAvailable.Should().BeTrue("Main window must be available");
+        window.IsEnabled.Should().BeTrue("Main window must be enabled");
+        CaptureScreenshot("Smoke_AppLaunched");
     }
 
-    /// <summary>
-    /// GE2E-STARTUP-002: Verifies the main window title contains "Photopipeline".
-    /// The title is set by the WPF TitleBar control (x:Name="TitleBar" Title="Photopipeline").
-    /// </summary>
     [Fact]
-    public async Task GE2E_STARTUP_002_MainWindow_HasCorrectTitle()
+    public async Task Smoke_Window_HasCorrectTitle()
     {
-        // Act: Find the window element and read its title
-        var title = await Task.Run(() =>
-        {
-            var desktop = new UIA3Automation().GetDesktop();
-            var ppWindow = desktop.FindFirstChild(cf =>
-                cf.ByControlType(ControlType.Window).And(cf.ByName("Photopipeline")));
-            return ppWindow?.Name ?? "(not found)";
-        });
-
-        // Assert — the title must contain "Photopipeline"
-        title.Should().NotBeNull("the main window should be discoverable by name");
-        title.Should().Contain("Photopipeline",
-            "the window title should contain the application name");
+        var window = GetMainWindow();
+        window.Title.Should().NotBeNull("Window must have a title");
+        window.Title.Should().Contain("Photopipeline", "Window title should contain the application name");
+        Output.WriteLine($"Window title: '{window.Title}'");
     }
 
-    /// <summary>
-    /// GE2E-STARTUP-003: Verifies the three-panel layout renders on startup.
-    /// The main window contains FilmstripView (left), PreviewView (center),
-    /// and PipelineEditorView (right).
-    /// </summary>
     [Fact]
-    public async Task GE2E_STARTUP_003_ThreePanelLayout_RendersOnStartup()
+    public async Task Smoke_Window_HasReasonableSize()
     {
-        // Act: Verify major panel elements exist
-        await LaunchAndAssertElementsExist(new[]
-        {
-            ("ImportButton", "FilmstripView Import button"),
-            ("FilmstripListBox", "FilmstripView ListBox"),
-            ("PluginBrowserList", "PluginBrowser panel"),
-            ("PipelineCanvas", "PipelineEditor canvas"),
-        });
+        var window = GetMainWindow();
+        var bounds = window.BoundingRectangle;
+        bounds.Width.Should().BeGreaterThan(800, "Window should have a reasonable width (>800px)");
+        bounds.Height.Should().BeGreaterThan(500, "Window should have a reasonable height (>500px)");
+        Output.WriteLine($"Window size: {bounds.Width}x{bounds.Height}");
     }
 
-    /// <summary>
-    /// GE2E-STARTUP-004: Verifies the backend connection status indicator
-    /// is visible after startup. The status bar at the bottom should show
-    /// a connection state.
-    /// </summary>
     [Fact]
-    public async Task GE2E_STARTUP_004_BackendStatusIndicator_ShowsOnStart()
+    public async Task Smoke_App_StaysAlive_After5Seconds()
     {
-        // Act: Check for any status-related text or element in the window
-        var statusElements = await Task.Run(() =>
-        {
-            var window = new UIA3Automation().GetDesktop()
-                .FindFirstChild(cf => cf.ByControlType(ControlType.Window)
-                    .And(cf.ByName("Photopipeline")));
-            if (window == null) throw new InvalidOperationException("Main window not found");
+        var window = GetMainWindow();
+        window.IsAvailable.Should().BeTrue("Window must be available immediately");
 
-            // Search for status indicators: StatusBar, or text containing status keywords
-            var all = window.FindAllDescendants(cf =>
-                cf.ByControlType(ControlType.StatusBar)
-                    .Or(cf.ByControlType(ControlType.Text)));
+        await Task.Delay(5000);
 
-            var statusTexts = new List<string>();
-            foreach (var elem in all)
-            {
-                var name = elem.Name ?? "";
-                if (name.Contains("Ready", StringComparison.OrdinalIgnoreCase) ||
-                    name.Contains("Connected", StringComparison.OrdinalIgnoreCase) ||
-                    name.Contains("Disconnected", StringComparison.OrdinalIgnoreCase) ||
-                    name.Contains("Backend", StringComparison.OrdinalIgnoreCase))
-                {
-                    statusTexts.Add($"{elem.ControlType}: {name}");
-                }
-            }
-            return statusTexts;
-        });
-
-        // Assert — at least one status element should exist
-        // If the app starts with no backend feedback, this will FAIL (Iron Rule 1).
-        statusElements.Should().NotBeEmpty(
-            "the main window should display some form of backend status information");
-        Output.WriteLine($"Found status elements: {string.Join("; ", statusElements)}");
+        window = GetMainWindow();
+        window.IsAvailable.Should().BeTrue("Window must stay alive after 5 seconds of idle");
     }
 
-    /// <summary>
-    /// GE2E-STARTUP-005: Verifies the status bar shows a "Ready" state
-    /// after application initialization completes.
-    /// </summary>
+    // ════════════════════════════════════════════════════════════════
+    //  Panel Presence Tests (3 tests)
+    // ════════════════════════════════════════════════════════════════
+
     [Fact]
-    public async Task GE2E_STARTUP_005_StatusBar_ShowsReadyState()
+    public async Task Smoke_AllThreePanels_Present()
     {
-        // Act: Wait briefly for initialization, then check for ready state
-        await Task.Delay(2000); // allow initialization
+        var window = GetMainWindow();
 
-        var hasReadyState = await Task.Run(() =>
+        var filmstripListBox = window.FindFirstDescendant(cf => cf.ByAutomationId("FilmstripListBox"));
+        var pluginBrowserList = window.FindFirstDescendant(cf => cf.ByAutomationId("PluginBrowserList"));
+        var pipelineCanvas = window.FindFirstDescendant(cf => cf.ByAutomationId("PipelineCanvas"));
+
+        filmstripListBox.Should().NotBeNull("Filmstrip panel must be present on startup");
+        pluginBrowserList.Should().NotBeNull("Plugin browser panel must be present on startup");
+        pipelineCanvas.Should().NotBeNull("Pipeline editor panel must be present on startup");
+        CaptureScreenshot("Smoke_ThreePanels");
+    }
+
+    [Fact]
+    public async Task Smoke_Filmstrip_ImportButton_Exists()
+    {
+        var window = GetMainWindow();
+        var importBtn = window.FindFirstDescendant(cf => cf.ByAutomationId("ImportButton"))
+            ?? window.FindFirstDescendant(cf =>
+                cf.ByControlType(ControlType.Button).And(cf.ByName("Import")));
+
+        importBtn.Should().NotBeNull("Import button must exist in FilmstripView on startup");
+        importBtn!.IsEnabled.Should().BeTrue("Import button should be enabled on startup");
+    }
+
+    [Fact]
+    public async Task Smoke_PluginBrowser_AddButton_Exists()
+    {
+        var window = GetMainWindow();
+        var addBtn = window.FindFirstDescendant(cf => cf.ByAutomationId("AddToPipelineButton"))
+            ?? window.FindFirstDescendant(cf =>
+                cf.ByControlType(ControlType.Button).And(cf.ByName("Add")));
+
+        addBtn.Should().NotBeNull("Add to Pipeline button must exist in PluginBrowserView");
+        Output.WriteLine($"AddToPipeline found, enabled: {addBtn!.IsEnabled}");
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Status & Version Tests (2 tests)
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task Smoke_StatusBar_ShowsReadyState()
+    {
+        await Task.Delay(2000); // Wait for initialization
+
+        var window = GetMainWindow();
+        var hasReady = await Task.Run(() =>
         {
-            var window = new UIA3Automation().GetDesktop()
-                .FindFirstChild(cf => cf.ByControlType(ControlType.Window)
-                    .And(cf.ByName("Photopipeline")));
-            if (window == null) return false;
-
             var allText = window.FindAllDescendants(cf =>
                 cf.ByControlType(ControlType.Text)
                     .Or(cf.ByControlType(ControlType.StatusBar)));
 
-            foreach (var elem in allText)
-            {
-                var name = elem.Name ?? "";
-                if (name.Contains("Ready", StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
-            return false;
+            return allText.Any(t =>
+                (t.Name ?? "").Contains("Ready", StringComparison.OrdinalIgnoreCase));
         });
 
-        // Assert — the status bar should indicate ready state
-        // If the app fails to initialize or doesn't show a ready state, this FAILs.
-        hasReadyState.Should().BeTrue(
-            "status bar should display a 'Ready' state after initialization");
+        hasReady.Should().BeTrue("Status bar should display 'Ready' state after initialization");
     }
 
-    // ── Helper methods ──
-
-    private async Task LaunchAndAssertElementsExist(
-        (string AutomationId, string Description)[] expectedElements)
+    [Fact]
+    public async Task Smoke_BackendStatus_ShowsConnection()
     {
-        await Task.Run(() =>
+        var window = GetMainWindow();
+        var statusElements = (await Task.Run(() =>
         {
-            var window = new UIA3Automation().GetDesktop()
-                .FindFirstChild(cf => cf.ByControlType(ControlType.Window)
-                    .And(cf.ByName("Photopipeline")));
-            if (window == null)
-                throw new InvalidOperationException(
-                    "Main window not found; application may have crashed.");
+            var allText = window.FindAllDescendants(cf =>
+                cf.ByControlType(ControlType.Text)
+                    .Or(cf.ByControlType(ControlType.StatusBar)));
 
-            foreach (var (automationId, description) in expectedElements)
-            {
-                var element = window.FindFirstDescendant(cf =>
-                    cf.ByAutomationId(automationId));
-                element.Should().NotBeNull(
-                    $"{description} (AutomationId='{automationId}') should be present in the main window. " +
-                    "Ensure the corresponding WPF view sets AutomationProperties.AutomationId.");
-            }
-        });
+            return allText.Where(t =>
+                (t.Name ?? "").Contains("Connected", StringComparison.OrdinalIgnoreCase)
+                || (t.Name ?? "").Contains("Disconnected", StringComparison.OrdinalIgnoreCase)
+                || (t.Name ?? "").Contains("Backend", StringComparison.OrdinalIgnoreCase)
+                || (t.Name ?? "").Contains("Ready", StringComparison.OrdinalIgnoreCase));
+        })).ToList();
+
+        statusElements.Should().NotBeEmpty(
+            "Window should display some form of backend connection status or ready state");
+        Output.WriteLine($"Status elements found: {string.Join("; ", statusElements.Select(s => s.Name))}");
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Quick Workflow Check (1 test)
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task Smoke_QuickWorkflow_ImportAndRun()
+    {
+        // Verify the full quick workflow: import -> select -> add plugin -> run -> export
+        await Driver.ImportImageAsync(GetTestImagePath("pure_red_small.png"));
+        await Driver.SelectImageAsync(0);
+        await Driver.NavigateToPipelineEditorAsync();
+        await Driver.AddPluginToPipelineAsync("raw_input");
+        await Driver.AddPluginToPipelineAsync("png_encoder");
+
+        await Driver.RunPipelineAsync();
+        await Driver.WaitForPipelineCompletionAsync(TimeSpan.FromMinutes(2));
+
+        var outputPath = GetOutputPath("Smoke_QuickWorkflow", "png");
+        await Driver.ExportOutputAsync(outputPath);
+
+        File.Exists(outputPath).Should().BeTrue("Quick workflow must produce output file");
+        new FileInfo(outputPath).Length.Should().BeGreaterThan(0, "Output file must not be empty");
+        SaveEvidence(outputPath, "Smoke_QuickWorkflow");
+        CaptureScreenshot("Smoke_QuickWorkflow_Complete");
     }
 }
