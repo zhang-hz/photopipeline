@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package photopipeline.plugin;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/empty.proto";
+
+service PluginService {
+  rpc ListPlugins(google.protobuf.Empty) returns (PluginCatalogResponse);
+  rpc GetNodeSchema(PluginIdRequest) returns (NodeSchemaResponse);
+}
+
+message PluginIdRequest {
+  string id = 1;
+}
+
+message PluginCatalogResponse {
+  repeated PluginEntry plugins = 1;
+  repeated string categories = 2;
+}
+
+message PluginEntry {
+  string id = 1;
+  string name = 2;
+  string version = 3;
+  string category = 4;
+  string description = 5;
+  repeated string tags = 6;
+  bool requires_pixel_access = 7;
+  bool requires_network = 8;
+  bool requires_filesystem = 9;
+  uint64 min_ram_mb = 10;
+  map<string, string> dependencies = 11;
+}
+
+message NodeSchemaResponse {
+  string plugin_id = 1;
+  string name = 2;
+  string version = 3;
+  string category = 4;
+  string description = 5;
+  google.protobuf.Struct parameter_schema = 6;
+  google.protobuf.Struct gui_schema = 7;
+}

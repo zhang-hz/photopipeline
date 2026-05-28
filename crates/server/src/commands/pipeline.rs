@@ -209,7 +209,6 @@ pub async fn run(registry: &Arc<Registry>, config_path: &str, input: &str, outpu
             });
 
             let out_buffer = exec_result.buffer.unwrap_or_else(|| {
-                // No pixel buffer produced — create empty placeholder (shouldn't happen normally)
                 PixelBuffer::new(
                     image_info.width,
                     image_info.height,

@@ -8,8 +8,9 @@ mod common;
 use common::{temp_dir, create_test_image, copy_golden, TestServer, TestClient};
 use photopipeline_server::pb::pipeline::{
     pipeline_service_client::PipelineServiceClient, execute_progress::Stage as ProtoStage,
-    ExecuteRequest, PipelineEdge, PipelineNode, PipelineSpec, PluginId,
+    ExecuteRequest, PipelineEdge, PipelineNode, PipelineSpec,
 };
+use photopipeline_server::pb::plugin::PluginIdRequest;
 use tokio_stream::StreamExt;
 use tonic::Code;
 
@@ -846,16 +847,16 @@ async fn validate_empty_pipeline_returns_valid_false() {
 }
 
 // ---------------------------------------------------------------------------
-// D.2.4 GetNodeSchema RPC (2 tests)
+// D.2.4 GetNodeSchema RPC (2 tests — migrated to PluginService)
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
 async fn get_node_schema_known_plugin_returns_nonempty_schema() {
     let (_server, client) = setup().await;
-    let mut svc = client.pipeline_client();
+    let mut svc = client.plugin_client();
 
     let resp = svc
-        .get_node_schema(tonic::Request::new(PluginId {
+        .get_node_schema(tonic::Request::new(PluginIdRequest {
             id: "photopipeline.plugins.colorspace".to_string(),
         }))
         .await
@@ -869,7 +870,6 @@ async fn get_node_schema_known_plugin_returns_nonempty_schema() {
     assert!(!schema.name.is_empty(), "Plugin name must not be empty");
     assert!(!schema.version.is_empty(), "Version must not be empty");
     assert!(schema.parameter_schema.is_some(), "Parameter schema must be present");
-    // Verify the parameter schema contains actual fields
     let ps = schema.parameter_schema.unwrap();
     assert!(!ps.fields.is_empty(), "Parameter schema fields must not be empty");
 }
@@ -877,10 +877,10 @@ async fn get_node_schema_known_plugin_returns_nonempty_schema() {
 #[tokio::test]
 async fn get_node_schema_unknown_plugin_returns_not_found() {
     let (_server, client) = setup().await;
-    let mut svc = client.pipeline_client();
+    let mut svc = client.plugin_client();
 
     let resp = svc
-        .get_node_schema(tonic::Request::new(PluginId {
+        .get_node_schema(tonic::Request::new(PluginIdRequest {
             id: "nonexistent.plugin.bogus".to_string(),
         }))
         .await;

@@ -43,6 +43,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
                 ParameterField {
                     id: "lut_format".into(),
@@ -93,6 +94,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
             ],
         },
@@ -124,6 +126,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
                 ParameterField {
                     id: "input_color_space".into(),
@@ -172,6 +175,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: true,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
                 ParameterField {
                     id: "clamp_output".into(),
@@ -187,6 +191,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
             ],
         },
@@ -228,6 +233,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                 advanced: true,
                 allow_override: true,
                 supports_expression: false,
+                ..Default::default()
             }],
         },
     ],

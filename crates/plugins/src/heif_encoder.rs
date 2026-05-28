@@ -105,6 +105,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
                 ParameterField {
                     id: "lossless".into(),
@@ -120,6 +121,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
                 ParameterField {
                     id: "bit_depth".into(),
@@ -152,6 +154,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
             ],
         },
@@ -202,6 +205,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: true,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
                 ParameterField {
                     id: "encoder_effort".into(),
@@ -220,6 +224,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: true,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
             ],
         },

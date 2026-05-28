@@ -959,6 +959,8 @@ fn test_png_encoder_rgb_with_solid_color() {
         &img,
     );
     assert!(!output.data.data.is_empty(), "png encoder output must not be empty");
+    assert_eq!(output.width, 1920, "PNG encoder output width must be preserved");
+    assert_eq!(output.height, 1080, "PNG encoder output height must be preserved");
     // Verify PNG magic header if encoder is available; may be raw pixels otherwise
     assert!(output.data.data.len() >= 2, "PNG output must have at least 2 bytes");
     if output.data.data.len() >= 8 && &output.data.data[0..4] == b"\x89PNG" {

@@ -478,9 +478,12 @@ mod tests {
             .height(64)
             .checkerboard()
             .build();
-        let first = buf.data.data[0];
-        let distant = buf.data.data[1000];
-        assert!(first != distant || first == distant);
+        // Checkerboard tiles: same-color squares should match, opposite should differ
+        let same_tile_a = buf.data.data[0];    // (0,0)   — bright tile
+        let same_tile_b = buf.data.data[48];   // (16,0)  — same tile (bright)
+        let other_tile = buf.data.data[32 * 3]; // (32,0) — opposite tile (dark)
+        assert_eq!(same_tile_a, same_tile_b, "same-tile pixels must match in checkerboard");
+        assert_ne!(same_tile_a, other_tile, "opposite-tile pixels must differ in checkerboard");
     }
 
     #[test]

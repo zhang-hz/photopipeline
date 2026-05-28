@@ -72,6 +72,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
                 ParameterField {
                     id: "bigtiff".into(),
@@ -87,6 +88,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
             ],
         },
@@ -112,6 +114,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
                 ParameterField {
                     id: "pixel_format".into(),
@@ -152,6 +155,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
             ],
         },

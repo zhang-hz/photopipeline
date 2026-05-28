@@ -40,6 +40,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
                 ParameterField {
                     id: "shift_minutes".into(),
@@ -58,6 +59,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
                 ParameterField {
                     id: "shift_seconds".into(),
@@ -76,6 +78,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
             ],
         },
@@ -174,6 +177,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
                 ParameterField {
                     id: "target_timezone".into(),
@@ -262,6 +266,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
             ],
         },
@@ -295,6 +300,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: true,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
                 ParameterField {
                     id: "batch_image_index".into(),
@@ -313,6 +319,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: true,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
             ],
         },

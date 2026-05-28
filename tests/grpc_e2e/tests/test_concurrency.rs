@@ -365,6 +365,7 @@ enabled = true
                     let id = resp.into_inner().id;
                     // Poll for completion
                     let start = std::time::Instant::now();
+                    let mut done = false;
                     loop {
                         if start.elapsed() > std::time::Duration::from_secs(30) {
                             break;
@@ -383,6 +384,7 @@ enabled = true
                                     if last.status == batch::batch_progress::Status::Done as i32
                                         || last.status == batch::batch_progress::Status::Error as i32
                                     {
+                                        done = true;
                                         break;
                                     }
                                 }
@@ -391,15 +393,23 @@ enabled = true
                         }
                         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                     }
+                    Ok(done)
                 }
-                Err(_) => {} // May fail due to file conflicts in concurrent batches
+                Err(e) => Err(format!("submit_batch failed: {}", e)),
             }
         }));
     }
 
+    let mut successes = 0;
     for handle in handles {
-        assert!(handle.await.is_ok(),
-            "concurrent batch operation must not panic or drop join handle");
+        match handle.await {
+            Ok(Ok(true)) => successes += 1,
+            Ok(Ok(false)) => tracing::warn!("batch progress polling timed out"),
+            Ok(Err(e)) => tracing::warn!("batch failed: {}", e),
+            Err(join_err) => tracing::warn!("batch task panicked: {}", join_err),
+        }
+    }
+    assert!(successes >= 2, "at least 2/4 concurrent batches must complete, got {}/4", successes);
     }
 }
 
@@ -447,9 +457,9 @@ enabled = true
     let id1 = resp1.into_inner().id;
 
     // Cancel immediately after submit
-    let _ = svc
-        .cancel(tonic::Request::new(batch::BatchId { id: id1.clone() }))
-        .await;
+    svc.cancel(tonic::Request::new(batch::BatchId { id: id1.clone() }))
+        .await
+        .expect("Cancel RPC must succeed");
 
     // Submit again — should work
     let resp2 = svc
@@ -523,13 +533,13 @@ async fn many_simultaneous_streams_all_work() {
 
     let mut success_count = 0;
     for handle in handles {
-        if let Ok(true) = handle.await {
-            success_count += 1;
-        } else {
-            // Some may fail under extreme load; that's acceptable
+        match handle.await {
+            Ok(true) => success_count += 1,
+            Ok(false) => tracing::warn!("stream task reported no Done stage"),
+            Err(e) => tracing::warn!("stream task panicked: {}", e),
         }
     }
-    assert!(success_count >= 15, "At least 15/20 streams must succeed, got {}", success_count);
+    assert_eq!(success_count, 20, "All 20 concurrent streams must succeed, got {}/20", success_count);
 }
 
 #[tokio::test]
@@ -540,7 +550,8 @@ async fn mixed_traffic_no_deadlock() {
 
     let mut handles = Vec::new();
 
-    // Mix of different RPC types executed concurrently
+    // Mix of different RPC types executed concurrently.
+    // Each task returns Result<(), String> so failures are visible.
     for i in 0..30 {
         let c = client.clone();
         let p = img.to_string_lossy().to_string();
@@ -553,7 +564,7 @@ async fn mixed_traffic_no_deadlock() {
                     svc.load(tonic::Request::new(ImagePath { path: p }))
                         .await
                         .map(|_| ())
-                        .map_err(|_| ())
+                        .map_err(|e| format!("Load failed: {e}"))
                 }
                 1 => {
                     // Create pipeline
@@ -574,7 +585,7 @@ async fn mixed_traffic_no_deadlock() {
                     svc.create_pipeline(tonic::Request::new(spec))
                         .await
                         .map(|_| ())
-                        .map_err(|_| ())
+                        .map_err(|e| format!("CreatePipeline failed: {e}"))
                 }
                 _ => {
                     // Validate
@@ -595,16 +606,21 @@ async fn mixed_traffic_no_deadlock() {
                     svc.validate(tonic::Request::new(spec))
                         .await
                         .map(|_| ())
-                        .map_err(|_| ())
+                        .map_err(|e| format!("Validate failed: {e}"))
                 }
             }
         }));
     }
 
+    let mut errors = Vec::new();
     for handle in handles {
-        assert!(handle.await.is_ok(),
-            "mixed traffic concurrent operation must not panic or drop join handle");
+        match handle.await {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => errors.push(e),
+            Err(join_err) => errors.push(format!("task panicked: {}", join_err)),
+        }
     }
+    assert!(errors.is_empty(), "mixed traffic RPC errors: {:?}", errors);
 }
 
 // ---------------------------------------------------------------------------

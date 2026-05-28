@@ -1,3 +1,5 @@
+pub mod commands;
+pub mod config;
 pub mod services;
 
 use parking_lot::RwLock;
@@ -18,6 +20,14 @@ pub mod pb {
     #[allow(ambiguous_associated_items)]
     pub mod batch {
         tonic::include_proto!("photopipeline.batch");
+    }
+    #[allow(ambiguous_associated_items)]
+    pub mod plugin {
+        tonic::include_proto!("photopipeline.plugin");
+    }
+    #[allow(ambiguous_associated_items)]
+    pub mod execution {
+        tonic::include_proto!("photopipeline.execution");
     }
 }
 

@@ -66,6 +66,12 @@ pub trait Plugin: Send + Sync + std::fmt::Debug {
     }
     fn supported_hardware(&self) -> HardwareRequirement;
 
+    /// Plugin dependencies: plugin_id → version requirement string.
+    /// Default: no dependencies.
+    fn dependencies(&self) -> std::collections::HashMap<String, String> {
+        Default::default()
+    }
+
     fn parameter_schema(&self) -> &ParameterSchema;
     fn gui_schema(&self) -> &GuiSchema;
 

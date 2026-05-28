@@ -40,6 +40,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
                 ParameterField {
                     id: "read_xmp".into(),
@@ -55,6 +56,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
                 ParameterField {
                     id: "read_iptc".into(),
@@ -70,6 +72,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
                 ParameterField {
                     id: "read_gps".into(),
@@ -85,6 +88,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
             ],
         },
@@ -110,6 +114,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
                 ParameterField {
                     id: "preserve_makernote".into(),
@@ -125,6 +130,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
                 ParameterField {
                     id: "write_exif".into(),
@@ -165,6 +171,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
             ],
         },
@@ -191,6 +198,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: true,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
                 ParameterField {
                     id: "exiftool_args".into(),
@@ -207,6 +215,7 @@ static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterS
                     advanced: true,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
             ],
         },

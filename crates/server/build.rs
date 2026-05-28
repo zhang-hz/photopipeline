@@ -8,6 +8,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "../../proto/pipeline.proto",
                 "../../proto/image.proto",
                 "../../proto/batch.proto",
+                "../../proto/plugin.proto",
+                "../../proto/execution.proto",
             ],
             &["../../proto/", proto_include.as_str()],
         )?;

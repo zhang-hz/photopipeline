@@ -495,6 +495,7 @@ mod tests {
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 }],
             }],
         }

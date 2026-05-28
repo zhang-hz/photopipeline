@@ -8,8 +8,9 @@ mod common;
 use common::{temp_dir, create_test_image, copy_golden, TestServer, TestClient};
 use photopipeline_server::pb::image::{DecodeRequest, EncodeRequest, ImagePath};
 use photopipeline_server::pb::pipeline::{
-    ExecuteRequest, PipelineEdge, PipelineNode, PipelineSpec, PluginId,
+    ExecuteRequest, PipelineEdge, PipelineNode, PipelineSpec,
 };
+use photopipeline_server::pb::plugin::PluginIdRequest;
 use tokio_stream::StreamExt;
 use tonic::Code;
 
@@ -346,10 +347,10 @@ async fn decode_empty_path_returns_error() {
 #[tokio::test]
 async fn get_node_schema_invalid_plugin_returns_not_found() {
     let (_server, client) = setup().await;
-    let mut svc = client.pipeline_client();
+    let mut svc = client.plugin_client();
 
     let resp = svc
-        .get_node_schema(tonic::Request::new(PluginId {
+        .get_node_schema(tonic::Request::new(PluginIdRequest {
             id: "not.a.plugin.xyz".to_string(),
         }))
         .await;

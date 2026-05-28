@@ -5,7 +5,8 @@ use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
 use photopipeline_core::{
-    ChannelLayout, EncodeOptions, ImageFormat, Metadata, PixelBuffer, PixelFormat,
+    ChannelLayout, DecodeOptions, EncodeOptions, FormatProbe, ImageFormat, Metadata, PixelBuffer,
+    PixelFormat,
 };
 
 use crate::SharedState;
@@ -48,6 +49,34 @@ fn parse_image_format(s: &str) -> ImageFormat {
         "bmp" => ImageFormat::BMP,
         _ => ImageFormat::Unknown(s.to_string()),
     }
+}
+
+fn probe_format_for_path(path: &str) -> FormatProbe {
+    let p = std::path::Path::new(path);
+    let ext = p
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.to_lowercase());
+    FormatProbe {
+        path: Some(p.to_path_buf()),
+        extension: ext,
+        magic_bytes: None,
+        mime_type: None,
+    }
+}
+
+fn find_decoder_processor(
+    registry: &photopipeline_plugin::Registry,
+    probe: &FormatProbe,
+) -> Option<Arc<dyn photopipeline_plugin::FormatProcessor>> {
+    for manifest in registry.manifests() {
+        if let Some(fp) = registry.get_format_processor(&manifest.id) {
+            if fp.can_decode(probe) {
+                return Some(fp);
+            }
+        }
+    }
+    None
 }
 
 fn find_format_processor_for_format(
@@ -122,10 +151,58 @@ impl ImageService for ImageServiceImpl {
             return Err(Status::not_found(format!("file not found: {}", path)));
         }
 
+        let registry = self.state.registry.clone();
         let decode_req = req.clone();
         let (tx, rx) = mpsc::channel(256);
 
         tokio::spawn(async move {
+            // Try FormatProcessor-based decode first (preserves bit depth & ICC)
+            let probe = probe_format_for_path(&path);
+            if let Some(decoder) = find_decoder_processor(&registry, &probe) {
+                let input_bytes = match std::fs::read(&path) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        let _ = tx.try_send(Err(Status::internal(format!("failed to read file: {}", e))));
+                        return;
+                    }
+                };
+
+                let opts = DecodeOptions {
+                    max_width: decode_req.max_width,
+                    max_height: decode_req.max_height,
+                    read_metadata: decode_req.read_metadata,
+                    apply_transfer: decode_req.apply_transfer,
+                    ..Default::default()
+                };
+
+                match decoder.decode(&input_bytes, &opts).await {
+                    Ok(decoded) => {
+                        let raw = decoded.buffer.data.data.clone();
+                        let total = raw.len() as u32;
+                        let chunk_size = (256 * 1024).min(total as usize).max(1);
+
+                        let mut offset = 0u32;
+                        while offset < total {
+                            let end = ((offset as usize) + chunk_size).min(total as usize);
+                            let slice = raw[offset as usize..end].to_vec();
+                            let is_last = end >= total as usize;
+                            let _ = tx.try_send(Ok(PixelDataChunk {
+                                offset,
+                                data: slice,
+                                total_size: total,
+                                is_last,
+                            }));
+                            offset = end as u32;
+                        }
+                        return;
+                    }
+                    Err(e) => {
+                        tracing::warn!("FormatProcessor decode failed, falling back to image crate: {}", e);
+                    }
+                }
+            }
+
+            // Fallback: use image crate for formats without a registered decoder
             match image::ImageReader::open(&path) {
                 Ok(reader) => match reader.with_guessed_format() {
                     Ok(reader) => match reader.decode() {

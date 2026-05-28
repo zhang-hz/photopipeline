@@ -33,9 +33,14 @@ use photopipeline_server::pb::{
         pipeline_service_client::PipelineServiceClient,
         pipeline_service_server::PipelineServiceServer,
     },
+    plugin::{
+        plugin_service_client::PluginServiceClient,
+        plugin_service_server::PluginServiceServer,
+    },
 };
 use photopipeline_server::services::{
     batch::BatchServiceImpl, image::ImageServiceImpl, pipeline::PipelineServiceImpl,
+    plugin::PluginServiceImpl,
 };
 
 /// Maximum time to wait for the gRPC server to become ready.
@@ -103,6 +108,9 @@ impl TestServer {
             .add_service(BatchServiceServer::new(BatchServiceImpl::new(
                 state.clone(),
             )))
+            .add_service(PluginServiceServer::new(PluginServiceImpl::new(
+                state.clone(),
+            )))
             .serve_with_incoming_shutdown(
                 tokio_stream::wrappers::TcpListenerStream::new(listener),
                 async {
@@ -130,16 +138,16 @@ impl TestServer {
             }
         };
 
-        // Verify the server can process RPCs by calling GetNodeSchema on a
-        // dummy plugin. The channel connect only verifies TCP — we need to
-        // verify the gRPC service is actually handling requests.
+        // Verify the server can process RPCs by calling GetNodeSchema on
+        // PluginService with a dummy plugin id. The channel connect only
+        // verifies TCP — we need to verify the gRPC service is handling RPCs.
         // We accept any gRPC response (including NotFound) as proof of liveness.
         let deadline = Instant::now() + HEALTH_CHECK_TIMEOUT;
         let mut healthy = false;
         while Instant::now() < deadline {
-            let mut client = PipelineServiceClient::new(channel.clone());
+            let mut client = PluginServiceClient::new(channel.clone());
             let req = tonic::Request::new(
-                photopipeline_server::pb::pipeline::PluginId {
+                photopipeline_server::pb::plugin::PluginIdRequest {
                     id: "health_check_dummy".to_string(),
                 },
             );
@@ -237,6 +245,10 @@ impl TestClient {
 
     pub fn batch_client(&self) -> BatchServiceClient<Channel> {
         BatchServiceClient::new(self.channel.clone())
+    }
+
+    pub fn plugin_client(&self) -> PluginServiceClient<Channel> {
+        PluginServiceClient::new(self.channel.clone())
     }
 }
 

@@ -39,6 +39,7 @@ fn make_simple_schema() -> ParameterSchema {
                 advanced: false,
                 allow_override: true,
                 supports_expression: false,
+                ..Default::default()
             }],
         }],
     }
@@ -72,6 +73,7 @@ fn make_multi_field_schema() -> ParameterSchema {
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
                 ParameterField {
                     id: "enabled".into(),
@@ -87,6 +89,7 @@ fn make_multi_field_schema() -> ParameterSchema {
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
                 ParameterField {
                     id: "name".into(),
@@ -103,6 +106,7 @@ fn make_multi_field_schema() -> ParameterSchema {
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
                 ParameterField {
                     id: "factor".into(),
@@ -123,6 +127,7 @@ fn make_multi_field_schema() -> ParameterSchema {
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
             ],
         }],
@@ -321,6 +326,7 @@ fn allow_override_false_blocks_group() {
                 advanced: false,
                 allow_override: false,
                 supports_expression: false,
+                ..Default::default()
             }],
         }],
     };

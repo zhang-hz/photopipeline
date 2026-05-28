@@ -100,6 +100,59 @@ fn default_parallel() -> usize {
     1
 }
 
+/// Top-level pipeline configuration (JSON primary, TOML supported).
+/// Wraps one or more `PipelineTemplate`s with image assignments,
+/// output settings, and execution parameters.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PipelineConfig {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub version: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub pipelines: Vec<PipelineTemplate>,
+    #[serde(default)]
+    pub images: Vec<ImageEntry>,
+    #[serde(default)]
+    pub output: Option<OutputConfig>,
+    #[serde(default)]
+    pub execution: Option<ExecutionConfig>,
+}
+
+/// Maps an image to a specific pipeline within a `PipelineConfig`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImageEntry {
+    pub path: String,
+    /// References `pipelines[].metadata.name` or pipeline index.
+    pub pipeline: String,
+    /// Per-node parameter overrides: node_id -> params.
+    #[serde(default)]
+    pub params: Option<HashMap<String, HashMap<String, serde_json::Value>>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OutputConfig {
+    #[serde(default)]
+    pub directory: Option<String>,
+    #[serde(default)]
+    pub naming: Option<String>,
+    #[serde(default)]
+    pub format: Option<String>,
+    #[serde(default)]
+    pub on_conflict: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionConfig {
+    #[serde(default)]
+    pub parallel: Option<u32>,
+    #[serde(default)]
+    pub resume: Option<bool>,
+    #[serde(default)]
+    pub timeout_seconds: Option<u64>,
+}
+
 impl PipelineTemplate {
     #[tracing::instrument(skip_all)]
     pub fn validate(&self) -> Result<(), String> {

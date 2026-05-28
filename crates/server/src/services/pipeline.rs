@@ -10,11 +10,11 @@ use photopipeline_engine::{NodeExecutor, PipelineTemplate, TemplateEdge, Templat
 use photopipeline_plugin::ProgressSink;
 
 use crate::pb::pipeline::{
-    ExecuteProgress, ExecuteRequest, NodeSchema, PipelineId, PipelineSpec, PluginId,
+    ExecuteProgress, ExecuteRequest, PipelineId, PipelineSpec,
     ValidationIssue, ValidationResult, execute_progress::Stage as ProtoStage,
     pipeline_service_server::PipelineService, validation_issue::Severity as ProtoSeverity,
 };
-use crate::{SharedState, json_to_prost_value, prost_struct_to_params, schema_to_prost_struct};
+use crate::{SharedState, prost_struct_to_params};
 
 pub struct PipelineServiceImpl {
     state: Arc<SharedState>,
@@ -65,47 +65,39 @@ fn build_template(spec: &PipelineSpec) -> PipelineTemplate {
     }
 }
 
-fn build_image_info(path: &str) -> ImageInfo {
-    let filename = std::path::Path::new(path)
-        .file_name()
-        .map(|f| f.to_string_lossy().to_string())
-        .unwrap_or_default();
+/// Load an image from disk, preferring FormatProcessor decode (preserves bit depth & ICC),
+/// falling back to the `image` crate for formats without a registered decoder.
+async fn load_image_from_disk(
+    registry: &photopipeline_plugin::Registry,
+    path: &str,
+) -> Result<photopipeline_core::PixelBuffer, String> {
+    use photopipeline_core::{FormatProbe, ChannelLayout, PixelBuffer, PixelFormat, ColorSpace, AlignedBuffer};
 
-    let format = crate::detect_format_from_ext(path);
+    // Try FormatProcessor-based decode first
+    let probe = {
+        let p = std::path::Path::new(path);
+        let ext = p.extension().and_then(|e| e.to_str()).map(|s| s.to_lowercase());
+        FormatProbe { path: Some(p.to_path_buf()), extension: ext, magic_bytes: None, mime_type: None }
+    };
 
-    let file_size_bytes = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
-
-    // Try to load the image to get real dimensions
-    if let Ok(loaded) = load_image_from_disk(path) {
-        return ImageInfo {
-            id: Uuid::new_v4(),
-            path: path.to_string(),
-            filename,
-            format,
-            width: loaded.width,
-            height: loaded.height,
-            file_size_bytes,
-            pixel_format: photopipeline_core::PixelFormat::U8,
-            color_space: photopipeline_core::ColorSpace::default(),
-        };
+    for manifest in registry.manifests() {
+        if let Some(fp) = registry.get_format_processor(&manifest.id) {
+            if fp.can_decode(&probe) {
+                let input_bytes = std::fs::read(path)
+                    .map_err(|e| format!("Failed to read {}: {}", path, e))?;
+                let opts = photopipeline_core::DecodeOptions::default();
+                match fp.decode(&input_bytes, &opts).await {
+                    Ok(decoded) => return Ok(decoded.buffer),
+                    Err(e) => {
+                        tracing::warn!("FormatProcessor decode failed for {}, falling back: {}", path, e);
+                        break;
+                    }
+                }
+            }
+        }
     }
 
-    ImageInfo {
-        id: Uuid::new_v4(),
-        path: path.to_string(),
-        filename,
-        format,
-        width: 0,
-        height: 0,
-        file_size_bytes,
-        pixel_format: photopipeline_core::PixelFormat::U8,
-        color_space: photopipeline_core::ColorSpace::default(),
-    }
-}
-
-/// Load an image from disk and convert to PixelBuffer (RGB U8).
-fn load_image_from_disk(path: &str) -> Result<photopipeline_core::PixelBuffer, String> {
-    use photopipeline_core::{PixelBuffer, ChannelLayout, PixelFormat, ColorSpace, AlignedBuffer};
+    // Fallback: use image crate
     let img = image::open(path).map_err(|e| format!("Failed to open image {}: {}", path, e))?;
     let rgb = img.to_rgb8();
     let (width, height) = rgb.dimensions();
@@ -122,6 +114,42 @@ fn load_image_from_disk(path: &str) -> Result<photopipeline_core::PixelBuffer, S
         color_space: ColorSpace::SRGB,
         icc_profile: None,
     })
+}
+
+async fn build_image_info(registry: &photopipeline_plugin::Registry, path: &str) -> ImageInfo {
+    let filename = std::path::Path::new(path)
+        .file_name()
+        .map(|f| f.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    let format = crate::detect_format_from_ext(path);
+    let file_size_bytes = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+
+    if let Ok(loaded) = load_image_from_disk(registry, path).await {
+        return ImageInfo {
+            id: Uuid::new_v4(),
+            path: path.to_string(),
+            filename,
+            format,
+            width: loaded.width,
+            height: loaded.height,
+            file_size_bytes,
+            pixel_format: loaded.format,
+            color_space: loaded.color_space,
+        };
+    }
+
+    ImageInfo {
+        id: Uuid::new_v4(),
+        path: path.to_string(),
+        filename,
+        format,
+        width: 0,
+        height: 0,
+        file_size_bytes,
+        pixel_format: photopipeline_core::PixelFormat::U8,
+        color_space: photopipeline_core::ColorSpace::default(),
+    }
 }
 
 
@@ -208,7 +236,7 @@ impl PipelineService for PipelineServiceImpl {
             )));
         }
 
-        let image_info = build_image_info(&image_path);
+        let image_info = build_image_info(&self.state.registry, &image_path).await;
         let metadata = Metadata::default();
 
         let (tx, rx) = mpsc::channel::<Result<ExecuteProgress, Status>>(256);
@@ -232,8 +260,8 @@ impl PipelineService for PipelineServiceImpl {
             elapsed_ms: 0,
         }));
 
-        // Load input image from disk
-        let input_buffer = match load_image_from_disk(&image_path) {
+        // Load input image from disk via FormatProcessor (with image crate fallback)
+        let input_buffer = match load_image_from_disk(&self.state.registry, &image_path).await {
             Ok(buf) => Some(buf),
             Err(e) => {
                 let _ = tx.try_send(Ok(ExecuteProgress {
@@ -394,42 +422,6 @@ impl PipelineService for PipelineServiceImpl {
         Ok(Response::new(ValidationResult { valid, issues }))
     }
 
-    async fn get_node_schema(
-        &self,
-        request: Request<PluginId>,
-    ) -> Result<Response<NodeSchema>, Status> {
-        let pid = request.into_inner();
-        tracing::info!(plugin_id = %pid.id, "get_node_schema RPC called for plugin {}", pid.id);
-        tracing::info!("get_node_schema: plugin={}", pid.id);
-
-        let plugin = self
-            .state
-            .registry
-            .get(&pid.id)
-            .ok_or_else(|| Status::not_found(format!("plugin not found: {}", pid.id)))?;
-
-        let schema = plugin.parameter_schema();
-        let gui = plugin.gui_schema();
-
-        let parameter_schema = Some(schema_to_prost_struct(schema));
-        let gui_schema = serde_json::to_value(gui).ok().map(|v| {
-            let pv = json_to_prost_value(&v);
-            match pv.kind {
-                Some(prost_types::value::Kind::StructValue(s)) => s,
-                _ => prost_types::Struct::default(),
-            }
-        });
-
-        Ok(Response::new(NodeSchema {
-            plugin_id: pid.id.clone(),
-            name: plugin.name().to_string(),
-            version: plugin.version().to_string(),
-            category: plugin.category().to_string(),
-            description: plugin.description().to_string(),
-            parameter_schema,
-            gui_schema,
-        }))
-    }
 }
 
 /// Encode a PixelBuffer to a TIFF file and write it to the given path.

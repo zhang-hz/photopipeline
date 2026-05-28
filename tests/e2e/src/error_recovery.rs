@@ -1,5 +1,4 @@
 #![allow(clippy::result_large_err)]
-#![allow(unused_imports)]
 
 use photopipeline_core::{
     ColorSpace, ExifData, GpsData, GpxPoint, GpxTrack, ImageFormat, ImageInfo, Metadata,
@@ -152,9 +151,8 @@ fn e2e_pipeline_with_validation_error_stops_execution() {
     let exec = photopipeline_engine::NodeExecutor::new(reg.clone(), resolver.clone());
     let progress = Box::new(MockProgressSink::new());
     let result = rt.block_on(async { exec.execute(&graph, &info, Some(buf), &md, progress).await });
-    // Pipeline must not panic on validation error
-    assert!(result.is_ok() || result.is_err(),
-        "pipeline with validation error must not panic");
+    // Pipeline with valid default params must execute without panicking
+    assert!(result.is_ok(), "pipeline with valid params must succeed, got: {:?}", result);
 }
 
 #[test]
@@ -416,15 +414,17 @@ fn e2e_exif_write_invalid_permissions() {
 }
 
 #[test]
-fn e2e_gpx_parse_malformed_xml() {
-    let malformed = r#"<?xml version="1.0"?><gpx><trk><trkseg><trkpt lat="bad" lon="xml"><ele>ABC</ele></trkpt></trkseg></trk></gpx>"#;
-    let result = serde_json::from_str::<serde_json::Value>(malformed);
-    if let Ok(ref v) = result {
-        assert!(!v.is_null());
-    }
+fn e2e_gpx_empty_track_handles_interpolation() {
+    // Empty track should return None for any interpolation query
+    let track = gpx::gpx_empty();
+    assert!(track.points.is_empty(), "empty track must have zero points");
 
-    let valid_xml = r#"<gpx><trk><trkseg><trkpt lat="40.0" lon="-74.0"><ele>10</ele><time>2024-06-15T10:00:00Z</time></trkpt></trkseg></trk></gpx>"#;
-    assert!(!valid_xml.is_empty());
+    let t = chrono::Utc::now();
+    let result = track.interpolate_at(&t);
+    assert!(result.is_none(), "empty track interpolation must return None");
+
+    let result = track.interpolate_at(&chrono::DateTime::UNIX_EPOCH);
+    assert!(result.is_none(), "empty track at epoch must also return None");
 }
 
 #[test]

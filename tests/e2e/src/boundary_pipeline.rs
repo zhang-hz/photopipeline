@@ -1,5 +1,4 @@
 #![allow(clippy::result_large_err)]
-#![allow(unused_imports)]
 
 use photopipeline_core::{
     ChannelLayout, ColorPrimaries, ColorSpace, ExifData, GpsData, ImageFormat, ImageInfo, Metadata,
@@ -307,9 +306,15 @@ fn e2e_cancel_mid_pipeline_stops_execution() {
                 matches!(s.status, NodeStatus::Failed(ref msg) if msg.contains("cancel"))
                     || matches!(s.status, NodeStatus::Skipped)
             });
-            let _ = has_canceled;
+            assert!(has_canceled, "cancelled pipeline must have cancelled/skipped nodes");
         }
-        Err(_) => {}
+        Err(e) => {
+            assert!(
+                matches!(e, PluginError::Canceled { .. }),
+                "cancelled pipeline must return Canceled error, got: {}",
+                e
+            );
+        }
     }
 }
 

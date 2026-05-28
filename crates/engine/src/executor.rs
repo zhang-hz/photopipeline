@@ -8,7 +8,7 @@ use photopipeline_core::{
 };
 use photopipeline_plugin::{ProgressSink, Registry};
 
-use crate::graph::PipelineGraph;
+use crate::graph::{PipelineGraph, PipelineTemplate};
 use crate::params::ParameterResolver;
 
 pub struct NodeExecutor {
@@ -700,6 +700,38 @@ impl NodeExecutor {
             output_pixels: 0,
         })
     }
+}
+
+/// Shared execution entry-point for both CLI and gRPC modes.
+///
+/// Validates a `PipelineTemplate`, converts it to a graph, validates the graph,
+/// and executes all nodes in topological order.
+///
+/// Callers are responsible for loading the input image (producing `buffer`),
+/// extracting `image_info` and `metadata`, and providing a `ProgressSink` for
+/// progress/cancellation. Output is returned via `ExecutionResult`.
+#[tracing::instrument(skip_all, fields(image_id = %image_info.id))]
+pub async fn execute_config(
+    template: &PipelineTemplate,
+    registry: Arc<Registry>,
+    resolver: Arc<ParameterResolver>,
+    image_info: &ImageInfo,
+    buffer: Option<PixelBuffer>,
+    metadata: &Metadata,
+    progress: Box<dyn ProgressSink>,
+) -> PluginResult<ExecutionResult> {
+    template
+        .validate()
+        .map_err(|e| PluginError::ValidationFailed(e))?;
+
+    let graph = template.clone().into_graph();
+
+    if let Err(issues) = graph.validate_graph() {
+        return Err(PluginError::ValidationFailed(issues.join("; ")));
+    }
+
+    let executor = NodeExecutor::new(registry, resolver);
+    executor.execute(&graph, image_info, buffer, metadata, progress).await
 }
 
 #[cfg(test)]

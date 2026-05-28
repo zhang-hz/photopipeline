@@ -74,10 +74,74 @@ pub struct ParameterField {
     pub allow_override: bool,
     #[serde(default)]
     pub supports_expression: bool,
+    /// Show this field only when condition evaluates to true.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visible_when: Option<Condition>,
+    /// Enable this field only when condition evaluates to true.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled_when: Option<Condition>,
 }
 
 fn default_true() -> bool {
     true
+}
+
+/// Sensible defaults for `ParameterField` — all fields `None`/`false`/empty.
+/// Plugin code should override the fields it needs.
+impl Default for ParameterField {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            label: String::new(),
+            description: None,
+            help_url: None,
+            field_type: ParameterType::Boolean {
+                label_true: None,
+                label_false: None,
+            },
+            default: serde_json::Value::Bool(false),
+            required: false,
+            advanced: false,
+            allow_override: true,
+            supports_expression: false,
+            visible_when: None,
+            enabled_when: None,
+        }
+    }
+}
+
+/// Field visibility/enable condition per ARCHITECTURE_DESIGN.md §8.5.
+///
+/// Serializes as an externally-tagged enum, e.g. `{"equals": {"field": "encoder", "value": "x265"}}`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Condition {
+    Equals {
+        field: String,
+        value: serde_json::Value,
+    },
+    NotEquals {
+        field: String,
+        value: serde_json::Value,
+    },
+    GreaterThan {
+        field: String,
+        value: f64,
+    },
+    LessThan {
+        field: String,
+        value: f64,
+    },
+    Contains {
+        field: String,
+        value: String,
+    },
+    Matches {
+        field: String,
+        pattern: String,
+    },
+    AllOf(Vec<Condition>),
+    AnyOf(Vec<Condition>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -322,6 +386,7 @@ mod tests {
                             advanced: false,
                             allow_override: true,
                             supports_expression: false,
+                            ..Default::default()
                         },
                         ParameterField {
                             id: "enabled".into(),
@@ -337,6 +402,7 @@ mod tests {
                             advanced: false,
                             allow_override: true,
                             supports_expression: false,
+                            ..Default::default()
                         },
                     ],
                 },
@@ -364,6 +430,7 @@ mod tests {
                         advanced: true,
                         allow_override: true,
                         supports_expression: false,
+                        ..Default::default()
                     }],
                 },
             ],
@@ -701,6 +768,7 @@ mod tests {
             advanced: false,
             allow_override: true,
             supports_expression: false,
+            ..Default::default()
         };
         let pt = ParameterType::Array {
             element: Box::new(inner),
@@ -761,6 +829,7 @@ mod tests {
             advanced: false,
             allow_override: true,
             supports_expression: false,
+            ..Default::default()
         };
         let pt = ParameterType::Section {
             fields: vec![inner],
@@ -786,6 +855,7 @@ mod tests {
             advanced: false,
             allow_override: true,
             supports_expression: false,
+            ..Default::default()
         };
         assert!(field.allow_override);
     }
@@ -807,6 +877,7 @@ mod tests {
             advanced: false,
             allow_override: true,
             supports_expression: false,
+            ..Default::default()
         };
         assert!(!field.supports_expression);
     }
@@ -828,6 +899,7 @@ mod tests {
             advanced: false,
             allow_override: true,
             supports_expression: false,
+            ..Default::default()
         };
         assert!(field.required);
     }
@@ -851,6 +923,7 @@ mod tests {
             advanced: true,
             allow_override: true,
             supports_expression: false,
+            ..Default::default()
         };
         assert!(field.advanced);
     }

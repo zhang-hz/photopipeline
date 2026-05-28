@@ -8,11 +8,6 @@ service PipelineService {
   rpc CreatePipeline(PipelineSpec) returns (PipelineId);
   rpc Execute(ExecuteRequest) returns (stream ExecuteProgress);
   rpc Validate(PipelineSpec) returns (ValidationResult);
-  rpc GetNodeSchema(PluginId) returns (NodeSchema);
-}
-
-message PluginId {
-  string id = 1;
 }
 
 message PipelineSpec {
@@ -77,16 +72,6 @@ message ValidationIssue {
   Severity severity = 1;
   string param = 2;
   string message = 3;
-}
-
-message NodeSchema {
-  string plugin_id = 1;
-  string name = 2;
-  string version = 3;
-  string category = 4;
-  string description = 5;
-  google.protobuf.Struct parameter_schema = 6;
-  google.protobuf.Struct gui_schema = 7;
 }
 
 message BatchConfig {

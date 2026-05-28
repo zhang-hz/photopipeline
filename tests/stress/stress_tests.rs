@@ -1,5 +1,5 @@
 #![allow(clippy::result_large_err)]
-#![allow(unused_imports)]
+
 use photopipeline_core::{ColorSpace, ImageFormat, Metadata, PixelFormat};
 use photopipeline_engine::{
     NodeExecutor, ParameterResolver, PipelineGraph, PipelineTemplate, TemplateNode,

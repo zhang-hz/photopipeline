@@ -1,5 +1,5 @@
 #![allow(clippy::result_large_err)]
-#![allow(unused_imports)]
+
 
 use photopipeline_core::{
     ColorSpace, ExifData, ImageFormat, ImageInfo, Metadata, PixelBuffer, PixelFormat, PluginError,

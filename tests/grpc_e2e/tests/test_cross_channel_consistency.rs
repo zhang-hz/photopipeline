@@ -476,14 +476,14 @@ async fn multiple_formats_consistency_across_rpcs() {
 #[tokio::test]
 async fn grpc_schema_info_is_consistent_with_registry() {
     let (_server, client) = setup().await;
-    let mut svc = client.pipeline_client();
+    let mut svc = client.plugin_client();
 
     // Query the same schema twice; must return identical results
     let plugin_id = "photopipeline.plugins.exif_rw";
 
     let resp1 = svc
         .get_node_schema(tonic::Request::new(
-            photopipeline_server::pb::pipeline::PluginId {
+            photopipeline_server::pb::plugin::PluginIdRequest {
                 id: plugin_id.to_string(),
             },
         ))
@@ -493,7 +493,7 @@ async fn grpc_schema_info_is_consistent_with_registry() {
 
     let resp2 = svc
         .get_node_schema(tonic::Request::new(
-            photopipeline_server::pb::pipeline::PluginId {
+            photopipeline_server::pb::plugin::PluginIdRequest {
                 id: plugin_id.to_string(),
             },
         ))

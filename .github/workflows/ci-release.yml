@@ -77,10 +77,10 @@ jobs:
         run: |
           Compress-Archive -Path staging\* `
             -DestinationPath "dist/photopipeline-${{ github.ref_name }}-windows-x64-portable.zip"
-      - name: Smoke test (CLI)
+      - name: Smoke test
         run: |
           $env:PATH = "$pwd\staging;$env:PATH"
-          .\staging\photopipeline-cli.exe --version
+          .\staging\photopipeline.exe --version
       - uses: actions/upload-artifact@v4
         with:
           name: photopipeline-windows-x64-portable

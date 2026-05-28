@@ -10,9 +10,13 @@ use photopipeline_server::{
 };
 use photopipeline_server::pb::pipeline::{
     PipelineId, PipelineSpec, ExecuteRequest, ValidationResult, ValidationIssue,
-    PluginId as ProtoPluginId, PipelineNode, PipelineEdge,
+    PipelineNode, PipelineEdge,
     pipeline_service_server::PipelineService,
     validation_issue::Severity as ProtoSeverity,
+};
+use photopipeline_server::pb::plugin::{
+    PluginIdRequest as ProtoPluginId,
+    plugin_service_server::PluginService,
 };
 use photopipeline_server::pb::image::{
     ImagePath, DecodeRequest, EncodeRequest, ThumbnailRequest,
@@ -426,12 +430,12 @@ async fn validate_unregistered_plugin_issues_found() {
         "validation must list issues for unregistered plugin");
 }
 
-// ── GetNodeSchema Tests ─────────────────────────────────────────────
+// ── GetNodeSchema Tests (PluginService) ────────────────────────────
 
 #[tokio::test]
 async fn get_node_schema_unknown_plugin() {
     let state = make_shared_state();
-    let service = photopipeline_server::services::pipeline::PipelineServiceImpl::new(state);
+    let service = photopipeline_server::services::plugin::PluginServiceImpl::new(state);
 
     let pid = ProtoPluginId {
         id: "nonexistent.plugin".into(),
@@ -760,6 +764,7 @@ fn schema_to_prost_valid_schema() {
                 advanced: false,
                 allow_override: true,
                 supports_expression: false,
+                ..Default::default()
             }],
         }],
     };

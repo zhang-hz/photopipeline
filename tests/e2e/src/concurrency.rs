@@ -3,7 +3,7 @@
 // panic or deadlock, but do NOT detect data races on shared mutable state.
 // For true race detection, tests should share state across threads.
 #![allow(clippy::result_large_err)]
-#![allow(unused_imports)]
+
 
 use photopipeline_core::{ColorSpace, ImageFormat, ImageInfo, Metadata, PixelBuffer, PixelFormat};
 use photopipeline_engine::{ParameterResolver, PipelineGraph, PipelineTemplate, TemplateNode};

@@ -8,12 +8,12 @@ members = [
     "crates/test-defs",
     "crates/halide",
     "crates/oiio",
-    "cli",
     "tests",
     "tests/test_harness",
     "tests/pipeline_integration",
     "tests/e2e",
     "tests/grpc_e2e",
+    "tests/e2e_suite",
     "benches",
 ]
 resolver = "2"

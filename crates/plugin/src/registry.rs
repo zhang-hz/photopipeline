@@ -62,7 +62,7 @@ impl Registry {
             requires_network: false,
             requires_filesystem: false,
             min_ram_mb: plugin.supported_hardware().min_ram_mb,
-            dependencies: Default::default(),
+            dependencies: plugin.dependencies(),
         };
 
         self.manifests.insert(id.clone(), manifest);
@@ -112,6 +112,16 @@ impl Registry {
 
     pub fn iter_format_processors(&self) -> impl Iterator<Item = Arc<dyn FormatProcessor>> + '_ {
         self.format_processors
+            .iter()
+            .map(|entry| entry.value().clone())
+    }
+
+    pub fn get_ai_processor(&self, id: &str) -> Option<Arc<dyn AiProcessor>> {
+        self.ai_processors.get(&id.to_string()).map(|e| e.value().clone())
+    }
+
+    pub fn iter_ai_processors(&self) -> impl Iterator<Item = Arc<dyn AiProcessor>> + '_ {
+        self.ai_processors
             .iter()
             .map(|entry| entry.value().clone())
     }
