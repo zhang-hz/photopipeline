@@ -154,6 +154,7 @@ fn e2e_concurrent_parameter_resolution() {
                 advanced: false,
                 allow_override: true,
                 supports_expression: false,
+                ..Default::default()
             }],
         }],
     };

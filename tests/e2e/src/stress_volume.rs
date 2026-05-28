@@ -142,6 +142,7 @@ fn e2e_large_parameter_merge_100_levels() {
                 advanced: false,
                 allow_override: true,
                 supports_expression: false,
+                ..Default::default()
             }],
         }],
     };
@@ -206,6 +207,7 @@ fn e2e_deeply_nested_group_conditions() {
                 advanced: false,
                 allow_override: true,
                 supports_expression: false,
+                ..Default::default()
             }],
         }],
     };
@@ -377,6 +379,7 @@ fn e2e_100_parameter_overrides_per_image() {
                 advanced: false,
                 allow_override: true,
                 supports_expression: false,
+                ..Default::default()
             }],
         }],
     };

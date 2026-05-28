@@ -167,6 +167,7 @@ fn e2e_parameter_wrong_type_string_for_int() {
                 advanced: false,
                 allow_override: true,
                 supports_expression: false,
+                ..Default::default()
             }],
         }],
     };
@@ -211,6 +212,7 @@ fn e2e_parameter_below_minimum_value() {
                 advanced: false,
                 allow_override: true,
                 supports_expression: false,
+                ..Default::default()
             }],
         }],
     };
@@ -254,6 +256,7 @@ fn e2e_parameter_above_maximum_value() {
                 advanced: false,
                 allow_override: true,
                 supports_expression: false,
+                ..Default::default()
             }],
         }],
     };
@@ -306,6 +309,7 @@ fn e2e_max_length_string_parameter_exceeded() {
                 advanced: false,
                 allow_override: true,
                 supports_expression: false,
+                ..Default::default()
             }],
         }],
     };

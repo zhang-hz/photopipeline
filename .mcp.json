@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "powershell": {
+      "command": "C:\\Program Files\\nodejs\\node.exe",
+      "args": [
+        "C:\\Users\\GMW\\.claude\\mcp-servers\\powershell-mcp\\server.js"
+      ]
+    }
+  }
+}

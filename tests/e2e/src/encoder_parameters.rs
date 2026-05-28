@@ -168,6 +168,7 @@ fn e2e_encoder_parameter_schema_serde_roundtrip() {
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
                 ParameterField {
                     id: "format".into(),
@@ -200,6 +201,7 @@ fn e2e_encoder_parameter_schema_serde_roundtrip() {
                     advanced: false,
                     allow_override: true,
                     supports_expression: false,
+                    ..Default::default()
                 },
             ],
         }],

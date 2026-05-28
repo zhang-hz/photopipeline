@@ -15,6 +15,10 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Resolve-Path "$ScriptDir\.."
 if (-not $OutputDir) { $OutputDir = "$RepoRoot\staging" }
 $env:VCPKG_ROOT = if (Test-Path "C:\vcpkg") { "C:\vcpkg" } else { $env:VCPKG_ROOT }
+$env:PROTOC = "C:\Users\GMW\AppData\Local\Microsoft\WinGet\Packages\Google.Protobuf_Microsoft.Winget.Source_8wekyb3d8bbwe\bin\protoc.exe"
+$env:PATH = "$env:CARGO_HOME\bin;$env:PATH"
+if (-not $env:CARGO_HOME) { $env:CARGO_HOME = "$env:USERPROFILE\.cargo" }
+$env:PATH = "$env:CARGO_HOME\bin;$env:PATH"
 
 # Default: Level3 (full pipeline)
 if (-not ($Level1 -or $Level2 -or $Level3 -or $Level4)) { $Level3 = $true }
@@ -36,23 +40,49 @@ function fatal([string]$msg) { Write-Host "  -> FAIL: $msg" -ForegroundColor Red
 function warn([string]$msg) { Write-Host "  -> WARN: $msg" -ForegroundColor Magenta }
 function info([string]$msg) { Write-Host "  $msg" -ForegroundColor Gray }
 
+function run([string]$exe, [string]$arguments) {
+    $pinfo = New-Object System.Diagnostics.ProcessStartInfo
+    $pinfo.FileName = $exe
+    $pinfo.Arguments = $arguments
+    $pinfo.UseShellExecute = $false
+    $pinfo.RedirectStandardOutput = $true
+    $pinfo.RedirectStandardError = $true
+    $proc = [System.Diagnostics.Process]::Start($pinfo)
+    $stdout = $proc.StandardOutput.ReadToEnd()
+    $stderr = $proc.StandardError.ReadToEnd()
+    $proc.WaitForExit()
+    Write-Host $stdout
+    if ($stderr) { Write-Host $stderr }
+    return $proc.ExitCode
+}
+
 function sh([string]$cmd, [string]$cwd, [string]$err) {
-    $full = if ($cwd) { "cd /d `"$cwd`" && $cmd 2>&1" } else { "$cmd 2>&1" }
-    cmd /c $full
-    if ($LASTEXITCODE -ne 0) { fatal $err }
+    if ($cwd) { Push-Location $cwd }
+    try {
+        $exit = run "cmd.exe" "/c $cmd"
+        if ($exit -ne 0) { fatal "${err} (exit $exit)" }
+    } finally {
+        if ($cwd) { Pop-Location }
+    }
 }
 
 function cargo([string]$cmd) {
     Write-Host "    cargo $cmd" -ForegroundColor DarkGray
-    $full = "cargo $cmd 2>&1"
-    cmd /c $full
-    if ($LASTEXITCODE -ne 0) { fatal "cargo $cmd failed" }
+    $fullCmd = "cargo $cmd"
+    $exit = run "cmd.exe" "/c `"$fullCmd`""
+    if ($exit -ne 0) { fatal "cargo $cmd failed (exit $exit)" }
 }
 
 # ── Clean ─────────────────────────────────────────────────────
 if ($Clean) {
-    header "[Clean] cargo clean"
-    cargo "clean"
+    header "[Clean] Removing stale CI artifacts"
+    if (Test-Path "$RepoRoot\staging") { Remove-Item -Recurse -Force "$RepoRoot\staging"; info "Removed staging/" }
+    if (Test-Path "$RepoRoot\dist") { Remove-Item -Recurse -Force "$RepoRoot\dist"; info "Removed dist/" }
+    if (Test-Path "$RepoRoot\target\ci") { Remove-Item -Recurse -Force "$RepoRoot\target\ci"; info "Removed target/ci/" }
+    if (Test-Path "$RepoRoot\target\debug\photopipeline.exe") { Remove-Item "$RepoRoot\target\debug\photopipeline.exe"; info "Removed debug binary" }
+    Get-ChildItem "$RepoRoot\target\debug\*.dll" -ErrorAction SilentlyContinue | Remove-Item -Force
+    if (Test-Path "$RepoRoot\e2e_report.json") { Remove-Item "$RepoRoot\e2e_report.json"; info "Removed old e2e report" }
+    Get-ChildItem "$RepoRoot\tests\e2e_suite\output\*.png" -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force
     ok
 }
 
@@ -159,7 +189,7 @@ if ($Level3 -or $Level4) {
 
         $e2eCmd = "`"$e2eRunner`" --binary `"$binary`" --categories all --output-dir `"$outputPath`" --report `"$reportPath`""
         info "Running: $e2eCmd"
-        cmd /c "$e2eCmd 2>&1"
+        Invoke-Expression "$e2eCmd 2>&1" | ForEach-Object { Write-Host $_ }
 
         if ($LASTEXITCODE -ne 0) {
             warn "E2E suite completed with exit code $LASTEXITCODE (see $reportPath)"
