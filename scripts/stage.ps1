@@ -15,4 +15,12 @@ if (Test-Path $vcpkgBin) {
 # License
 if (Test-Path "LICENSE") { Copy-Item "LICENSE" "$OutputDir/license.txt" }
 
+# Verify critical C FFI DLLs
+$required = @("heif.dll", "jxl.dll", "raw.dll", "raw_r.dll", "lcms2-2.dll")
+foreach ($dll in $required) {
+    if (-not (Test-Path "$OutputDir/$dll")) {
+        Write-Warning "Missing DLL: $dll — install via vcpkg install <package>"
+    }
+}
+
 Write-Host "Staged $(Get-ChildItem $OutputDir | Measure-Object | Select-Object -ExpandProperty Count) files to $OutputDir"

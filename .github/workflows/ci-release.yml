@@ -43,9 +43,18 @@ jobs:
           key: cargo-registry-${{ hashFiles('Cargo.lock') }}
           restore-keys: cargo-registry-
       - name: Build Rust binaries
-        run: cargo build --profile ci --workspace
+        run: cargo build --profile ci --workspace --features "libheif-native,libjxl-native,libraw-native"
       - name: Stage package
         run: powershell -File scripts/stage.ps1
+      - name: Run E2E Suite
+        run: |
+          $env:PATH = "$pwd\staging;$env:PATH"
+          .\target\ci\photopipeline-e2e-runner.exe --binary .\staging\photopipeline.exe --categories all --output-dir test_output --report e2e_report.json || $true
+      - name: Upload E2E Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: e2e_report.json
       - name: Create portable zip
         run: |
           Compress-Archive -Path staging\* `

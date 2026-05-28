@@ -78,10 +78,10 @@ jobs:
 
       # --- Build + Test (cross-platform) ---
       - name: Build
-        run: cargo build --profile ci --workspace
+        run: cargo build --profile ci --workspace --features "libheif-native,libjxl-native,libraw-native"
 
       - name: Test
-        run: cargo test --workspace --no-fail-fast
+        run: cargo test --workspace --no-fail-fast --features "libheif-native,libjxl-native,libraw-native"
 
       - name: Fmt
         run: cargo fmt --all -- --check

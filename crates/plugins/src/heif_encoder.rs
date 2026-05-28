@@ -2,67 +2,7 @@ use async_trait::async_trait;
 use std::sync::LazyLock;
 
 #[cfg(feature = "libheif-native")]
-mod libheif_ffi {
-    use std::ffi::{c_int, c_uint};
-
-    #[repr(C)]
-    pub struct HeifContext;
-    #[repr(C)]
-    pub struct HeifEncoder;
-    #[repr(C)]
-    pub struct HeifImage;
-
-    // Link directives provided by libheif-sys build.rs
-    unsafe extern "C" {
-        pub fn heif_context_alloc() -> *mut HeifContext;
-        pub fn heif_context_free(ctx: *mut HeifContext);
-        pub fn heif_context_get_encoder_for_format(
-            ctx: *mut HeifContext,
-            format: c_int,
-        ) -> *mut HeifEncoder;
-        pub fn heif_encoder_set_lossy_quality(enc: *mut HeifEncoder, quality: c_int);
-        pub fn heif_encoder_set_lossless(enc: *mut HeifEncoder, lossless: c_int);
-        pub fn heif_encoder_set_parameter_string(
-            enc: *mut HeifEncoder,
-            name: *const u8,
-            value: *const u8,
-        );
-        pub fn heif_image_create(
-            width: c_int,
-            height: c_int,
-            colorspace: c_int,
-            chroma: c_int,
-            image: *mut *mut HeifImage,
-        );
-        pub fn heif_image_add_plane(
-            image: *mut HeifImage,
-            channel: c_int,
-            width: c_int,
-            height: c_int,
-            bit_depth: c_int,
-        );
-        pub fn heif_image_get_plane(
-            image: *mut HeifImage,
-            channel: c_int,
-            stride: *mut c_int,
-        ) -> *mut u8;
-        pub fn heif_context_encode_image(
-            ctx: *mut HeifContext,
-            image: *mut HeifImage,
-            enc: *mut HeifEncoder,
-            options: *const std::ffi::c_void,
-            output: *mut *mut u8,
-            output_size: *mut usize,
-        );
-        pub fn heif_image_release(image: *mut HeifImage);
-        pub fn heif_encoder_release(enc: *mut HeifEncoder);
-    }
-
-    pub const HEIF_COLOR_SPACE_RGB: c_int = 1;
-    pub const HEIF_CHROMA_444: c_int = 1;
-    pub const HEIF_CHROMA_420: c_int = 2;
-    pub const HEIF_COMPRESSION_HEVC: c_int = 1;
-}
+use libheif_sys as libheif;
 
 use photopipeline_core::{
     DecodeOptions, DecodedImage, EncodeOptions, FormatProbe, HardwareRequirement, ImageFormat,
@@ -479,142 +419,133 @@ fn encode_via_libheif(
     }
     #[cfg(feature = "libheif-native")]
     {
-        use libheif_ffi::*;
-        use std::ffi::{c_int, CString};
+        use libheif::*;
+        use std::ffi::{c_int, CString, c_void};
         unsafe {
-            let ctx = heif_context_alloc();
-            if ctx.is_null() {
-                return Err(PluginError::Internal {
-                    plugin: plugin_id.clone(),
-                    message: "failed to allocate heif context".into(),
-                });
+            unsafe extern "C" fn writer_cb(
+                _ctx: *mut heif_context,
+                data: *const c_void,
+                size: usize,
+                userdata: *mut c_void,
+            ) -> heif_error {
+                if data.is_null() || size == 0 { return heif_error { code: 0, subcode: 0, message: std::ptr::null() }; }
+                let buf: &mut Vec<u8> = &mut *(userdata as *mut Vec<u8>);
+                let slice = std::slice::from_raw_parts(data as *const u8, size);
+                buf.extend_from_slice(slice);
+                heif_error { code: 0, subcode: 0, message: std::ptr::null() }
+            }
+
+            fn err_check(e: heif_error, plugin_id: &PluginId, msg: &str) -> PluginResult<()> {
+                if e.code != 0 {
+                    Err(PluginError::Internal { plugin: plugin_id.clone(), message: format!("{}: code={} subcode={}", msg, e.code, e.subcode) })
+                } else { Ok(()) }
             }
 
             let width = image.width as c_int;
             let height = image.height as c_int;
-            let chroma_val = match chroma_str {
-                "420" => HEIF_CHROMA_420,
-                _ => HEIF_CHROMA_444,
-            };
             let bpc = image.format.bytes_per_channel();
 
-            let mut heif_image: *mut HeifImage = std::ptr::null_mut();
-            heif_image_create(
-                width,
-                height,
-                HEIF_COLOR_SPACE_RGB,
-                chroma_val,
-                &mut heif_image,
-            );
-            if heif_image.is_null() {
-                heif_context_free(ctx);
-                return Err(PluginError::Internal {
-                    plugin: plugin_id.clone(),
-                    message: "failed to create heif image".into(),
-                });
+            // Allocate context
+            let ctx = heif_context_alloc();
+            if ctx.is_null() {
+                return Err(PluginError::Internal { plugin: plugin_id.clone(), message: "failed to allocate heif context".into() });
             }
 
-            let total_pixels = (width * height) as usize;
-            heif_image_add_plane(heif_image, 0, width, height, bit_depth as c_int);
+            // Create image
+            let mut heif_image: *mut heif_image = std::ptr::null_mut();
+            let chroma = match chroma_str { "420" => heif_chroma_heif_chroma_420, _ => heif_chroma_heif_chroma_444 };
+            err_check(
+                heif_image_create(width, height, heif_colorspace_heif_colorspace_RGB, chroma, &mut heif_image),
+                plugin_id, "heif_image_create"
+            )?;
 
+            let in_bit_depth = match bpc { 1 => 8, 2 => 16, _ => 8 };
+            let channel = heif_channel_heif_channel_interleaved;
+            err_check(
+                heif_image_add_plane(heif_image, channel, width, height, in_bit_depth),
+                plugin_id, "heif_image_add_plane"
+            )?;
+
+            // Get plane and copy pixel data
             let mut stride: c_int = 0;
-            let plane = heif_image_get_plane(heif_image, 0, &mut stride);
+            let plane = heif_image_get_plane(heif_image, channel, &mut stride);
             if plane.is_null() {
                 heif_image_release(heif_image);
                 heif_context_free(ctx);
-                return Err(PluginError::Internal {
-                    plugin: plugin_id.clone(),
-                    message: "failed to get heif image plane".into(),
-                });
+                return Err(PluginError::Internal { plugin: plugin_id.clone(), message: "failed to get image plane".into() });
             }
 
-            if bpc == 2 {
-                let src = image.data.data.as_slice();
-                let dst = std::slice::from_raw_parts_mut(plane, total_pixels * 2);
-                let width_u = width as usize;
-                let stride_u = stride as usize;
-                if stride_u == width_u * 2 {
-                    let min_len = std::cmp::min(src.len(), dst.len());
-                    dst[..min_len].copy_from_slice(&src[..min_len]);
-                } else {
-                    for y in 0..height as usize {
-                        let src_row = &src[y * width_u * 3 * 2..(y + 1) * width_u * 3 * 2];
-                        let dst_row = &mut dst[y * stride_u..y * stride_u + width_u * 3 * 2];
-                        let copy_len = std::cmp::min(src_row.len(), dst_row.len());
-                        dst_row[..copy_len].copy_from_slice(&src_row[..copy_len]);
-                    }
-                }
+            let total_pixels = (width * height) as usize;
+            let plane_bytes = if bpc == 2 { total_pixels * 2 } else { total_pixels * ((bit_depth as usize + 7) / 8) };
+            let dst = std::slice::from_raw_parts_mut(plane, plane_bytes);
+            if stride as usize == width as usize * 3 * (if bpc == 2 { 2 } else { 1 }) {
+                let copy_end = std::cmp::min(image.data.data.len(), dst.len());
+                dst[..copy_end].copy_from_slice(&image.data.data[..copy_end]);
             } else {
-                let dst = std::slice::from_raw_parts_mut(
-                    plane,
-                    total_pixels * ((bit_depth as usize + 7) / 8),
-                );
                 let width_u = width as usize;
-                let stride_u = stride as usize;
-                if stride_u == width_u * 3 {
-                    let copy_end = std::cmp::min(image.data.data.len(), dst.len());
-                    dst[..copy_end].copy_from_slice(&image.data.data[..copy_end]);
-                } else {
-                    for y in 0..height as usize {
-                        let src_row = &image.data.data[y * width_u * 3..(y + 1) * width_u * 3];
-                        let dst_row = &mut dst[y * stride_u..y * stride_u + width_u * 3];
-                        let copy_len = std::cmp::min(src_row.len(), dst_row.len());
-                        dst_row[..copy_len].copy_from_slice(src_row);
+                for y in 0..height as usize {
+                    let src_off = y * width_u * 3 * (if bpc == 2 { 2 } else { 1 });
+                    let dst_off = y * stride as usize;
+                    let src_end = std::cmp::min(src_off + width_u * 3 * (if bpc == 2 { 2 } else { 1 }), image.data.data.len());
+                    let dst_end = std::cmp::min(dst_off + (src_end - src_off), dst.len());
+                    if dst_off < dst.len() && src_off < image.data.data.len() {
+                        let src_slice = &image.data.data[src_off..src_end];
+                        dst[dst_off..dst_end].copy_from_slice(src_slice);
                     }
                 }
             }
 
-            let encoder = heif_context_get_encoder_for_format(ctx, HEIF_COMPRESSION_HEVC);
-            if encoder.is_null() {
-                heif_image_release(heif_image);
-                heif_context_free(ctx);
-                return Err(PluginError::Internal {
-                    plugin: plugin_id.clone(),
-                    message: "failed to get hevc encoder".into(),
-                });
-            }
+            // Get encoder
+            let mut encoder: *mut heif_encoder = std::ptr::null_mut();
+            err_check(
+                heif_context_get_encoder_for_format(ctx, heif_compression_format_heif_compression_HEVC, &mut encoder),
+                plugin_id, "heif_context_get_encoder_for_format"
+            )?;
 
             if lossless {
-                heif_encoder_set_lossless(encoder, 1);
+                err_check(heif_encoder_set_lossless(encoder, 1), plugin_id, "set_lossless")?;
             } else {
-                heif_encoder_set_lossy_quality(encoder, quality as c_int);
+                err_check(heif_encoder_set_lossy_quality(encoder, quality as c_int), plugin_id, "set_quality")?;
             }
 
-            let effort_cstr = CString::new(format!("{}", effort)).unwrap_or_default();
-            let effort_key = CString::new("effort").unwrap_or_default();
-            heif_encoder_set_parameter_string(
-                encoder,
-                effort_key.as_ptr(),
-                effort_cstr.as_ptr(),
-            );
+            let effort_cstr = CString::new("effort").unwrap();
+            let val_cstr = CString::new(format!("{}", effort)).unwrap();
+            err_check(
+                heif_encoder_set_parameter_string(encoder, effort_cstr.as_ptr(), val_cstr.as_ptr()),
+                plugin_id, "set_effort"
+            )?;
 
-            let mut output_ptr: *mut u8 = std::ptr::null_mut();
-            let mut output_size: usize = 0;
-            heif_context_encode_image(
-                ctx,
-                heif_image,
-                encoder,
-                std::ptr::null(),
-                &mut output_ptr,
-                &mut output_size,
-            );
+            // Encode image → get image handle
+            let mut handle: *mut heif_image_handle = std::ptr::null_mut();
+            err_check(
+                heif_context_encode_image(ctx, heif_image, encoder, std::ptr::null(), &mut handle),
+                plugin_id, "encode_image"
+            )?;
 
-            if output_ptr.is_null() || output_size == 0 {
+            // Write to memory via writer callback
+            let mut write_buf: Vec<u8> = Vec::new();
+            let mut writer = heif_writer {
+                writer_api_version: 1,
+                write: Some(writer_cb),
+            };
+            err_check(
+                heif_context_write(ctx, &mut writer, &mut write_buf as *mut Vec<u8> as *mut c_void),
+                plugin_id, "context_write",
+            )?;
+
+            if write_buf.is_empty() {
+                heif_image_handle_release(handle);
                 heif_encoder_release(encoder);
                 heif_image_release(heif_image);
                 heif_context_free(ctx);
-                return Err(PluginError::Internal {
-                    plugin: plugin_id.clone(),
-                    message: "encode produced no output".into(),
-                });
+                return Err(PluginError::Internal { plugin: plugin_id.clone(), message: "encode produced no output".into() });
             }
 
-            let output = std::slice::from_raw_parts(output_ptr, output_size).to_vec();
-
+            let output = write_buf;
+            heif_image_handle_release(handle);
             heif_encoder_release(encoder);
             heif_image_release(heif_image);
             heif_context_free(ctx);
-
             Ok(output)
         }
     }

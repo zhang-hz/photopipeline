@@ -44,6 +44,21 @@ fn main() {
         std::process::exit(1);
     }
 
+    // Enforce packaged binary: check required DLLs exist alongside the binary
+    let bin_dir = std::path::Path::new(&cli.binary).parent().unwrap_or(std::path::Path::new("."));
+    let required_dlls = ["heif.dll", "jxl.dll", "raw.dll", "raw_r.dll"];
+    let mut missing = Vec::new();
+    for dll in &required_dlls {
+        if !bin_dir.join(dll).exists() {
+            missing.push(*dll);
+        }
+    }
+    if !missing.is_empty() {
+        eprintln!("ERROR: Packaged binary requires DLLs in '{}': {:?}", bin_dir.display(), missing);
+        eprintln!("Run: scripts/ci-local.ps1 (to auto-stage) or copy DLLs from vcpkg");
+        std::process::exit(1);
+    }
+
     eprintln!("E2E Runner — {} test categories", if cli.categories == "all" { "all" } else { &cli.categories });
     eprintln!("  Binary: {}", cli.binary);
     eprintln!("  Output: {}", cli.output_dir);
