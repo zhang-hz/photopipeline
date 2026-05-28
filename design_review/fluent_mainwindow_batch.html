@@ -1,0 +1,176 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Photopipeline — Edit Mode + Batch Mode</title></head><body style="font-family:'Segoe UI Variable',system-ui,sans-serif;font-size:12px;color:#f5f5f5;background:#141414;display:flex;justify-content:center;align-items:center;min-height:100vh;padding:16px;">
+<div style="width:1500px;height:920px;background:#1f1f1f;border-radius:12px;border:1px solid #383838;box-shadow:0 8px 32px rgba(0,0,0,0.5);display:flex;flex-direction:column;overflow:hidden;">
+
+  <!-- TitleBar + Mode Switch -->
+  <div style="height:44px;display:flex;align-items:center;padding:0 16px;gap:16px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);border-bottom:1px solid #383838;flex-shrink:0;">
+    <span style="width:22px;height:22px;background:#479ef5;border-radius:4px;font-size:11px;color:#141414;display:flex;align-items:center;justify-content:center;">◆</span>
+    <span style="font-weight:600;flex:1;">Photopipeline — HDR Pipeline v1</span>
+
+    <!-- Mode tabs -->
+    <div style="display:flex;gap:0;background:#141414;border-radius:6px;padding:2px;border:1px solid #383838;">
+      <div class="mode-tab active" id="tab-edit" onclick="switchMode('edit')" style="padding:5px 16px;border-radius:4px;font-size:11px;cursor:pointer;color:#f5f5f5;background:rgba(71,158,245,0.10);transition:0.15s;">Pipeline Editor</div>
+      <div class="mode-tab" id="tab-batch" onclick="switchMode('batch')" style="padding:5px 16px;border-radius:4px;font-size:11px;cursor:pointer;color:#6e6e6e;transition:0.15s;">Batch Processing <span style="background:#479ef5;color:#141414;border-radius:8px;padding:1px 7px;font-size:9px;font-weight:600;margin-left:4px;">16</span></div>
+    </div>
+
+    <span style="width:32px;height:32px;border-radius:4px;color:#6e6e6e;font-size:14px;display:flex;align-items:center;justify-content:center;">◐</span>
+    <span style="width:32px;height:32px;border-radius:4px;color:#6e6e6e;font-size:14px;display:flex;align-items:center;justify-content:center;">⚙</span>
+  </div>
+
+  <!-- ═══════ EDIT MODE ═══════ -->
+  <div style="flex:1;display:flex;overflow:hidden;" id="editMode">
+    <!-- Left: Candidate Files -->
+    <div style="width:272px;display:flex;flex-direction:column;border-right:1px solid #383838;background:#141414;">
+      <div style="padding:8px 12px;font-size:10px;font-weight:600;color:#6e6e6e;text-transform:uppercase;border-bottom:1px solid #383838;">Candidate Files<span style="margin-left:auto;font-size:9px;color:#505050;">12 images</span></div>
+      <div style="display:flex;gap:4px;padding:6px 8px;border-bottom:1px solid #383838;">
+        <button style="padding:2px 8px;height:24px;border:1px solid #479ef5;background:#479ef5;color:#141414;border-radius:4px;font-size:10px;">📂 Import</button>
+        <button style="padding:2px 8px;height:24px;border:none;background:transparent;color:#adadad;border-radius:4px;font-size:10px;">📤 To Batch</button>
+      </div>
+      <div style="padding:4px 12px;border-bottom:1px solid #383838;background:rgba(213,153,0,0.06);font-size:10px;color:#d59900;">📋 3 selected · <span style="color:#479ef5;cursor:pointer;">Send to Batch</span></div>
+      <div style="flex:1;overflow-y:auto;padding:4px;">
+        <div style="display:flex;gap:8px;padding:6px 8px;background:#1f1f1f;border:1px solid #479ef5;border-radius:8px;margin:1px 0;"><div style="width:48px;height:34px;border-radius:4px;background:#292929;display:flex;align-items:center;justify-content:center;font-size:18px;">🌄</div><div style="flex:1;"><div style="font-weight:500;">DSC_0034.ARW</div><div style="font-size:10px;color:#505050;">6000×4000 ARW · ISO 6400</div></div></div>
+        <div style="display:flex;gap:8px;padding:6px 8px;background:#1f1f1f;border:1px dashed #479ef5;border-radius:8px;margin:1px 0;"><div style="width:48px;height:34px;border-radius:4px;background:#292929;display:flex;align-items:center;justify-content:center;font-size:18px;">🏔</div><div style="flex:1;"><div style="font-weight:500;">PANO_001.DNG</div><div style="font-size:10px;color:#505050;">8256×5504 DNG</div></div></div>
+        <div style="display:flex;gap:8px;padding:6px 8px;background:#1f1f1f;border:1px dashed #479ef5;border-radius:8px;margin:1px 0;"><div style="width:48px;height:34px;border-radius:4px;background:#292929;display:flex;align-items:center;justify-content:center;font-size:18px;">🎆</div><div style="flex:1;"><div style="font-weight:500;">night_012.NEF</div><div style="font-size:10px;color:#505050;">6016×4016 NEF</div></div></div>
+      </div>
+      <div style="border-top:1px solid #383838;padding:4px;"><div style="font-size:10px;color:#505050;padding:4px 10px;text-transform:uppercase;">Groups</div><div style="display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:4px;color:#adadad;font-size:11px;"><span style="width:6px;height:6px;border-radius:50%;background:#d59900;"></span>High ISO<span style="margin-left:auto;font-size:9px;color:#6e6e6e;background:#292929;padding:1px 6px;border-radius:10px;">4</span></div></div>
+    </div>
+
+    <!-- Center: DAG + Plugin Browser -->
+    <div style="flex:1;min-width:400px;display:flex;flex-direction:column;background:#1f1f1f;">
+      <div style="padding:8px 16px;font-size:10px;font-weight:600;color:#6e6e6e;text-transform:uppercase;border-bottom:1px solid #383838;"><span style="width:8px;height:8px;border-radius:50%;background:#54b054;display:inline-block;margin-right:8px;"></span>Pipeline Editor<span style="margin-left:auto;font-size:10px;color:#505050;">5 nodes · 120%</span></div>
+      <div style="display:flex;gap:4px;padding:6px 12px;border-bottom:1px solid #383838;"><button style="padding:3px 10px;height:26px;border:none;background:transparent;color:#adadad;border-radius:4px;">📄 New</button><button style="padding:3px 10px;height:26px;border:none;background:transparent;color:#adadad;border-radius:4px;">💾 Save</button><span style="width:1px;height:18px;background:#383838;margin:0 4px;"></span><button style="padding:3px 10px;height:26px;background:#479ef5;color:#141414;border:none;border-radius:4px;font-weight:600;">▶ Run</button></div>
+      <div style="flex:1;margin:8px;background:#141414;border-radius:8px;border:1px solid #383838;"><div style="width:100%;height:100%;background-image:linear-gradient(rgba(255,255,255,0.015) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.015) 1px,transparent 1px);background-size:32px 32px;position:relative;">
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1;" xmlns="http://www.w3.org/2000/svg"><path d="M 220,130 L 280,170 Q 310,200 340,200" stroke="#479ef5" stroke-width="2" fill="none" opacity="0.55"/></svg>
+        <div style="position:absolute;left:80px;top:100px;min-width:130px;background:#1f1f1f;border:1.5px solid #4a4a4a;border-radius:8px;padding:8px 14px 8px 18px;box-shadow:0 2px 8px rgba(0,0,0,0.3);z-index:2;"><div style="font-weight:600;">raw_input</div><div style="font-size:10px;color:#505050;">Input</div><div style="position:absolute;width:12px;height:12px;border-radius:2px;right:-7px;top:50%;background:#1f1f1f;border:2px solid #479ef5;transform:translateY(-50%);"></div></div>
+        <div style="position:absolute;left:340px;top:175px;min-width:130px;background:#1f1f1f;border:1.5px solid #479ef5;border-radius:8px;padding:8px 14px 8px 18px;box-shadow:0 0 0 3px rgba(71,158,245,0.12),0 4px 16px rgba(0,0,0,0.4);z-index:5;"><div style="font-weight:600;">heif_encoder</div><div style="font-size:10px;color:#505050;">Export</div><div style="position:absolute;width:12px;height:12px;border-radius:2px;left:-7px;top:50%;background:#1f1f1f;border:2px solid #54b054;transform:translateY(-50%);"></div></div></div></div>
+      <div style="display:flex;gap:4px;overflow-x:auto;padding:6px 12px;background:#141414;border-top:1px solid #383838;"><div style="padding:6px 10px;background:rgba(71,158,245,0.06);border:1px solid #479ef5;border-radius:8px;flex-shrink:0;min-width:90px;"><div style="font-weight:600;">heif_encoder</div><span style="font-size:9px;color:#505050;background:#292929;padding:1px 5px;border-radius:2px;">Export</span></div><div style="padding:6px 10px;background:#1f1f1f;border:1px solid transparent;border-radius:8px;flex-shrink:0;min-width:90px;"><div style="font-weight:600;">jxl_encoder</div><span style="font-size:9px;color:#505050;background:#292929;padding:1px 5px;border-radius:2px;">Export</span></div></div>
+    </div>
+
+    <!-- Right: Plugin Details -->
+    <div style="width:380px;display:flex;flex-direction:column;border-left:1px solid #383838;background:#1f1f1f;overflow-y:auto;">
+      <div style="padding:8px 16px;font-size:10px;font-weight:600;color:#6e6e6e;text-transform:uppercase;border-bottom:1px solid #383838;">Plugin Details · heif_encoder</div>
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #383838;"><div style="width:36px;height:36px;border-radius:4px;background:rgba(20,184,166,0.12);color:#14b8a6;display:flex;align-items:center;justify-content:center;font-size:18px;">📦</div><div style="flex:1;"><div style="font-weight:600;">HEIF Encoder</div><div style="font-size:10px;color:#505050;font-family:monospace;">photopipeline.plugins.heif_encoder</div></div></div>
+      <div style="padding:16px;color:#505050;text-align:center;">(Quality/Advanced parameters)</div>
+    </div>
+  </div>
+
+  <!-- ═══════ BATCH MODE ═══════ -->
+  <div style="flex:1;display:none;background:#1f1f1f;" id="batchMode">
+    <div style="display:flex;height:100%;">
+      <!-- Left: Pipeline Summary (read-only mini view) -->
+      <div style="width:260px;border-right:1px solid #383838;background:#141414;display:flex;flex-direction:column;">
+        <div style="padding:8px 12px;font-size:10px;font-weight:600;color:#6e6e6e;text-transform:uppercase;border-bottom:1px solid #383838;">Pipeline · HDR_v1</div>
+        <div style="padding:12px;flex:1;overflow-y:auto;">
+          <div style="padding:8px;background:#1f1f1f;border:1px solid #383838;border-radius:6px;margin-bottom:8px;">
+            <div style="font-size:10px;color:#505050;text-transform:uppercase;margin-bottom:6px;">Nodes</div>
+            <div style="display:flex;flex-direction:column;gap:3px;">
+              <div style="display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:3px;font-size:10px;"><span style="color:#ef4444;">●</span> raw_input <span style="color:#505050;margin-left:auto;">→</span></div>
+              <div style="display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:3px;font-size:10px;"><span style="color:#a855f7;">●</span> ai_denoise <span style="color:#505050;margin-left:auto;">→</span></div>
+              <div style="display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:3px;font-size:10px;"><span style="color:#8b5cf6;">●</span> colorspace <span style="color:#505050;margin-left:auto;">→</span></div>
+              <div style="display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:3px;font-size:10px;"><span style="color:#14b8a6;">●</span> heif_encoder</div>
+            </div>
+          </div>
+          <div style="padding:8px;background:#1f1f1f;border:1px solid #383838;border-radius:6px;margin-bottom:8px;">
+            <div style="font-size:10px;color:#505050;text-transform:uppercase;margin-bottom:6px;">Output</div>
+            <div style="font-size:10px;color:#adadad;line-height:1.6;"><span style="color:#505050;">Format:</span> HEIF 10-bit 4:4:4<br><span style="color:#505050;">Quality:</span> 95%<br><span style="color:#505050;">Directory:</span> C:\output</div>
+          </div>
+          <div style="padding:8px;background:#1f1f1f;border:1px solid #383838;border-radius:6px;">
+            <div style="font-size:10px;color:#505050;text-transform:uppercase;margin-bottom:6px;">Groups (3)</div>
+            <div style="font-size:10px;color:#adadad;line-height:1.6;">High ISO (4) · Night (3) · GPS Chengdu (5)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Center: Batch Main -->
+      <div style="flex:1;display:flex;flex-direction:column;min-width:500px;">
+        <!-- Controls + Progress Header -->
+        <div style="padding:12px 16px;border-bottom:1px solid #383838;display:flex;align-items:center;gap:12px;">
+          <button style="padding:4px 16px;height:32px;border:1px solid #479ef5;background:#479ef5;color:#141414;border-radius:6px;font-size:13px;font-weight:600;">▶ Start Batch</button>
+          <button style="padding:4px 12px;height:32px;border:1px solid #383838;background:transparent;color:#adadad;border-radius:6px;font-size:12px;">⏸ Pause</button>
+          <button style="padding:4px 12px;height:32px;border:1px solid #383838;background:transparent;color:#adadad;border-radius:6px;font-size:12px;">⏹ Stop</button>
+          <span style="width:1px;height:20px;background:#383838;"></span>
+          <div style="flex:1;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+              <div style="flex:1;height:6px;background:#383838;border-radius:3px;overflow:hidden;"><div style="width:68%;height:100%;background:#479ef5;"></div></div>
+              <span style="font-weight:600;">68%</span>
+            </div>
+            <div style="display:flex;gap:16px;font-size:10px;color:#adadad;">
+              <span><span style="color:#54b054;">11</span> done</span><span><span style="color:#d13447;">2</span> failed</span><span>16 total</span>
+              <span>⏱ 00:03:15</span><span>~00:01:30</span><span style="color:#505050;">14 img/min</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Queue List -->
+        <div style="flex:1;overflow-y:auto;padding:8px;">
+          <div style="display:flex;gap:8px;padding:8px 10px;background:#1f1f1f;border:1px solid transparent;border-radius:8px;align-items:center;margin-bottom:3px;"><span style="width:8px;height:8px;border-radius:50%;background:#54b054;flex-shrink:0;"></span><span style="font-weight:500;width:180px;">DSC_0034.ARW</span><span style="font-size:10px;color:#505050;width:120px;">6000×4000 ARW</span><span style="font-size:10px;color:#505050;width:60px;">24 MB</span><span style="font-size:10px;color:#54b054;margin-left:auto;">Done</span></div>
+          <div style="display:flex;gap:8px;padding:8px 10px;background:#1f1f1f;border:1px solid transparent;border-radius:8px;align-items:center;margin-bottom:3px;"><span style="width:8px;height:8px;border-radius:50%;background:#54b054;flex-shrink:0;"></span><span style="font-weight:500;width:180px;">PANO_001.DNG</span><span style="font-size:10px;color:#505050;width:120px;">8256×5504 DNG</span><span style="font-size:10px;color:#505050;width:60px;">45 MB</span><span style="font-size:10px;color:#54b054;margin-left:auto;">Done</span></div>
+          <div style="display:flex;gap:8px;padding:8px 10px;background:#1f1f1f;border:1px solid transparent;border-radius:8px;align-items:center;margin-bottom:3px;"><span style="width:8px;height:8px;border-radius:50%;background:#d13447;flex-shrink:0;"></span><span style="font-weight:500;width:180px;">DSC_0036.ARW</span><span style="font-size:10px;color:#505050;width:120px;">6000×4000 ARW</span><span style="font-size:10px;color:#505050;width:60px;">24 MB</span><span style="font-size:10px;color:#d13447;margin-left:auto;">Failed — bitdepth mismatch</span></div>
+          <div style="display:flex;gap:8px;padding:8px 10px;background:rgba(71,158,245,0.04);border:1px solid #479ef5;border-radius:8px;align-items:center;margin-bottom:3px;"><span style="width:8px;height:8px;border-radius:50%;background:#479ef5;flex-shrink:0;animation:pulse 1s infinite;"></span><span style="font-weight:500;width:180px;">night_012.NEF</span><span style="font-size:10px;color:#505050;width:120px;">6016×4016 NEF</span><span style="font-size:10px;color:#505050;width:60px;">29 MB</span><span style="font-size:10px;color:#479ef5;margin-left:auto;">Processing · Tile 6/8</span></div>
+          <div style="display:flex;gap:8px;padding:8px 10px;background:#1f1f1f;border:1px solid transparent;border-radius:8px;align-items:center;margin-bottom:3px;"><span style="width:8px;height:8px;border-radius:50%;background:#505050;flex-shrink:0;"></span><span style="font-weight:500;width:180px;">city_001.ORF</span><span style="font-size:10px;color:#505050;width:120px;">5184×3888 ORF</span><span style="font-size:10px;color:#505050;width:60px;">19 MB</span><span style="font-size:10px;color:#505050;margin-left:auto;">Queued</span></div>
+          <div style="display:flex;gap:8px;padding:8px 10px;background:#1f1f1f;border:1px solid transparent;border-radius:8px;align-items:center;margin-bottom:3px;"><span style="width:8px;height:8px;border-radius:50%;background:#505050;flex-shrink:0;"></span><span style="font-weight:500;width:180px;">city_002.ORF</span><span style="font-size:10px;color:#505050;width:120px;">5184×3888 ORF</span><span style="font-size:10px;color:#505050;width:60px;">19 MB</span><span style="font-size:10px;color:#505050;margin-left:auto;">Queued</span></div>
+        </div>
+      </div>
+
+      <!-- Right: Output Settings + Per-Image Override -->
+      <div style="width:340px;border-left:1px solid #383838;background:#1f1f1f;overflow-y:auto;">
+        <div style="padding:8px 14px;font-size:10px;font-weight:600;color:#6e6e6e;text-transform:uppercase;border-bottom:1px solid #383838;">Output Settings</div>
+        <div style="padding:10px 14px;border-bottom:1px solid #383838;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><span style="width:70px;text-align:right;font-size:10px;color:#adadad;">Directory</span><input value="C:\output" style="flex:1;height:26px;padding:0 8px;background:#141414;border:1px solid #383838;border-radius:4px;color:#f5f5f5;font-size:10px;"><button style="padding:2px 6px;height:26px;border:1px solid #383838;background:transparent;color:#adadad;border-radius:4px;">…</button></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><span style="width:70px;text-align:right;font-size:10px;color:#adadad;">Template</span><input value="{date}/{filename}" style="flex:1;height:26px;padding:0 8px;background:#141414;border:1px solid #383838;border-radius:4px;color:#f5f5f5;font-size:10px;"></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><span style="width:70px;text-align:right;font-size:10px;color:#adadad;">Format</span><select style="flex:1;height:26px;padding:0 6px;background:#141414;border:1px solid #383838;border-radius:4px;color:#f5f5f5;font-size:10px;"><option>HEIF</option><option>JXL</option><option>TIFF</option></select></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><span style="width:70px;text-align:right;font-size:10px;color:#adadad;">Quality</span><input type="range" min="0" max="100" value="95" style="flex:1;"><span style="width:30px;text-align:right;font-size:10px;font-family:monospace;">95%</span></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><span style="width:70px;text-align:right;font-size:10px;color:#adadad;">Parallel</span><input type="number" value="4" min="1" max="32" style="width:60px;height:26px;padding:0 6px;background:#141414;border:1px solid #383838;border-radius:4px;color:#f5f5f5;font-size:10px;"><span style="font-size:10px;color:#505050;">threads</span></div>
+          <div style="display:flex;align-items:center;gap:8px;"><span style="width:70px;text-align:right;font-size:10px;color:#adadad;">Conflict</span><select style="flex:1;height:26px;padding:0 6px;background:#141414;border:1px solid #383838;border-radius:4px;color:#f5f5f5;font-size:10px;"><option>Skip existing</option><option>Overwrite</option><option>Rename new</option></select></div>
+        </div>
+
+        <!-- Per-image Override -->
+        <div style="padding:8px 14px;font-size:10px;font-weight:600;color:#6e6e6e;text-transform:uppercase;border-bottom:1px solid #383838;">Per-Image Override</div>
+        <div style="padding:10px 14px;">
+          <div style="font-size:10px;color:#505050;margin-bottom:8px;">Select a queued image to override its parameters:</div>
+          <select style="width:100%;height:28px;padding:0 8px;background:#141414;border:1px solid #383838;border-radius:4px;color:#f5f5f5;font-size:10px;margin-bottom:8px;"><option>night_012.NEF (Processing)</option><option>city_001.ORF (Queued)</option></select>
+          <div style="padding:8px;background:rgba(213,153,0,0.04);border:1px solid rgba(213,153,0,0.12);border-radius:6px;">
+            <div style="font-size:10px;color:#d59900;font-weight:600;margin-bottom:4px;">Overrides for night_012.NEF</div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><span style="font-size:9px;color:#adadad;">Denoise Strength:</span><input value="0.8" style="width:50px;height:22px;padding:0 6px;background:#141414;border:1px solid #383838;border-radius:3px;color:#f5f5f5;font-size:10px;"><span style="width:6px;height:6px;border-radius:50%;background:#d59900;"></span></div>
+            <button style="padding:2px 8px;height:22px;border:1px dashed #383838;background:transparent;color:#6e6e6e;border-radius:3px;font-size:9px;width:100%;">+ Add parameter override</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Batch Status Bar -->
+    <div style="height:32px;background:#141414;border-top:1px solid #383838;display:flex;align-items:center;padding:0 14px;gap:14px;font-size:11px;">
+      <span style="color:#54b054;">●</span><span style="color:#adadad;">Backend: Connected</span>
+      <span style="color:#505050;">|</span>
+      <span style="color:#adadad;">Mem: 1.2GB / 2GB</span>
+      <span style="color:#505050;">|</span>
+      <span style="color:#adadad;">GPU: CUDA · 70°C</span>
+      <span style="margin-left:auto;color:#adadad;">Pipeline: HDR_v1</span>
+      <span style="color:#505050;">|</span>
+      <span style="color:#adadad;">16 images · 12 source files</span>
+    </div>
+  </div>
+
+  <!-- Edit Mode Status Bar -->
+  <div style="height:32px;background:#1f1f1f;border-top:1px solid #383838;display:flex;align-items:center;padding:0 14px;gap:14px;font-size:11px;flex-shrink:0;" id="editStatusbar">
+    <span style="color:#adadad;">Mem: 512MB · GPU: Ready</span>
+    <span style="margin-left:auto;color:#505050;">|</span>
+    <span style="color:#adadad;">Backend</span><span style="width:8px;height:8px;border-radius:50%;background:#54b054;"></span><span>Connected</span>
+  </div>
+</div>
+
+<style>
+.mode-tab.active { color:#f5f5f5 !important; background:rgba(71,158,245,0.10) !important; }
+.mode-tab:hover { color:#adadad; }
+@keyframes pulse{50%{opacity:0.3}}
+</style>
+<script>
+function switchMode(mode) {
+  document.getElementById('editMode').style.display = mode === 'edit' ? 'flex' : 'none';
+  document.getElementById('batchMode').style.display = mode === 'batch' ? 'block' : 'none';
+  document.getElementById('editStatusbar').style.display = mode === 'edit' ? 'flex' : 'none';
+  document.getElementById('tab-edit').classList.toggle('active', mode === 'edit');
+  document.getElementById('tab-batch').classList.toggle('active', mode === 'batch');
+}
+</script>
+</body></html>

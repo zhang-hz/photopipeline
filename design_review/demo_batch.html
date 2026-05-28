@@ -1,0 +1,170 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Batch Processing — Design Demo</title></head><body style="font-family:'Segoe UI Variable',system-ui,sans-serif;font-size:12px;color:#f5f5f5;background:#141414;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:20px;gap:20px;">
+<style>
+:root{--bg:#1f1f1f;--bg2:#141414;--bg3:#292929;--s1:#383838;--s2:#4a4a4a;--fg:#f5f5f5;--fg2:#adadad;--fg3:#6e6e6e;--fg4:#505050;--brand:#479ef5;--ok:#54b054;--err:#d13447;--warn:#d59900;--r:4px;--rL:8px}
+*{margin:0;padding:0;box-sizing:border-box;}
+.panel{flex:1;max-width:500px;background:var(--bg);border-radius:12px;border:1px solid var(--s1);display:flex;flex-direction:column;overflow:hidden;}
+.sec-hdr{padding:8px 14px;font-size:10px;font-weight:600;color:var(--fg3);text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid var(--s1);display:flex;align-items:center;gap:6px;}
+.btn{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;height:28px;border:1px solid var(--s1);background:var(--bg);color:var(--fg);border-radius:var(--r);font-family:inherit;font-size:11px;cursor:pointer;}
+.btn:hover{background:var(--bg3);}.btn--p{background:var(--brand);color:var(--bg2);border-color:var(--brand);}.btn--s{border-color:transparent;background:transparent;color:var(--fg2);}.btn--s:hover{background:var(--bg3);}.btn--xs{height:22px;padding:2px 8px;font-size:10px;}
+
+.controls{display:flex;gap:4px;padding:8px;border-bottom:1px solid var(--s1);align-items:center;}
+.controls .speed{font-size:10px;color:var(--fg4);margin-left:auto;}
+
+.queue{flex:1;overflow-y:auto;padding:4px;}
+.queue::-webkit-scrollbar{width:5px;}.queue::-webkit-scrollbar-thumb{background:var(--s1);border-radius:3px;}
+
+.batch-item{display:flex;gap:8px;padding:7px 8px;background:var(--bg);border:1px solid transparent;border-radius:var(--rL);align-items:center;margin:2px 0;}
+.batch-item:hover{background:var(--bg3);}
+.status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.status-dot.queued{background:var(--fg4);}.status-dot.done{background:var(--ok);}.status-dot.failed{background:var(--err);}.status-dot.processing{background:var(--brand);animation:pulse 1s infinite;}
+@keyframes pulse{50%{opacity:0.4}}
+.item-name{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.item-meta{font-size:10px;color:var(--fg4);}
+.item-status{font-size:9px;margin-left:auto;flex-shrink:0;}
+.item-status.queued{color:var(--fg4);}.item-status.done{color:var(--ok);}.item-status.failed{color:var(--err);}
+
+.progress-area{padding:8px 12px;border-bottom:1px solid var(--s1);}
+.progress-bar{height:4px;background:var(--s1);border-radius:2px;overflow:hidden;margin-bottom:4px;}
+.progress-fill{height:100%;background:var(--brand);transition:width 0.3s;}
+.progress-stats{display:flex;gap:12px;font-size:10px;color:var(--fg2);justify-content:space-between;align-items:center;}
+.progress-time{color:var(--fg4);text-align:right;font-size:10px;}
+
+.output-settings{padding:8px 12px;border-bottom:1px solid var(--s1);}
+.output-settings h4{font-size:10px;font-weight:600;color:var(--fg3);text-transform:uppercase;margin-bottom:8px;}
+.setting-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.setting-label{width:72px;text-align:right;font-size:10px;color:var(--fg2);flex-shrink:0;}
+.setting-input{flex:1;height:26px;padding:0 8px;background:var(--bg2);border:1px solid var(--s1);border-radius:var(--r);color:var(--fg);font-family:inherit;font-size:11px;}
+.setting-select{flex:1;height:26px;padding:0 6px;background:var(--bg2);border:1px solid var(--s1);border-radius:var(--r);color:var(--fg);font-family:inherit;font-size:11px;}
+.setting-unit{font-size:10px;color:var(--fg4);width:40px;}
+
+.info{width:300px;background:var(--bg);border-radius:12px;border:1px solid var(--s1);padding:16px;overflow-y:auto;max-height:700px;}
+.info h3{font-size:11px;font-weight:600;color:var(--fg3);text-transform:uppercase;margin-bottom:12px;}
+.info li{font-size:10px;color:var(--fg2);line-height:1.6;}
+#log{font-size:9px;color:var(--fg4);height:120px;overflow-y:auto;border:1px solid var(--s1);border-radius:var(--r);padding:6px;margin-top:8px;}
+#log div{border-bottom:1px solid #2a2a2a;padding:1px 0;}
+</style>
+
+<div class="panel">
+  <div class="sec-hdr"><span style="color:var(--brand);">⟳</span> Batch Processing</div>
+  <div class="controls">
+    <button class="btn btn--p" id="btnStart" onclick="startBatch()">▶ Start</button>
+    <button class="btn btn--s" id="btnPause" onclick="pauseBatch()">⏸ Pause</button>
+    <button class="btn btn--s" id="btnResume" onclick="resumeBatch()" style="display:none;">▶ Resume</button>
+    <button class="btn btn--s" id="btnStop" onclick="stopBatch()">⏹ Stop</button>
+    <button class="btn btn--s" onclick="clearDone()">🗑 Clear Done</button>
+    <span class="speed" id="speedInfo">— img/min</span>
+  </div>
+
+  <div class="queue" id="queue"></div>
+
+  <div class="progress-area">
+    <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:45%"></div></div>
+    <div class="progress-stats">
+      <span><span id="doneCount" style="color:var(--ok);">7</span> done, <span id="failCount" style="color:var(--err);">1</span> failed, <span id="totalCount">16</span> total</span>
+      <span class="progress-time"><span id="elapsed">00:02:15</span> · <span id="eta">~00:02:48</span></span>
+    </div>
+  </div>
+
+  <div class="output-settings">
+    <h4>Output Settings</h4>
+    <div class="setting-row"><span class="setting-label">Directory</span><input class="setting-input" value="C:\output" placeholder="Select directory..."><button class="btn btn--s" style="padding:2px 6px;height:26px;">…</button></div>
+    <div class="setting-row"><span class="setting-label">Template</span><input class="setting-input" value="{date}/{filename}" placeholder="{date}/{filename}.heif"></div>
+    <div class="setting-row"><span class="setting-label">Format</span><select class="setting-select"><option>HEIF</option><option>JXL</option><option>TIFF</option><option>PNG</option></select></div>
+    <div class="setting-row"><span class="setting-label">Quality</span><input type="range" min="0" max="100" value="95" style="flex:1;"><span class="setting-unit">95%</span></div>
+    <div class="setting-row"><span class="setting-label">Parallel</span><input type="number" value="4" min="1" max="32" class="setting-input" style="width:60px;"><span class="setting-unit">threads</span></div>
+  </div>
+</div>
+
+<div class="info">
+  <h3>Batch Workflow</h3>
+  <ul>
+    <li>① Select images in Filmstrip → Send to Batch</li>
+    <li>② Configure output settings</li>
+    <li>③ Click <b>Start</b> to begin processing</li>
+    <li>④ Real-time progress with speed/ETA</li>
+    <li>⑤ <b>Pause</b>/<b>Resume</b> — continue from where stopped</li>
+    <li>⑥ <b>Stop</b> — cancel remaining items</li>
+  </ul>
+  <h4 style="margin-top:10px;color:var(--brand);">Status Legend</h4>
+  <ul>
+    <li style="color:var(--fg4);">● Queued</li>
+    <li style="color:var(--brand);">● Processing (pulsing)</li>
+    <li style="color:var(--ok);">● Done</li>
+    <li style="color:var(--err);">● Failed</li>
+  </ul>
+  <div id="log"><div>— Ready</div></div>
+</div>
+
+<script>
+let items = [
+  {name:'DSC_0034.ARW',meta:'6000×4000 ARW',status:'done'},
+  {name:'PANO_001.DNG',meta:'8256×5504 DNG',status:'done'},
+  {name:'IMG_8821.CR3',meta:'6960×4640 CR3',status:'done'},
+  {name:'night_012.NEF',meta:'6016×4016 NEF',status:'done'},
+  {name:'macro_03.RAF',meta:'6240×4160 RAF',status:'done'},
+  {name:'street_044.ORF',meta:'5184×3888 ORF',status:'done'},
+  {name:'DSC_0035.ARW',meta:'6000×4000 ARW',status:'done'},
+  {name:'DSC_0036.ARW',meta:'6000×4000 ARW',status:'failed'},
+  {name:'sunset_005.CR3',meta:'6960×4640 CR3',status:'processing'},
+  {name:'night_015.NEF',meta:'6016×4016 NEF',status:'queued'},
+  {name:'night_020.NEF',meta:'6016×4016 NEF',status:'queued'},
+  {name:'city_001.ORF',meta:'5184×3888 ORF',status:'queued'},
+  {name:'city_002.ORF',meta:'5184×3888 ORF',status:'queued'},
+  {name:'city_003.ORF',meta:'5184×3888 ORF',status:'queued'},
+  {name:'DSC_0040.ARW',meta:'6000×4000 ARW',status:'queued'},
+  {name:'DSC_0041.ARW',meta:'6000×4000 ARW',status:'queued'},
+];
+let running = true, timer = null, simIdx = 9;
+let elapsed = 135;
+
+function log(m){const l=document.getElementById('log');const d=document.createElement('div');d.textContent=`[${new Date().toLocaleTimeString()}] ${m}`;l.appendChild(d);l.scrollTop=l.scrollHeight;if(l.children.length>30)l.removeChild(l.firstChild);}
+function renderQueue(){
+  const q=document.getElementById('queue');q.innerHTML='';
+  items.forEach((it,i)=>{
+    q.innerHTML+=`<div class="batch-item"><span class="status-dot ${it.status}"></span><div style="flex:1;min-width:0;"><div class="item-name">${it.name}</div><div class="item-meta">${it.meta}</div></div><span class="item-status ${it.status}">${it.status.charAt(0).toUpperCase()+it.status.slice(1)}</span></div>`;
+  });
+  const done=items.filter(i=>i.status==='done').length;
+  const fail=items.filter(i=>i.status==='failed').length;
+  const total=items.length;
+  const pct=Math.round((done+fail)/total*100);
+  document.getElementById('progressFill').style.width=pct+'%';
+  document.getElementById('doneCount').textContent=done;
+  document.getElementById('failCount').textContent=fail;
+  document.getElementById('totalCount').textContent=total;
+  document.getElementById('elapsed').textContent=formatTime(elapsed);
+  if(pct>0){
+    const remaining=(elapsed/pct)*(100-pct);
+    document.getElementById('eta').textContent='~'+formatTime(Math.round(remaining));
+  }
+  const speed=pct>0?Math.round((done+fail)/(elapsed/60)):0;
+  document.getElementById('speedInfo').textContent=speed+' img/min';
+}
+function formatTime(s){const m=Math.floor(s/60),sec=s%60;return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;}
+
+function startBatch(){running=true;log('Batch started');simulate();}
+function pauseBatch(){running=false;clearTimeout(timer);document.getElementById('btnPause').style.display='none';document.getElementById('btnResume').style.display='inline-flex';log('Batch paused');}
+function resumeBatch(){running=true;document.getElementById('btnPause').style.display='inline-flex';document.getElementById('btnResume').style.display='none';log('Batch resumed');simulate();}
+function stopBatch(){running=false;clearTimeout(timer);items.forEach(i=>{if(i.status==='queued')i.status='failed';});renderQueue();log('Batch stopped');}
+function clearDone(){items=items.filter(i=>i.status!=='done');renderQueue();log('Cleared done items');}
+
+function simulate(){
+  if(!running || simIdx>=items.length) { if(simIdx>=items.length) log('Batch complete!'); return; }
+  const prev=items[simIdx-1];if(prev&&prev.status==='processing')prev.status='done';
+  items[simIdx].status='processing';renderQueue();
+  timer=setTimeout(()=>{
+    elapsed+=5;
+    items[simIdx].status=Math.random()>0.15?'done':'failed';
+    simIdx++;renderQueue();
+    if(simIdx<items.length)simulate();
+    else{items.forEach(i=>{if(i.status==='processing')i.status='done';});renderQueue();log('Batch complete!');}
+  },2000);
+}
+
+function addToQueue(name,meta){
+  items.push({name,meta,status:'queued'});
+  renderQueue();log(`Added: ${name}`);
+}
+
+renderQueue();simulate();
+</script>
+</body></html>

@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DAG Pipeline Editor — 交互设计Demo</title>
+<style>
+:root {
+  --bg: #1e1e22; --card: #2a2a2e; --card-h: #35353a; --inp: #3a3a3d;
+  --border: #404045; --div: #35353a;
+  --t1: #fafafa; --t2: #a0a0a4; --t3: #6a6a6e;
+  --accent: #60cdff; --accent-bg: rgba(96,205,255,0.10);
+  --success: #6ccb5f; --danger: #ff6b6b; --warn: #f0c040; --orange: #f0a060;
+  --font: 'Segoe UI', system-ui, sans-serif;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:var(--font); background:var(--bg); color:var(--t1); font-size:12px; display:flex; justify-content:center; align-items:flex-start; padding:30px; min-height:100vh; }
+.container { width:1000px; display:flex; flex-direction:column; gap:16px; }
+
+h2 { font-size:16px; font-weight:600; }
+.note { padding:8px 12px; background:var(--accent-bg); border-radius:6px; font-size:10px; color:var(--t2); border:1px solid rgba(96,205,255,0.1); }
+
+/* ======= DAG CANVAS ======= */
+.canvas-wrap { position:relative; height:420px; background:var(--card); border-radius:8px; border:1px solid var(--border); overflow:hidden; }
+.canvas-grid { width:100%; height:100%;
+  background-image: linear-gradient(rgba(255,255,255,0.02) 1px,transparent 1px), linear-gradient(90deg,rgba(255,255,255,0.02) 1px,transparent 1px);
+  background-size:32px 32px; position:relative; }
+
+/* Node */
+.node { position:absolute; min-width:130px; background:var(--card); border:1.5px solid var(--border); border-radius:8px; cursor:pointer; font-size:11px; box-shadow:0 3px 12px rgba(0,0,0,0.4); z-index:2; }
+.node:hover { border-color:rgba(255,255,255,0.25); }
+.node.selected { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-bg), 0 4px 16px rgba(0,0,0,0.5); z-index:5; }
+.node.disabled { opacity:0.4; }
+.node.disabled:hover { opacity:0.6; }
+
+.node-body { padding:8px 14px 8px 18px; position:relative; }
+.node-icon { width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:5px;vertical-align:middle; }
+.node-name { font-weight:600; font-size:11px; }
+.node-type { font-size:9px; color:var(--t3); margin-top:1px; padding-left:15px; }
+.node-status { position:absolute; right:8px; top:10px; width:7px;height:7px;border-radius:50%; }
+.node-status.ok { background:var(--success); }
+
+/* Ports */
+.port { position:absolute; width:12px;height:12px;border-radius:3px; z-index:6; cursor:crosshair; transition:all 0.15s; }
+.port:hover { transform:scale(1.3); }
+.port.input { left:-7px; top:50%; transform:translateY(-50%); background:var(--card); border:2px solid var(--success); }
+.port.input:hover { transform:translateY(-50%) scale(1.3); background:var(--success); }
+.port.output { right:-7px; top:50%; transform:translateY(-50%); background:var(--card); border:2px solid var(--accent); }
+.port.output:hover { transform:translateY(-50%) scale(1.3); background:var(--accent); }
+.port-tooltip { display:none; position:absolute; top:-22px; left:50%; transform:translateX(-50%); background:#333; font-size:9px; padding:2px 6px; border-radius:3px; white-space:nowrap; pointer-events:none; border:1px solid var(--border); }
+.port:hover .port-tooltip { display:block; }
+
+/* SVG Edges */
+.edge-layer { position:absolute; top:0;left:0; width:100%;height:100%; pointer-events:none; z-index:1; }
+.edge-layer path { stroke:var(--accent); stroke-width:2.5; fill:none; opacity:0.55; }
+.edge-layer path:hover { stroke-width:5; opacity:0.9; }
+
+/* Minimap */
+.minimap { position:absolute; bottom:12px; right:12px; width:130px; height:80px; background:rgba(0,0,0,0.5); border:1px solid var(--border); border-radius:5px; z-index:10; cursor:pointer; }
+.mm-view { position:absolute; border:1px solid var(--accent); background:rgba(96,205,255,0.06); border-radius:1px; }
+
+/* Context Menu */
+.cmenu { display:none; position:absolute; background:var(--card); border:1px solid var(--border); border-radius:6px; padding:4px; min-width:160px; z-index:20; box-shadow:0 8px 30px rgba(0,0,0,0.6); }
+.cmenu .mi { padding:6px 12px; border-radius:4px; cursor:pointer; font-size:11px; display:flex; align-items:center; gap:8px; color:var(--t2); }
+.cmenu .mi:hover { background:var(--accent-bg); color:var(--t1); }
+.cmenu .mi.danger:hover { background:rgba(255,107,107,0.10); color:var(--danger); }
+.cmenu .sep { height:1px; background:var(--div); margin:3px 6px; }
+.cmenu .mi .shortcut { margin-left:auto; font-size:10px; color:var(--t3); }
+
+/* Drop indicator */
+.drop-indicator { position:absolute; padding:16px 32px; border:2px dashed var(--accent); border-radius:8px; background:var(--accent-bg); font-size:14px; font-weight:600; color:var(--accent); z-index:15; pointer-events:none; opacity:0; top:50%;left:50%;transform:translate(-50%,-50%); transition:opacity 0.2s; }
+
+/* Drag wire (temporary) */
+.drag-wire { position:absolute; pointer-events:none; z-index:15; }
+.drag-wire line { stroke:var(--accent); stroke-width:2; stroke-dasharray:6 3; opacity:0.8; }
+
+/* Connection preview */
+.conn-hint { display:none; position:absolute; padding:3px 8px; background:var(--accent-bg); border:1px solid var(--accent); border-radius:3px; font-size:10px; color:var(--accent); pointer-events:none; z-index:15; white-space:nowrap; }
+
+/* Toolbar */
+.toolbar { display:flex; gap:4px; padding:6px 10px; background:var(--card); border-radius:8px; align-items:center; border:1px solid var(--border); }
+.tbtn { padding:4px 12px; border:1px solid var(--border); background:transparent; color:var(--t2); border-radius:4px; font-size:10.5px; cursor:pointer; display:flex; align-items:center; gap:4px; }
+.tbtn:hover { background:rgba(255,255,255,0.04); }
+.tbtn.accent { background:var(--accent-bg); border-color:var(--accent); color:var(--accent); }
+.tbtn.danger { border-color:var(--danger); color:var(--danger); }
+.tsep { width:1px; height:18px; background:var(--div); margin:0 4px; }
+.zoominfo { margin-left:auto; font-size:10px; color:var(--t3); }
+
+/* Lower panels */
+.panels { display:flex; gap:16px; }
+.col { background:var(--card); border-radius:8px; border:1px solid var(--border); padding:12px 14px; flex:1; }
+.col h3 { font-size:11px; font-weight:600; color:var(--t2); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px; }
+.col dl { font-size:10px; color:var(--t3); line-height:1.8; }
+.col dl dt { color:var(--t2); font-weight:500; margin-top:2px; }
+.col dl dd { margin-left:12px; margin-bottom:4px; }
+.col dl kbd { display:inline-block; padding:1px 5px; background:var(--inp); border:1px solid var(--border); border-radius:2px; font-size:9px; font-family:monospace; color:var(--t1); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h2>DAG Pipeline Editor — 交互设计</h2>
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <span class="tbtn" style="color:var(--t3);font-size:10px;cursor:default;">Pipeline: HDR_v2</span>
+  <span class="tsep"></span>
+  <span class="tbtn">📄 New</span>
+  <span class="tbtn">💾 Save</span>
+  <span class="tbtn">📂 Load</span>
+  <span class="tsep"></span>
+  <span class="tbtn">✓ Validate</span>
+  <span class="tsep"></span>
+  <span class="tbtn accent">▶ Run</span>
+  <span class="tbtn danger">⏹ Cancel</span>
+  <span class="tsep"></span>
+  <span class="tbtn" title="Zoom In">🔍+</span>
+  <span class="tbtn" title="Zoom Out">🔍−</span>
+  <span class="tbtn" title="Fit All">⊞ Fit</span>
+  <span class="zoominfo">125%</span>
+</div>
+
+<!-- DAG Canvas -->
+<div class="canvas-wrap" id="canvas">
+  <div class="canvas-grid">
+
+    <!-- SVG edges -->
+    <svg class="edge-layer" xmlns="http://www.w3.org/2000/svg">
+      <!-- raw -> transform -->
+      <path d="M 216,115 C 260,115 270,135 310,135" />
+      <path d="M 216,115 C 260,115 270,225 310,225" />
+      <!-- transform -> colorspace -->
+      <path d="M 466,135 C 510,135 520,190 560,190" />
+      <!-- transform -> ai -->
+      <path d="M 466,135 C 510,135 520,225 560,225" />
+      <!-- transform -> lens -->
+      <path d="M 466,135 C 510,135 520,330 310,330" />
+      <!-- raw -> lens -->
+      <path d="M 216,115 C 240,115 260,330 310,330" />
+      <!-- colorspace + ai + lens -> heif -->
+      <path d="M 716,190 C 740,190 760,260 790,260" />
+      <path d="M 716,225 C 750,225 760,260 790,260" />
+      <path d="M 466,330 C 520,330 560,280 620,280 C 680,280 740,260 790,260" />
+    </svg>
+
+    <!-- Node: raw_input -->
+    <div class="node" style="left:60px;top:85px;border-color:rgba(94,222,227,0.4);">
+      <div class="node-body">
+        <div class="node-status ok"></div>
+        <div class="node-name"><span class="node-icon" style="background:#ef4444;"></span>raw_input</div>
+        <div class="node-type">Input · RAW Decoder</div>
+        <div class="port output" title="Connect output"><div class="port-tooltip">output →</div></div>
+      </div>
+    </div>
+
+    <!-- Node: transform (selected) -->
+    <div class="node selected" style="left:310px;top:108px;">
+      <div class="node-body">
+        <div class="node-status ok"></div>
+        <div class="node-name"><span class="node-icon" style="background:#06b6d4;"></span>transform</div>
+        <div class="node-type">Transform · Resize+Rotate+Crop</div>
+        <div class="port input" title="Connect input"><div class="port-tooltip">← input</div></div>
+        <div class="port output" title="Connect output"><div class="port-tooltip">output →</div></div>
+      </div>
+    </div>
+
+    <!-- Node: colorspace -->
+    <div class="node" style="left:560px;top:163px;border-color:rgba(139,92,246,0.4);">
+      <div class="node-body">
+        <div class="node-status ok"></div>
+        <div class="node-name"><span class="node-icon" style="background:#8b5cf6;"></span>colorspace</div>
+        <div class="node-type">Color · ICC + Rendering</div>
+        <div class="port input" title="Connect input"><div class="port-tooltip">← input</div></div>
+        <div class="port output" title="Connect output"><div class="port-tooltip">output →</div></div>
+      </div>
+    </div>
+
+    <!-- Node: ai_denoise -->
+    <div class="node" style="left:560px;top:198px;border-color:rgba(168,85,247,0.4);">
+      <div class="node-body">
+        <div class="node-status ok"></div>
+        <div class="node-name"><span class="node-icon" style="background:#a855f7;"></span>ai_denoise</div>
+        <div class="node-type">Enhance · ONNX Denoise</div>
+        <div class="port input" title="Connect input"><div class="port-tooltip">← input</div></div>
+        <div class="port output" title="Connect output"><div class="port-tooltip">output →</div></div>
+      </div>
+    </div>
+
+    <!-- Node: lens_correct -->
+    <div class="node" style="left:310px;top:298px;border-color:rgba(99,102,241,0.4);">
+      <div class="node-body">
+        <div class="node-status ok"></div>
+        <div class="node-name"><span class="node-icon" style="background:#6366f1;"></span>lens_correct</div>
+        <div class="node-type">Correct · LensFun CA+Vignette</div>
+        <div class="port input" title="Connect input"><div class="port-tooltip">← input</div></div>
+        <div class="port output" title="Connect output"><div class="port-tooltip">output →</div></div>
+      </div>
+    </div>
+
+    <!-- Node: heif_encoder -->
+    <div class="node" style="left:790px;top:233px;border-color:rgba(20,184,166,0.4);">
+      <div class="node-body">
+        <div class="node-name"><span class="node-icon" style="background:#14b8a6;"></span>heif_encoder</div>
+        <div class="node-type">Export · HEIF 10-bit</div>
+        <div class="port input" title="Connect input"><div class="port-tooltip">← input</div></div>
+      </div>
+    </div>
+
+    <!-- Context Menu (hidden by default) -->
+    <div class="cmenu" id="canvasMenu" style="top:140px;left:400px;">
+      <div class="mi" style="font-weight:600;color:var(--t3);">Add Node</div>
+      <div class="mi" onclick="document.getElementById('canvasMenu').style.display='none'">🔴 raw_input <span style="font-size:9px;color:var(--t3);">Input</span></div>
+      <div class="mi" onclick="document.getElementById('canvasMenu').style.display='none'">🔄 transform <span style="font-size:9px;color:var(--t3);">Transform</span></div>
+      <div class="mi" onclick="document.getElementById('canvasMenu').style.display='none'">🎨 colorspace <span style="font-size:9px;color:var(--t3);">Color</span></div>
+      <div class="mi" onclick="document.getElementById('canvasMenu').style.display='none'">🤖 ai_denoise <span style="font-size:9px;color:var(--t3);">Enhance</span></div>
+      <div class="mi" onclick="document.getElementById('canvasMenu').style.display='none'">🔍 lens_correct <span style="font-size:9px;color:var(--t3);">Correct</span></div>
+      <div class="sep"></div>
+      <div class="mi" onclick="document.getElementById('canvasMenu').style.display='none'">📦 heif_encoder <span style="font-size:9px;color:var(--t3);">Export</span></div>
+      <div class="mi" onclick="document.getElementById('canvasMenu').style.display='none'">📦 jxl_encoder <span style="font-size:9px;color:var(--t3);">Export</span></div>
+      <div class="sep"></div>
+      <div class="mi" onclick="document.getElementById('canvasMenu').style.display='none'">📋 Paste nodes <span class="shortcut">Ctrl+V</span></div>
+    </div>
+
+    <!-- Node context menu (hidden) -->
+    <div class="cmenu" id="nodeMenu" style="top:180px;left:500px;">
+      <div class="mi" style="font-weight:600;color:var(--t1);">transform</div>
+      <div class="sep"></div>
+      <div class="mi" onclick="document.getElementById('nodeMenu').style.display='none'">📋 Copy <span class="shortcut">Ctrl+C</span></div>
+      <div class="mi" onclick="document.getElementById('nodeMenu').style.display='none'">📋 Duplicate <span class="shortcut">Ctrl+D</span></div>
+      <div class="sep"></div>
+      <div class="mi" onclick="document.getElementById('nodeMenu').style.display='none'">🔌 Disconnect inputs</div>
+      <div class="mi" onclick="document.getElementById('nodeMenu').style.display='none'">🔌 Disconnect outputs</div>
+      <div class="sep"></div>
+      <div class="mi" onclick="
+        var n = document.querySelector('.node.selected');
+        if(n) n.classList.toggle('disabled');
+        document.getElementById('nodeMenu').style.display='none';
+      ">⏸ Disable node <span class="shortcut">E</span></div>
+      <div class="sep"></div>
+      <div class="mi danger" onclick="
+        var n = document.querySelector('.node.selected');
+        if(n) n.style.display='none';
+        document.getElementById('nodeMenu').style.display='none';
+      ">🗑 Delete node <span class="shortcut">Del</span></div>
+    </div>
+
+    <!-- Drop indicator -->
+    <div class="drop-indicator" id="dropIndicator">Drop plugin here to add node</div>
+
+    <!-- Minimap -->
+    <div class="minimap">
+      <div class="mm-view" style="left:5%;top:8%;width:82%;height:65%;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Lower info panels -->
+<div class="panels">
+  <div class="col">
+    <h3>🔌 Connection Rules</h3>
+    <dl>
+      <dt>Input port (⊡ green square)</dt>
+      <dd>Accepts 1 incoming connection. Hover shows tooltip "← input".</dd>
+      <dt>Output port (⊡ blue square)</dt>
+      <dd>Can fan out to multiple nodes.</dd>
+      <dt>Creating a connection</dt>
+      <dd>Drag from output port → drop on input port. Dashed preview line follows cursor.</dd>
+      <dt>Removing a connection</dt>
+      <dd>Right-click port → "Disconnect" · or · select edge (hover) → Del key.</dd>
+      <dt>Cycle prevention</dt>
+      <dd>Red flash + "Connection would create a cycle" toast if detected.</dd>
+      <dt>Fan-out</dt>
+      <dd>One output → multiple inputs allowed (no warning needed).</dd>
+    </dl>
+  </div>
+  <div class="col">
+    <h3>⌨️ Keyboard Shortcuts</h3>
+    <dl>
+      <dt><kbd>Ctrl+N</kbd></dt> <dd>New pipeline</dd>
+      <dt><kbd>Ctrl+S</kbd></dt> <dd>Save pipeline</dd>
+      <dt><kbd>Ctrl+D</kbd></dt> <dd>Duplicate selected node</dd>
+      <dt><kbd>Del</kbd></dt> <dd>Delete selected node(s)</dd>
+      <dt><kbd>E</kbd></dt> <dd>Enable/disable selected node</dd>
+      <dt><kbd>F</kbd></dt> <dd>Fit all nodes in view</dd>
+      <dt><kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd></dt> <dd>Undo / Redo</dd>
+      <dt><kbd>Space</kbd>+drag</dt> <dd>Pan canvas</dd>
+      <dt><kbd>Ctrl+Scroll</kbd></dt> <dd>Zoom in/out</dd>
+      <dt><kbd>Shift+Click</kbd></dt> <dd>Multi-select nodes</dd>
+    </dl>
+  </div>
+  <div class="col">
+    <h3>🎯 Interaction Summary</h3>
+    <dl>
+      <dt>Add node</dt>
+      <dd>① Drag from plugin panel · ② Double-click plugin card · ③ Right-click canvas → Add Node</dd>
+      <dt>Select</dt>
+      <dd>Click node. <kbd>Shift</kbd>+Click for multi. Click+drag canvas to box-select.</dd>
+      <dt>Delete node</dt>
+      <dd>① <kbd>Del</kbd> key · ② Right-click → Delete · ③ Right panel 🗑 button</dd>
+      <dt>Move node</dt>
+      <dd>Click+drag. Holding <kbd>Shift</kbd> locks to axis.</dd>
+      <dt>Connect</dt>
+      <dd>Drag from output port to input port.</dd>
+      <dt>Minimap</dt>
+      <dd>Click minimap to jump viewport. Drag viewport to pan.</dd>
+      <dt>Canvas zoom</dt>
+      <dd>Scroll wheel (centered on cursor). Buttons ±/Fit. <kbd>Ctrl+0</kbd> = Reset.</dd>
+    </dl>
+  </div>
+</div>
+
+<div class="note">
+  <strong>Demonstrate:</strong> Try these on the canvas above —
+  ① Click any node to select (blue glow) → opens params in right panel (see MainWindow mockup).<br>
+  ② Ports use different shapes: <span style="color:var(--success);">⊡ green square = input</span> · <span style="color:var(--accent);">⊡ blue square = output</span> · Hover to see tooltip.<br>
+  ③ Right-click on canvas area → "Add Node" context menu appears.<br>
+  ④ Selected node shows: icon color (from GuiSchema), plugin name, type description, status dot.<br>
+  ⑤ Nodes can be disabled (opacity 40%) — click transform's right-click menu → "Disable".
+</div>
+
+<script>
+// Simple interactive bits
+document.getElementById('canvas').addEventListener('contextmenu', function(e) {
+  e.preventDefault();
+  // Show canvas menu at click position
+  var menu = document.getElementById('canvasMenu');
+  var rect = this.getBoundingClientRect();
+  var x = e.clientX - rect.left;
+  var y = e.clientY - rect.top;
+  menu.style.display = 'block';
+  menu.style.left = Math.min(x, rect.width - 180) + 'px';
+  menu.style.top = Math.min(y, rect.height - 200) + 'px';
+
+  // Hide node menu
+  document.getElementById('nodeMenu').style.display = 'none';
+  // Deselect all nodes
+  document.querySelectorAll('.node').forEach(n => n.classList.remove('selected'));
+});
+
+// Node click
+document.querySelectorAll('.node').forEach(function(node) {
+  node.addEventListener('click', function(e) {
+    e.stopPropagation();
+    document.querySelectorAll('.node').forEach(n => n.classList.remove('selected'));
+    this.classList.add('selected');
+    document.getElementById('canvasMenu').style.display = 'none';
+    document.getElementById('nodeMenu').style.display = 'none';
+  });
+  node.addEventListener('contextmenu', function(e) {
+    e.stopPropagation();
+    e.preventDefault();
+    document.querySelectorAll('.node').forEach(n => n.classList.remove('selected'));
+    this.classList.add('selected');
+
+    var menu = document.getElementById('nodeMenu');
+    var rect = document.getElementById('canvas').getBoundingClientRect();
+    var x = e.clientX - rect.left;
+    var y = e.clientY - rect.top;
+    menu.style.display = 'block';
+    menu.style.left = Math.min(x, rect.width - 180) + 'px';
+    menu.style.top = Math.min(y, rect.height - 250) + 'px';
+
+    document.getElementById('canvasMenu').style.display = 'none';
+  });
+});
+
+// Click canvas to deselect + hide menus
+document.getElementById('canvas').addEventListener('click', function(e) {
+  if (e.target.closest('.node') || e.target.closest('.cmenu')) return;
+  document.querySelectorAll('.node').forEach(n => n.classList.remove('selected'));
+  document.getElementById('canvasMenu').style.display = 'none';
+  document.getElementById('nodeMenu').style.display = 'none';
+});
+
+// Hover edges for edge selection (simplified - just show opacity change)
+</script>
+</body>
+</html>

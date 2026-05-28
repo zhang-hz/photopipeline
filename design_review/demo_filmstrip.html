@@ -1,0 +1,321 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Candidate Files — Design Demo</title></head><body style="font-family:'Segoe UI Variable',system-ui,sans-serif;font-size:12px;color:#f5f5f5;background:#141414;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:20px;gap:20px;">
+<style>
+:root{--bg:#1f1f1f;--bg2:#141414;--bg3:#292929;--bg4:#333;--s1:#383838;--s2:#4a4a4a;--fg:#f5f5f5;--fg2:#adadad;--fg3:#6e6e6e;--fg4:#505050;--brand:#479ef5;--ok:#54b054;--err:#d13447;--warn:#d59900;--r:4px;--rL:8px}
+
+.sidebar { width:272px; background:var(--bg); border-radius:12px; border:1px solid var(--s1); display:flex; flex-direction:column; height:800px; overflow:hidden; }
+.sb-hdr { padding:8px 12px; font-size:10px; font-weight:600; color:var(--fg3); text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid var(--s1); display:flex; align-items:center; }
+.sb-hdr .cnt { margin-left:auto; font-size:9px; color:var(--fg4); }
+
+/* Toolbar */
+.toolbar { display:flex; gap:4px; padding:6px 8px; border-bottom:1px solid var(--s1); }
+.btn { padding:3px 10px; height:26px; border:1px solid var(--s1); background:var(--bg); color:var(--fg); border-radius:var(--r); font-family:inherit; font-size:11px; cursor:pointer; display:inline-flex; align-items:center; gap:4px; white-space:nowrap; }
+.btn:hover { background:var(--bg3); }
+.btn--p { background:var(--brand); color:var(--bg2); border-color:var(--brand); }
+.btn--s { border-color:transparent; background:transparent; color:var(--fg2); }
+.btn--s:hover { background:var(--bg3); color:var(--fg); }
+.btn--xs { height:22px; padding:2px 8px; font-size:10px; }
+
+/* Sort bar */
+.sortbar { display:flex; gap:4px; padding:4px 8px; border-bottom:1px solid var(--s1); align-items:center; }
+.sortbar label { font-size:10px; color:var(--fg4); }
+.sortbar select, .sortbar button { font-size:10px; height:22px; padding:0 6px; background:var(--bg2); border:1px solid var(--s1); border-radius:var(--r); color:var(--fg); font-family:inherit; }
+
+/* Multi-select bar */
+.msbar { display:none; padding:4px 8px; border-bottom:1px solid var(--s1); background:rgba(213,153,0,0.06); align-items:center; gap:6px; }
+.msbar.show { display:flex; }
+.msbar-text { font-size:10px; color:var(--warn); flex:1; }
+
+/* Image list */
+.list { flex:1; overflow-y:auto; padding:4px; }
+.list::-webkit-scrollbar { width:5px; }
+.list::-webkit-scrollbar-thumb { background:var(--s1); border-radius:3px; }
+
+/* Image card */
+.ic { display:flex; gap:8px; padding:7px 8px; background:var(--bg); border:1px solid transparent; border-radius:var(--rL); cursor:pointer; align-items:center; margin:2px 0; transition:0.1s; position:relative; }
+.ic:hover { background:var(--bg3); }
+.ic--sel { border-color:var(--brand); background:rgba(71,158,245,0.06); }
+.ic--multi { border-color:var(--brand); border-style:dashed; }
+.ic .chk { display:none; position:absolute; left:6px; top:6px; width:18px;height:18px;background:var(--brand);border-radius:3px;align-items:center;justify-content:center;font-size:10px;color:white;z-index:2; }
+.ic--multi .chk { display:flex; }
+.ic-th { width:50px;height:34px;border-radius:var(--r);background:var(--bg2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px; }
+.ic-info { flex:1;min-width:0; }
+.ic-name { font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.ic-meta { font-size:10px;color:var(--fg4);display:flex;gap:5px;margin-top:1px; }
+.ic-tag { display:inline-block;margin-top:2px;padding:0 5px;border-radius:2px;font-size:8px;font-weight:600;background:rgba(213,153,0,0.08);color:var(--warn); }
+.ic-size { font-size:10px;color:var(--fg4);flex-shrink:0; }
+
+/* Empty state */
+.empty-state { display:none; flex-direction:column; align-items:center; justify-content:center; height:100%; color:var(--fg4); gap:8px; }
+.empty-state.show { display:flex; }
+.empty-icon { font-size:40px; opacity:0.3; }
+.empty-text { font-size:12px; }
+.empty-hint { font-size:10px; color:var(--fg4); }
+
+/* Context menu */
+.cmenu { display:none; position:fixed; background:var(--bg); border:1px solid var(--s1); border-radius:var(--rL); padding:4px; min-width:160px; z-index:100; box-shadow:0 8px 30px rgba(0,0,0,0.6); }
+.cmenu .mi { padding:5px 10px; border-radius:var(--r); cursor:pointer; font-size:11px; color:var(--fg2); display:flex; align-items:center; gap:8px; }
+.cmenu .mi:hover { background:rgba(71,158,245,0.10); color:var(--fg); }
+.cmenu .mi.del:hover { background:rgba(209,52,71,0.08); color:var(--err); }
+.cmenu .sep { height:1px; background:var(--s1); margin:3px 6px; }
+.cmenu .mi .shortcut { margin-left:auto; font-size:9px; color:var(--fg4); }
+
+/* Drop zone */
+.dropzone { display:none; position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(71,158,245,0.06);border:2px dashed var(--brand);border-radius:var(--rL);align-items:center;justify-content:center;z-index:10;pointer-events:none; }
+.dropzone.show { display:flex; }
+.dropzone span { font-size:14px; font-weight:600; color:var(--brand); }
+
+/* Group section */
+.groups { border-top:1px solid var(--s1); padding:4px; }
+.grp-hdr { font-size:10px;color:var(--fg4);padding:4px 10px 2px;text-transform:uppercase;letter-spacing:0.5px; }
+.grp-item { display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:var(--r);cursor:pointer;font-size:11px;color:var(--fg2);position:relative; }
+.grp-item:hover { background:var(--bg3); }
+.grp-item:hover .grp-acts { display:flex; }
+.grp-dot { width:6px;height:6px;border-radius:50%;flex-shrink:0; }
+.grp-dot--w { background:var(--warn); }
+.grp-cnt { margin-left:auto;font-size:9px;color:var(--fg3);background:var(--bg3);padding:1px 6px;border-radius:10px; }
+.grp-acts { display:none;gap:2px;margin-left:4px; }
+.grp-acts button { width:20px;height:20px;border:none;background:transparent;border-radius:3px;cursor:pointer;font-size:10px;color:var(--fg4);display:flex;align-items:center;justify-content:center; }
+.grp-acts button:hover { background:var(--bg4);color:var(--fg); }
+.grp-acts .del:hover { color:var(--err); }
+.grp-add { display:flex;gap:4px;padding:4px 10px; }
+.grp-add button { font-size:10px;color:var(--fg4);background:transparent;border:1px dashed var(--s1);border-radius:var(--r);padding:4px 10px;cursor:pointer;text-align:left; }
+.grp-add button:hover { color:var(--fg);border-color:var(--fg4); }
+
+/* Panel on right for details */
+.info-panel { width:320px; background:var(--bg); border-radius:12px; border:1px solid var(--s1); padding:16px; height:800px; overflow-y:auto; }
+.info-panel h3 { font-size:11px; font-weight:600; color:var(--fg3); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:12px; }
+.info-block { margin-bottom:16px; }
+.info-block h4 { font-size:10px; color:var(--brand); margin-bottom:4px; }
+.info-block p, .info-block li { font-size:10px; color:var(--fg2); line-height:1.6; }
+.info-block ul { padding-left:14px; }
+.info-block kbd { display:inline-block;padding:1px 5px;background:var(--bg3);border:1px solid var(--s1);border-radius:2px;font-size:9px;font-family:monospace;color:var(--fg); }
+.stats { display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px; }
+.stat { background:var(--bg2);border-radius:var(--rL);padding:10px;text-align:center; }
+.stat-val { font-size:20px;font-weight:700;color:var(--brand); }
+.stat-lbl { font-size:9px;color:var(--fg4);margin-top:2px;text-transform:uppercase; }
+</style>
+
+<div class="sidebar" id="sidebar">
+  <div class="sb-hdr">Candidate Files<span class="cnt" id="fileCount">12 images</span></div>
+  <div class="toolbar">
+    <button class="btn btn--p" onclick="importFiles()">📂 Import</button>
+    <button class="btn btn--s" onclick="clearSelection()">🗑 Clear</button>
+    <button class="btn btn--s" onclick="sendToBatch()">📤 To Batch</button>
+  </div>
+  <div class="sortbar">
+    <label>Sort:</label>
+    <select onchange="sortFiles(this.value)"><option>Name</option><option>Size</option><option>Format</option><option>ISO</option></select>
+    <label style="margin-left:8px;">Size:</label>
+    <button onclick="setThumbSize('s')">S</button><button onclick="setThumbSize('m')">M</button><button onclick="setThumbSize('l')">L</button>
+  </div>
+  <div class="msbar" id="msbar">
+    <span class="msbar-text" id="msbarText">3 images selected</span>
+    <button class="btn btn--xs btn--s" onclick="addToGroup()">+ Group</button>
+    <button class="btn btn--xs btn--s" onclick="sendToBatch()">To Batch</button>
+    <button class="btn btn--xs btn--s" onclick="clearSelection()">Clear</button>
+  </div>
+  <div class="list" id="imageList" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)" onclick="handleListClick(event)">
+    <div class="dropzone" id="dropzone"><span>Drop images here to import</span></div>
+  </div>
+  <div class="empty-state" id="emptyState">
+    <div class="empty-icon">📂</div>
+    <div class="empty-text">No images loaded</div>
+    <div class="empty-hint">Click Import or drag files here</div>
+  </div>
+  <div class="groups">
+    <div class="grp-hdr">Groups</div>
+    <div class="grp-item"><span class="grp-dot grp-dot--w"></span>High ISO (≥1600)<span class="grp-cnt">4</span><div class="grp-acts"><button onclick="editGroup('High ISO')">✎</button><button class="del" onclick="deleteGroup('High ISO')">🗑</button></div></div>
+    <div class="grp-item"><span class="grp-dot grp-dot--w" style="background:#b084f4;"></span>Night (21-05)<span class="grp-cnt">3</span><div class="grp-acts"><button onclick="editGroup('Night')">✎</button><button class="del" onclick="deleteGroup('Night')">🗑</button></div></div>
+    <div class="grp-item"><span class="grp-dot grp-dot--w" style="background:var(--ok);"></span>GPS: Chengdu<span class="grp-cnt">5</span><div class="grp-acts"><button onclick="editGroup('Chengdu')">✎</button><button class="del" onclick="deleteGroup('Chengdu')">🗑</button></div></div>
+    <div class="grp-add">
+      <button style="flex:1;" onclick="createGroup()">+ Create Group…</button>
+      <button onclick="autoGroup()">Auto-group ▾</button>
+    </div>
+  </div>
+</div>
+
+<div class="info-panel">
+  <h3>Interaction Guide</h3>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-val" id="totalFiles">12</div><div class="stat-lbl">Total Files</div></div>
+    <div class="stat"><div class="stat-val" id="selectedFiles">1</div><div class="stat-lbl">Selected</div></div>
+    <div class="stat"><div class="stat-val" id="totalSize">224</div><div class="stat-lbl">Total MB</div></div>
+    <div class="stat"><div class="stat-val" id="groupCount">3</div><div class="stat-lbl">Groups</div></div>
+  </div>
+
+  <div class="info-block">
+    <h4>Selection</h4>
+    <ul>
+      <li><kbd>Click</kbd> — Select single image</li>
+      <li><kbd>Ctrl+Click</kbd> — Add/remove from selection</li>
+      <li><kbd>Shift+Click</kbd> — Range select</li>
+      <li><kbd>Ctrl+A</kbd> — Select all</li>
+      <li><kbd>Escape</kbd> — Clear selection</li>
+    </ul>
+  </div>
+  <div class="info-block">
+    <h4>Right-Click Menu</h4>
+    <ul>
+      <li>Open in Explorer</li>
+      <li>Copy Path</li>
+      <li>Select All / Clear / Invert</li>
+      <li>Add to Group → [list] / New Group</li>
+      <li>Send to Batch</li>
+      <li>Remove</li>
+    </ul>
+  </div>
+  <div class="info-block">
+    <h4>Drag & Drop</h4>
+    <ul>
+      <li>Drag files from Explorer → Import</li>
+      <li>Drag images to Group → Add to group</li>
+      <li>Drag images to Batch panel → Send to batch</li>
+    </ul>
+  </div>
+  <div class="info-block">
+    <h4>Groups</h4>
+    <ul>
+      <li>Hover group → ✎ Edit / 🗑 Delete</li>
+      <li>Auto-group: ISO range / GPS / Time</li>
+      <li>Drag images onto group to add</li>
+    </ul>
+  </div>
+  <div class="info-block" id="clickLog" style="font-size:9px;color:var(--fg4);height:80px;overflow-y:auto;">
+    <h4>Event Log</h4>
+    <div>— Ready</div>
+  </div>
+</div>
+
+<script>
+const files = [
+  { name:'DSC_0034.ARW', size:'6000×4000', format:'ARW', iso:6400, mb:24, group:'High ISO' },
+  { name:'PANO_2025_001.DNG', size:'8256×5504', format:'DNG', iso:100, mb:45, group:'' },
+  { name:'IMG_8821.CR3', size:'6960×4640', format:'CR3', iso:800, mb:32, group:'' },
+  { name:'night_sky_012.NEF', size:'6016×4016', format:'NEF', iso:3200, mb:29, group:'Night' },
+  { name:'macro_flower_03.RAF', size:'6240×4160', format:'RAF', iso:200, mb:26, group:'' },
+  { name:'street_044.ORF', size:'5184×3888', format:'ORF', iso:400, mb:20, group:'' },
+  { name:'DSC_0035.ARW', size:'6000×4000', format:'ARW', iso:12800, mb:24, group:'High ISO' },
+  { name:'DSC_0036.ARW', size:'6000×4000', format:'ARW', iso:8000, mb:24, group:'High ISO' },
+  { name:'sunset_005.CR3', size:'6960×4640', format:'CR3', iso:1600, mb:31, group:'High ISO' },
+  { name:'night_015.NEF', size:'6016×4016', format:'NEF', iso:6400, mb:28, group:'Night' },
+  { name:'night_020.NEF', size:'6016×4016', format:'NEF', iso:2500, mb:28, group:'Night' },
+  { name:'city_001.ORF', size:'5184×3888', format:'ORF', iso:200, mb:19, group:'' },
+];
+let selectedIndices = new Set([0]); // DSC_0034 selected
+let selectionAnchor = 0;
+let lastClickIdx = 0;
+
+function log(msg) {
+  const logEl = document.getElementById('clickLog');
+  const div = document.createElement('div');
+  div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  div.style.borderBottom = '1px solid #333';
+  logEl.appendChild(div);
+  logEl.scrollTop = logEl.scrollHeight;
+  if (logEl.children.length > 20) logEl.removeChild(logEl.firstChild);
+}
+
+function renderList() {
+  const container = document.getElementById('imageList');
+  container.innerHTML = '<div class="dropzone" id="dropzone" style="display:none;"><span>Drop images here to import</span></div>';
+  files.forEach((f, i) => {
+    const card = document.createElement('div');
+    card.className = 'ic';
+    if (selectedIndices.has(i)) {
+      card.classList.add(selectedIndices.size > 1 ? 'ic--multi' : 'ic--sel');
+    }
+    card.dataset.index = i;
+    const emojis = ['🌄','🏔','🌆','🎆','🌿','📷','🌅','🏞','🌇','🏙','🌃','🏯'];
+    card.innerHTML = `
+      <div class="chk">✓</div>
+      <div class="ic-th">${emojis[i]}</div>
+      <div class="ic-info">
+        <div class="ic-name">${f.name}</div>
+        <div class="ic-meta"><span>${f.size}</span><span>${f.format}</span><span>ISO ${f.iso}</span></div>
+        ${f.group ? `<span class="ic-tag">${f.group}</span>` : ''}
+      </div>
+      <div class="ic-size">${f.mb} MB</div>
+    `;
+    card.addEventListener('click', (e) => handleClick(e, i));
+    card.addEventListener('contextmenu', (e) => handleContextMenu(e, i));
+    container.appendChild(card);
+  });
+  updateStats();
+  updateMSBar();
+}
+
+function handleClick(e, i) {
+  if (e.ctrlKey || e.metaKey) {
+    if (selectedIndices.has(i)) selectedIndices.delete(i);
+    else selectedIndices.add(i);
+    selectionAnchor = i;
+    log(`Ctrl+Click: ${files[i].name} — ${selectedIndices.size} selected`);
+  } else if (e.shiftKey) {
+    const [from, to] = [Math.min(selectionAnchor,i), Math.max(selectionAnchor,i)];
+    for (let j = from; j <= to; j++) selectedIndices.add(j);
+    log(`Shift+Click: range [${from}..${to}] — ${selectedIndices.size} selected`);
+  } else {
+    selectedIndices.clear();
+    selectedIndices.add(i);
+    selectionAnchor = i;
+    log(`Click: ${files[i].name} (single select)`);
+  }
+  renderList();
+}
+
+function handleContextMenu(e, i) {
+  e.preventDefault();
+  if (!selectedIndices.has(i)) { selectedIndices.clear(); selectedIndices.add(i); renderList(); }
+  log(`Right-click: ${files[i].name}`);
+  alert(`Context menu for ${files[i].name}:\n• Open in Explorer\n• Copy Path\n• Add to Group →\n• Send to Batch\n• Remove`);
+}
+
+function handleListClick(e) {
+  if (e.target === document.getElementById('imageList') || e.target.closest('.dropzone')) {
+    selectedIndices.clear();
+    renderList();
+    log('Clicked empty area — cleared selection');
+  }
+}
+
+function updateStats() {
+  document.getElementById('totalFiles').textContent = files.length;
+  document.getElementById('selectedFiles').textContent = selectedIndices.size;
+  document.getElementById('totalSize').textContent = files.reduce((s,f)=>s+f.mb,0);
+}
+
+function updateMSBar() {
+  const msbar = document.getElementById('msbar');
+  const text = document.getElementById('msbarText');
+  if (selectedIndices.size > 1) {
+    msbar.classList.add('show');
+    text.textContent = `${selectedIndices.size} images selected`;
+  } else {
+    msbar.classList.remove('show');
+  }
+}
+
+function sortFiles(mode) { log(`Sort by: ${mode}`); files.sort((a,b) => mode==='Name'?a.name.localeCompare(b.name):mode==='Size'?a.mb-b.mb:a.format.localeCompare(b.format)); renderList(); }
+function setThumbSize(s) { log(`Thumb size: ${s.toUpperCase()}`); }
+function addToGroup() { const g = prompt('Group name:'); if(g){ log(`Added ${selectedIndices.size} images to group "${g}"`); selectedIndices.forEach(i=>files[i].group=g); renderList(); } }
+function sendToBatch() { log(`Sent ${selectedIndices.size} images to batch`); }
+function clearSelection() { selectedIndices.clear(); renderList(); log('Selection cleared'); }
+function createGroup() { const g = prompt('New group name:'); if(g) log(`Created group: ${g}`); }
+function editGroup(g) { log(`Editing group: ${g}`); }
+function deleteGroup(g) { if(confirm(`Delete group "${g}"?`)){ files.forEach(f=>{if(f.group===g)f.group='';}); renderList(); log(`Deleted group: ${g}`); } }
+function autoGroup() { log('Auto-group dialog opened'); }
+function importFiles() { log('Import dialog opened'); }
+function handleDragOver(e) { e.preventDefault(); document.getElementById('dropzone').classList.add('show'); }
+function handleDragLeave(e) { if (!e.currentTarget.contains(e.relatedTarget)) document.getElementById('dropzone').classList.remove('show'); }
+function handleDrop(e) { e.preventDefault(); document.getElementById('dropzone').classList.remove('show'); log('Files dropped — import triggered'); }
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'a' && e.ctrlKey) { e.preventDefault(); for(let i=0;i<files.length;i++) selectedIndices.add(i); renderList(); log('Ctrl+A: Select all'); }
+  if (e.key === 'Escape') { selectedIndices.clear(); renderList(); log('Escape: Cleared selection'); }
+});
+
+renderList();
+</script>
+</body></html>

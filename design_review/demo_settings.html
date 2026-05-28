@@ -1,0 +1,130 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Settings — Design Demo</title></head><body style="font-family:'Segoe UI Variable',system-ui,sans-serif;font-size:12px;color:#f5f5f5;background:#141414;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:20px;gap:20px;">
+<style>
+:root{--bg:#1f1f1f;--bg2:#141414;--bg3:#292929;--s1:#383838;--s2:#4a4a4a;--fg:#f5f5f5;--fg2:#adadad;--fg3:#6e6e6e;--fg4:#505050;--brand:#479ef5;--ok:#54b054;--err:#d13447;--warn:#d59900;--r:4px;--rL:8px}
+*{margin:0;padding:0;box-sizing:border-box;}
+.dialog{width:520px;background:var(--bg);border-radius:12px;border:1px solid var(--s1);box-shadow:0 8px 40px rgba(0,0,0,0.6);overflow:hidden;}
+.dlg-hdr{padding:12px 16px;border-bottom:1px solid var(--s1);font-size:13px;font-weight:600;}
+.tabs{display:flex;border-bottom:1px solid var(--s1);padding:0 8px;}
+.tab{padding:8px 14px;font-size:11px;color:var(--fg2);cursor:pointer;border-bottom:2px solid transparent;}
+.tab:hover{color:var(--fg);background:var(--bg3);}
+.tab.active{color:var(--brand);border-bottom-color:var(--brand);}
+.tab-content{padding:16px;display:none;max-height:400px;overflow-y:auto;}
+.tab-content.show{display:block;}
+.setting-row{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+.setting-lbl{width:120px;text-align:right;font-size:11px;color:var(--fg2);flex-shrink:0;}
+.setting-inp{flex:1;height:28px;padding:0 8px;background:var(--bg2);border:1px solid var(--s1);border-radius:var(--r);color:var(--fg);font-family:inherit;font-size:11px;}
+.setting-sel{flex:1;height:28px;padding:0 6px;background:var(--bg2);border:1px solid var(--s1);border-radius:var(--r);color:var(--fg);font-family:inherit;font-size:11px;}
+.switch{display:flex;align-items:center;gap:8px;cursor:pointer;}
+.sw-track{width:36px;height:18px;background:var(--s2);border-radius:9px;position:relative;transition:background 0.15s;flex-shrink:0;}
+.sw-track.on{background:var(--brand);}
+.sw-thumb{position:absolute;top:2px;left:2px;width:14px;height:14px;background:white;border-radius:50%;transition:left 0.15s;}
+.sw-track.on .sw-thumb{left:20px;}
+.sw-lbl{font-size:11px;color:var(--fg2);}
+.dlg-footer{padding:12px 16px;border-top:1px solid var(--s1);display:flex;justify-content:flex-end;gap:8px;}
+.btn{padding:5px 16px;height:30px;border:1px solid var(--s1);background:var(--bg);color:var(--fg);border-radius:var(--r);font-family:inherit;font-size:11px;cursor:pointer;}
+.btn:hover{background:var(--bg3);}
+.btn--p{background:var(--brand);color:var(--bg2);border-color:var(--brand);}
+.setting-desc{font-size:9px;color:var(--fg4);margin:-8px 0 10px 130px;}
+
+.info{width:280px;background:var(--bg);border-radius:12px;border:1px solid var(--s1);padding:16px;}
+.info h3{font-size:11px;font-weight:600;color:var(--fg3);text-transform:uppercase;margin-bottom:12px;}
+.info li{font-size:10px;color:var(--fg2);line-height:1.8;}
+#log{font-size:9px;color:var(--fg4);height:120px;overflow-y:auto;border:1px solid var(--s1);border-radius:var(--r);padding:6px;margin-top:8px;}
+</style>
+
+<div>
+  <div class="dialog">
+    <div class="dlg-hdr">Settings</div>
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('general')">General</div>
+      <div class="tab" onclick="switchTab('backend')">Backend</div>
+      <div class="tab" onclick="switchTab('output')">Output</div>
+      <div class="tab" onclick="switchTab('advanced')">Advanced</div>
+    </div>
+
+    <!-- General -->
+    <div class="tab-content show" id="tab-general">
+      <div class="setting-row"><span class="setting-lbl">Theme</span><select class="setting-sel"><option>Dark</option><option>Light</option><option>System</option></select></div>
+      <div class="setting-desc">Application theme. Changes apply immediately.</div>
+      <div class="setting-row"><span class="setting-lbl">Language</span><select class="setting-sel"><option>English</option><option>中文 (简体)</option><option>日本語</option></select></div>
+      <div class="setting-desc">Interface language. Requires restart.</div>
+      <div class="setting-row"><span class="setting-lbl">Max Recent Files</span><input type="number" value="10" min="5" max="50" class="setting-inp" style="width:80px;"></div>
+      <div class="setting-desc">Number of recent files shown in the welcome screen.</div>
+      <div class="setting-row"><span class="setting-lbl">Check Updates</span><label class="switch" onclick="this.querySelector('.sw-track').classList.toggle('on')"><div class="sw-track on"><div class="sw-thumb"></div></div><span class="sw-lbl">Automatically check for updates</span></label></div>
+      <div class="setting-row"><span class="setting-lbl">Telemetry</span><label class="switch" onclick="this.querySelector('.sw-track').classList.toggle('on')"><div class="sw-track"><div class="sw-thumb"></div></div><span class="sw-lbl">Send anonymous usage data</span></label></div>
+    </div>
+
+    <!-- Backend -->
+    <div class="tab-content" id="tab-backend">
+      <div class="setting-row"><span class="setting-lbl">Server Path</span><div style="flex:1;display:flex;gap:4px;"><input class="setting-inp" value="photopipeline-server" placeholder="Server binary path"><button class="btn" style="padding:2px 8px;height:28px;">…</button></div></div>
+      <div class="setting-desc">Path to the photopipeline server binary. Default: photopipeline-server (uses PATH).</div>
+      <div class="setting-row"><span class="setting-lbl">Port</span><input type="number" value="50051" min="1024" max="65535" class="setting-inp" style="width:90px;"></div>
+      <div class="setting-desc">gRPC server port. Default: 50051.</div>
+      <div class="setting-row"><span class="setting-lbl">Auto-start</span><label class="switch" onclick="this.querySelector('.sw-track').classList.toggle('on')"><div class="sw-track on"><div class="sw-thumb"></div></div><span class="sw-lbl">Start server automatically with app</span></label></div>
+      <div class="setting-row"><span class="setting-lbl">GPU Backend</span><select class="setting-sel"><option>Auto-detect</option><option>CUDA</option><option>CPU only</option><option>CoreML (Apple)</option><option>OpenVINO</option></select></div>
+      <div class="setting-desc">Preferred GPU backend for AI plugins. Auto-detect uses the best available.</div>
+      <div class="setting-row"><span class="setting-lbl">Log Level</span><select class="setting-sel"><option>Info</option><option>Debug</option><option>Warn</option><option>Error</option></select></div>
+    </div>
+
+    <!-- Output -->
+    <div class="tab-content" id="tab-output">
+      <div class="setting-row"><span class="setting-lbl">Default Format</span><select class="setting-sel"><option>HEIF</option><option>JPEG XL</option><option>AVIF</option><option>TIFF</option><option>PNG</option></select></div>
+      <div class="setting-desc">Default output format for new pipelines.</div>
+      <div class="setting-row"><span class="setting-lbl">Default Directory</span><div style="flex:1;display:flex;gap:4px;"><input class="setting-inp" value="C:\output"><button class="btn" style="padding:2px 8px;height:28px;">…</button></div></div>
+      <div class="setting-desc">Default output directory for batch processing.</div>
+      <div class="setting-row"><span class="setting-lbl">JPEG Quality</span><div style="flex:1;display:flex;align-items:center;gap:8px;"><input type="range" min="0" max="100" value="95" style="flex:1;"><span style="width:32px;text-align:right;font-family:monospace;">95%</span></div></div>
+      <div class="setting-row"><span class="setting-lbl">Embed Metadata</span><label class="switch" onclick="this.querySelector('.sw-track').classList.toggle('on')"><div class="sw-track on"><div class="sw-thumb"></div></div><span class="sw-lbl">Embed EXIF/XMP in output</span></label></div>
+      <div class="setting-row"><span class="setting-lbl">Thumbnail Size</span><input type="number" value="120" min="64" max="512" class="setting-inp" style="width:80px;"><span style="font-size:10px;color:var(--fg4);">px</span></div>
+    </div>
+
+    <!-- Advanced -->
+    <div class="tab-content" id="tab-advanced">
+      <div class="setting-row"><span class="setting-lbl">Tile Size</span><input type="number" value="1024" min="256" max="4096" class="setting-inp" style="width:80px;"><span style="font-size:10px;color:var(--fg4);">px</span></div>
+      <div class="setting-desc">Default tile size for large image processing. Lower values use less memory.</div>
+      <div class="setting-row"><span class="setting-lbl">Cache Directory</span><div style="flex:1;display:flex;gap:4px;"><input class="setting-inp" value="%APPDATA%/Photopipeline/cache"><button class="btn" style="padding:2px 8px;height:28px;">…</button></div></div>
+      <div class="setting-desc">Thumbnail cache directory. Clear to free disk space.</div>
+      <div class="setting-row"><span class="setting-lbl">Max Cache Size</span><input type="number" value="1024" min="128" max="8192" class="setting-inp" style="width:80px;"><span style="font-size:10px;color:var(--fg4);">MB</span></div>
+      <div class="setting-row"><span class="setting-lbl">ExifTool Path</span><div style="flex:1;display:flex;gap:4px;"><input class="setting-inp" value="exiftool"><button class="btn" style="padding:2px 8px;height:28px;">…</button></div></div>
+      <div class="setting-desc">Custom path to exiftool binary. Default uses system PATH.</div>
+      <div style="margin-top:16px;">
+        <button class="btn" style="color:var(--warn);border-color:var(--warn);width:100%;">⚠ Reset All Settings to Defaults</button>
+      </div>
+    </div>
+
+    <div class="dlg-footer">
+      <button class="btn" onclick="log('Cancelled')">Cancel</button>
+      <button class="btn" onclick="log('Reset to defaults')">Reset</button>
+      <button class="btn btn--p" onclick="log('Settings saved')">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="info">
+  <h3>Settings Panels</h3>
+  <ul>
+    <li><b>General</b> — Theme, Language, Updates</li>
+    <li><b>Backend</b> — Server path, Port, GPU, Log</li>
+    <li><b>Output</b> — Format, Directory, Quality, Metadata</li>
+    <li><b>Advanced</b> — Tile size, Cache, ExifTool</li>
+  </ul>
+  <h4 style="margin-top:10px;color:var(--brand);">Behavior</h4>
+  <ul>
+    <li>Save → Persist to appsettings.json</li>
+    <li>Cancel → Restore snapshot (discard edits)</li>
+    <li>Reset → Restore factory defaults</li>
+    <li>Theme change → Apply immediately</li>
+    <li>Language change → Requires restart</li>
+  </ul>
+  <div id="log" style="margin-top:8px;"><div>— Ready</div></div>
+</div>
+
+<script>
+function switchTab(id){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('show'));
+  event.target.classList.add('active');
+  document.getElementById('tab-'+id).classList.add('show');
+}
+function log(m){const l=document.getElementById('log');const d=document.createElement('div');d.textContent=`[${new Date().toLocaleTimeString()}] ${m}`;l.appendChild(d);l.scrollTop=l.scrollHeight;}
+</script>
+</body></html>

@@ -1,0 +1,338 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DAG Pipeline Editor — Design Demo</title></head><body style="font-family:'Segoe UI Variable',system-ui,sans-serif;font-size:12px;color:#f5f5f5;background:#141414;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:20px;gap:20px;">
+<style>
+:root{--bg:#1f1f1f;--bg2:#141414;--bg3:#292929;--bg4:#333;--s1:#383838;--s2:#4a4a4a;--fg:#f5f5f5;--fg2:#adadad;--fg3:#6e6e6e;--fg4:#505050;--brand:#479ef5;--ok:#54b054;--err:#d13447;--warn:#d59900;--r:4px;--rL:8px}
+*{margin:0;padding:0;box-sizing:border-box;}
+.editor-wrap { flex:1; max-width:900px; background:var(--bg); border-radius:12px; border:1px solid var(--s1); overflow:hidden; display:flex; flex-direction:column; height:750px; }
+.toolbar { padding:6px 10px; border-bottom:1px solid var(--s1); display:flex; gap:4px; align-items:center; }
+.btn { padding:4px 10px;height:28px;border:1px solid var(--s1);background:var(--bg);color:var(--fg);border-radius:var(--r);font-family:inherit;font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:4px; }
+.btn:hover { background:var(--bg3); }
+.btn--p { background:var(--brand);color:var(--bg2);border-color:var(--brand); }
+.btn--s { border-color:transparent;background:transparent;color:var(--fg2); }
+.btn--s:hover { background:var(--bg3);color:var(--fg); }
+.sep { width:1px;height:18px;background:var(--s1);margin:0 4px; }
+.canvas { flex:1; margin:8px; background:var(--bg2); border-radius:var(--rL); border:1px solid var(--s1); position:relative; overflow:hidden; }
+.grid { width:100%;height:100%;background-image:linear-gradient(rgba(255,255,255,0.015) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.015) 1px,transparent 1px);background-size:32px 32px;position:relative; }
+.node { position:absolute;min-width:130px;background:var(--bg);border:1.5px solid var(--s2);border-radius:var(--rL);padding:8px 14px 8px 20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.3);z-index:2;transition:border-color 0.15s;user-select:none; }
+.node:hover { border-color:var(--fg4); }
+.node.sel { border-color:var(--brand);box-shadow:0 0 0 3px rgba(71,158,245,0.12),0 4px 16px rgba(0,0,0,0.4);z-index:5; }
+.nname { font-weight:600;font-size:11px; }
+.ntype { font-size:9px;color:var(--fg4);margin-top:2px; }
+.nbadge { position:absolute;right:6px;top:6px;font-size:8px;background:rgba(71,158,245,0.12);color:var(--brand);padding:1px 6px;border-radius:10px; }
+.port { position:absolute;width:14px;height:14px;border-radius:3px;z-index:6;cursor:crosshair; }
+.port--o { right:-8px;top:50%;transform:translateY(-50%);background:var(--bg);border:2px solid var(--brand); }
+.port--i { left:-8px;top:50%;transform:translateY(-50%);background:var(--bg);border:2px solid var(--ok); }
+.port:hover { transform:translateY(-50%) scale(1.3); }
+
+/* Drag wire */
+.drag-wire { position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10;display:none; }
+.drag-wire line { stroke:var(--brand);stroke-width:2.5;stroke-dasharray:6 3;opacity:0.8; }
+
+/* Minimap */
+.minimap { position:absolute;bottom:10px;right:10px;width:120px;height:80px;background:rgba(0,0,0,0.55);border:1px solid var(--s1);border-radius:var(--r);z-index:8; }
+
+/* Context menu */
+.cmenu { display:none;position:fixed;background:var(--bg);border:1px solid var(--s1);border-radius:var(--rL);padding:4px;min-width:160px;z-index:100;box-shadow:0 8px 30px rgba(0,0,0,0.6); }
+.cmenu .mi { padding:5px 10px;border-radius:var(--r);cursor:pointer;font-size:11px;color:var(--fg2);display:flex;align-items:center;gap:8px; }
+.cmenu .mi:hover { background:rgba(71,158,245,0.10);color:var(--fg); }
+.cmenu .mi.del:hover { background:rgba(209,52,71,0.08);color:var(--err); }
+.cmenu .sep { height:1px;background:var(--s1);margin:3px 6px; }
+.cmenu .mi .shortcut { margin-left:auto;font-size:9px;color:var(--fg4); }
+
+/* Drop indicator */
+.drop-hint { position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);padding:16px 32px;border:2px dashed var(--brand);border-radius:8px;background:rgba(71,158,245,0.06);color:var(--brand);font-weight:600;z-index:15;pointer-events:none;display:none; }
+
+/* Info panel */
+.info { width:300px; background:var(--bg); border-radius:12px; border:1px solid var(--s1); padding:16px; height:750px; overflow-y:auto; }
+.info h3 { font-size:11px; font-weight:600; color:var(--fg3); text-transform:uppercase; margin-bottom:12px; }
+.info-block { margin-bottom:14px; }
+.info-block h4 { font-size:10px; color:var(--brand); margin-bottom:4px; }
+.info-block li,.info-block p { font-size:10px; color:var(--fg2); line-height:1.6; }
+.info-block ul { padding-left:14px; }
+kbd { display:inline-block;padding:1px 5px;background:var(--bg3);border:1px solid var(--s1);border-radius:2px;font-size:9px;font-family:monospace;color:var(--fg); }
+#eventLog { font-size:9px;color:var(--fg4);height:100px;overflow-y:auto;border:1px solid var(--s1);border-radius:var(--r);padding:6px;margin-top:8px; }
+#eventLog div { border-bottom:1px solid #2a2a2a;padding:1px 0; }
+</style>
+
+<div class="editor-wrap" id="editor">
+  <div class="toolbar">
+    <button class="btn btn--s" onclick="addNode()">📄 New</button>
+    <button class="btn btn--s" onclick="logEvent('Save pipeline')">💾 Save</button>
+    <span class="sep"></span>
+    <button class="btn btn--s" onclick="logEvent('Validate pipeline')">✓ Validate</button>
+    <span class="sep"></span>
+    <button class="btn btn--p" onclick="logEvent('Run pipeline')">▶ Run</button>
+    <button class="btn btn--s" onclick="logEvent('Cancel execution')">⏹ Cancel</button>
+    <span class="sep"></span>
+    <button class="btn btn--s" onclick="logEvent('Zoom in')">🔍+</button>
+    <button class="btn btn--s" onclick="logEvent('Zoom out')">🔍−</button>
+    <button class="btn btn--s" onclick="logEvent('Fit view')">⊞ Fit</button>
+    <span style="margin-left:auto;font-size:10px;color:var(--fg4);">1.2x</span>
+  </div>
+  <div class="canvas" id="canvas"
+    onmousemove="handleCanvasMouseMove(event)"
+    onmouseup="handleCanvasMouseUp(event)"
+    onclick="handleCanvasClick(event)"
+    oncontextmenu="handleCanvasContext(event)">
+    <div class="grid" id="grid">
+      <!-- SVG edges -->
+      <svg id="edgesSvg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1;" xmlns="http://www.w3.org/2000/svg"></svg>
+      <!-- Nodes rendered by JS -->
+      <div class="drag-wire" id="dragWire"><svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg"><line id="dragLine" x1="0" y1="0" x2="100" y2="100"/></svg></div>
+      <div class="minimap"></div>
+      <div class="drop-hint" id="dropHint">Drop plugin here to add node</div>
+    </div>
+  </div>
+</div>
+
+<div class="info">
+  <h3>Interaction Guide</h3>
+  <div class="info-block">
+    <h4>Add Node</h4>
+    <ul>
+      <li>Double-click canvas → Add node</li>
+      <li>Drag from plugin bar → Drop on canvas</li>
+      <li>Right-click canvas → Add Node menu</li>
+    </ul>
+  </div>
+  <div class="info-block">
+    <h4>Select & Move</h4>
+    <ul>
+      <li><kbd>Click</kbd> node → Select</li>
+      <li><kbd>Drag</kbd> node → Move</li>
+      <li><kbd>Shift+Click</kbd> → Multi-select</li>
+      <li>Click canvas → Deselect all</li>
+    </ul>
+  </div>
+  <div class="info-block">
+    <h4>Connect</h4>
+    <ul>
+      <li>Drag from <span style="color:var(--brand);">■ output port</span> → <span style="color:var(--ok);">■ input port</span></li>
+    </ul>
+  </div>
+  <div class="info-block">
+    <h4>Right-Click</h4>
+    <ul>
+      <li>Node → Copy / Duplicate / Disable / Delete</li>
+      <li>Canvas → Add Node menu</li>
+    </ul>
+  </div>
+  <div class="info-block">
+    <h4>Keyboard</h4>
+    <ul>
+      <li><kbd>Del</kbd> → Delete selected</li>
+      <li><kbd>Ctrl+D</kbd> → Duplicate</li>
+      <li><kbd>E</kbd> → Disable/Enable</li>
+      <li><kbd>Ctrl+Z/Y</kbd> → Undo/Redo</li>
+    </ul>
+  </div>
+  <div id="eventLog"><div>— Ready</div></div>
+</div>
+
+<script>
+const plugins = ['raw_input','transform','colorspace','lut3d','ai_denoise','lens_correct','exif_rw','heif_encoder'];
+const colors = ['#ef4444','#06b6d4','#8b5cf6','#ec4899','#a855f7','#6366f1','#3b82f6','#14b8a6'];
+let nodes = [], edges = [], selNode = null, draggedNode = null, dragOffX = 0, dragOffY = 0;
+let connectingFrom = null, wireActive = false, mouseX = 0, mouseY = 0;
+let nodeIdCounter = 0;
+
+// Init sample pipeline
+nodes = [
+  { id:'n1', plugin:'raw_input', x:80, y:60, color:'#ef4444', badge:'auto·12', inputs:[], outputs:['p1'] },
+  { id:'n2', plugin:'transform', x:320, y:40, color:'#06b6d4', inputs:['p1'], outputs:['p2','p3'] },
+  { id:'n3', plugin:'colorspace', x:320, y:190, color:'#8b5cf6', inputs:['p2'], outputs:['p4'] },
+  { id:'n4', plugin:'ai_denoise', x:320, y:340, color:'#a855f7', inputs:['p3'], outputs:['p5'] },
+  { id:'n5', plugin:'heif_encoder', x:560, y:260, color:'#14b8a6', inputs:['p4','p5'], outputs:[] },
+];
+edges = [
+  { from:'n1','p1', to:'n2','p1' },
+  { from:'n2','p2', to:'n3','p2' },
+  { from:'n2','p3', to:'n4','p3' },
+  { from:'n3','p4', to:'n5','p4' },
+  { from:'n4','p5', to:'n5','p5' },
+];
+selNode = 'n5';
+
+function logEvent(msg) {
+  const log = document.getElementById('eventLog');
+  const d = document.createElement('div');
+  d.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  log.appendChild(d);
+  log.scrollTop = log.scrollHeight;
+  if (log.children.length > 30) log.removeChild(log.firstChild);
+}
+
+function render() {
+  const grid = document.getElementById('grid');
+  // Remove old nodes
+  grid.querySelectorAll('.node').forEach(n => n.remove());
+  // Render edges SVG
+  const svg = document.getElementById('edgesSvg');
+  svg.innerHTML = '';
+  edges.forEach(e => {
+    const fn = nodes.find(n => n.id === e.from);
+    const tn = nodes.find(n => n.id === e.to);
+    if (!fn || !tn) return;
+    const x1 = fn.x + 130 + 6, y1 = fn.y + 26;
+    const x2 = tn.x - 8, y2 = tn.y + 26;
+    const mx = (x1 + x2) / 2;
+    const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d', `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`);
+    path.setAttribute('stroke','#479ef5');
+    path.setAttribute('stroke-width','2');
+    path.setAttribute('fill','none');
+    path.setAttribute('opacity','0.55');
+    svg.appendChild(path);
+  });
+  // Render nodes
+  nodes.forEach(n => {
+    const el = document.createElement('div');
+    el.className = 'node' + (selNode === n.id ? ' sel' : '');
+    el.style.left = n.x + 'px';
+    el.style.top = n.y + 'px';
+    if (n.color) el.style.borderColor = n.color + '44';
+    el.innerHTML = (n.badge ? `<div class="nbadge">${n.badge}</div>` : '') +
+      `<div class="nname">${n.plugin}</div><div class="ntype">${n.plugin === 'raw_input' ? 'Input' : n.plugin === 'heif_encoder' ? 'Export' : n.plugin === 'ai_denoise' ? 'Enhance' : n.plugin === 'exif_rw' ? 'Metadata' : n.plugin === 'lens_correct' ? 'Correct' : 'Color/Transform'}</div>` +
+      (n.inputs.length > 0 ? `<div class="port port--i" data-node="${n.id}" data-port="in"></div>` : '') +
+      (n.outputs.length > 0 ? `<div class="port port--o" data-node="${n.id}" data-port="out"></div>` : '');
+
+    el.addEventListener('mousedown', (e) => handleNodeMouseDown(e, n));
+    el.addEventListener('contextmenu', (e) => handleNodeContext(e, n));
+    grid.appendChild(el);
+  });
+  // Wire
+  ports = document.querySelectorAll('.port--o');
+  ports.forEach(p => {
+    p.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      connectingFrom = p.dataset.node;
+      wireActive = true;
+      document.getElementById('dragWire').style.display = 'block';
+      updateWire(e);
+      logEvent(`Connecting from: ${nodes.find(n=>n.id===connectingFrom).plugin}`);
+    });
+  });
+}
+
+function handleNodeMouseDown(e, n) {
+  if (e.target.classList.contains('port')) return;
+  selNode = n.id;
+  if (e.shiftKey) logEvent(`Shift+Click: ${n.plugin} (multi-select)`);
+  else logEvent(`Selected: ${n.plugin}`);
+  draggedNode = n;
+  const rect = document.getElementById('canvas').getBoundingClientRect();
+  dragOffX = e.clientX - rect.left - n.x;
+  dragOffY = e.clientY - rect.top - n.y;
+  render();
+}
+
+function handleCanvasMouseMove(e) {
+  if (draggedNode) {
+    const rect = document.getElementById('canvas').getBoundingClientRect();
+    draggedNode.x = e.clientX - rect.left - dragOffX;
+    draggedNode.y = e.clientY - rect.top - dragOffY;
+    render();
+  }
+  if (wireActive) updateWire(e);
+}
+
+function handleCanvasMouseUp(e) {
+  if (wireActive && connectingFrom) {
+    const targetPort = document.elementFromPoint(e.clientX, e.clientY);
+    if (targetPort && targetPort.classList.contains('port--i')) {
+      const toNode = targetPort.dataset.node;
+      const fromNode = connectingFrom;
+      if (fromNode !== toNode) {
+        edges.push({ from:fromNode, p1:'', to:toNode, p2:'' });
+        logEvent(`Connected: ${nodes.find(n=>n.id===fromNode).plugin} → ${nodes.find(n=>n.id===toNode).plugin}`);
+        render();
+      }
+    }
+    connectingFrom = null;
+  }
+  wireActive = false; draggedNode = null;
+  document.getElementById('dragWire').style.display = 'none';
+}
+
+function handleCanvasClick(e) {
+  if (e.target === document.getElementById('canvas') || e.target.classList.contains('grid') || e.target.id === 'grid') {
+    selNode = null; render(); logEvent('Canvas clicked — deselected');
+  }
+}
+
+function handleCanvasContext(e) {
+  e.preventDefault();
+  const menu = document.createElement('div');
+  menu.className = 'cmenu'; menu.style.display = 'block';
+  menu.style.left = e.clientX + 'px'; menu.style.top = e.clientY + 'px';
+  menu.innerHTML = `<div style="font-weight:600;color:var(--fg3);padding:5px 10px;">Add Node</div>
+    ${plugins.map((p,i) => `<div class="mi" onclick="addNode('${p}');this.parentElement.remove();logEvent('Added: ${p}')">${colors[i] ? '<span style="color:'+colors[i]+'">●</span>' : ''} ${p}</div>`).join('')}
+    <div class="sep"></div><div class="mi" onclick="this.parentElement.remove()">📋 Paste nodes</div>`;
+  document.body.appendChild(menu);
+  document.addEventListener('click', () => { if(menu.parentElement) menu.remove(); }, {once:true});
+  logEvent('Right-click canvas → Add Node menu');
+}
+
+function handleNodeContext(e, n) {
+  e.preventDefault(); e.stopPropagation();
+  selNode = n.id; render();
+  const menu = document.createElement('div');
+  menu.className = 'cmenu'; menu.style.display = 'block';
+  menu.style.left = e.clientX + 'px'; menu.style.top = e.clientY + 'px';
+  menu.innerHTML = `<div style="font-weight:600;padding:5px 10px;">${n.plugin}</div><div class="sep"></div>
+    <div class="mi" onclick="this.parentElement.remove()">📋 Copy <span class="shortcut">Ctrl+C</span></div>
+    <div class="mi" onclick="this.parentElement.remove()">📋 Duplicate <span class="shortcut">Ctrl+D</span></div>
+    <div class="sep"></div>
+    <div class="mi" onclick="this.parentElement.remove();logEvent('Disabled: ${n.plugin}')">⏸ Disable <span class="shortcut">E</span></div>
+    <div class="sep"></div>
+    <div class="mi del" onclick="deleteNode(n.id);this.parentElement.remove();logEvent('Deleted: ${n.plugin}')">🗑 Delete <span class="shortcut">Del</span></div>`;
+  document.body.appendChild(menu);
+  document.addEventListener('click', () => { if(menu.parentElement) menu.remove(); }, {once:true});
+}
+
+function deleteNode(id) {
+  nodes = nodes.filter(n => n.id !== id);
+  edges = edges.filter(e => e.from !== id && e.to !== id);
+  if (selNode === id) selNode = null;
+  render();
+}
+
+function addNode(plugin) {
+  const p = plugin || plugins[Math.floor(Math.random()*plugins.length)];
+  nodeIdCounter++;
+  const rect = document.getElementById('canvas').getBoundingClientRect();
+  nodes.push({ id:'n'+(6+nodeIdCounter), plugin:p, x:Math.random()*300+200, y:Math.random()*200+150, color:colors[plugins.indexOf(p)], inputs:['auto'], outputs:p==='heif_encoder'?[]:['auto'], badge:'' });
+  render();
+  logEvent(`Added node: ${p}`);
+}
+
+function updateWire(e) {
+  if (!connectingFrom) return;
+  const rect = document.getElementById('canvas').getBoundingClientRect();
+  const fn = nodes.find(n => n.id === connectingFrom);
+  if (!fn) return;
+  const line = document.getElementById('dragLine');
+  line.setAttribute('x1', fn.x + 130 + 6);
+  line.setAttribute('y1', fn.y + 26);
+  line.setAttribute('x2', e.clientX - rect.left);
+  line.setAttribute('y2', e.clientY - rect.top);
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Delete' && selNode) {
+    const n = nodes.find(n => n.id === selNode);
+    deleteNode(selNode);
+    logEvent(`Deleted: ${n.plugin} (Del key)`);
+  }
+  if (e.key === 'd' && e.ctrlKey && selNode) {
+    const n = nodes.find(n => n.id === selNode);
+    addNode(n.plugin);
+    logEvent(`Duplicated: ${n.plugin} (Ctrl+D)`);
+  }
+  if (e.key === 'z' && e.ctrlKey) logEvent('Undo (Ctrl+Z)');
+  if (e.key === 'y' && e.ctrlKey) logEvent('Redo (Ctrl+Y)');
+});
+
+render();
+</script>
+</body></html>

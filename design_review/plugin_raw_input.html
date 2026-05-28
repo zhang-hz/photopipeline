@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>raw_input — Fluent 2 Design</title>
+<style>
+:root {
+  --neutralBg1: #141414; --neutralBg2: #1f1f1f; --neutralBg3: #292929; --neutralBg4: #333333;
+  --neutralStroke1: #383838; --neutralStroke2: #4a4a4a;
+  --neutralFg1: #f5f5f5; --neutralFg2: #adadad; --neutralFg3: #6e6e6e; --neutralFg4: #505050;
+  --brandFg1: #479ef5; --successFg: #54b054; --dangerFg: #d13447; --warningFg: #d59900;
+  --pluginColor: #ef4444;
+  --radiusSmall: 2px; --radiusMedium: 4px; --radiusLarge: 8px; --radiusXLarge: 12px;
+  --strokeThin: 1px; --strokeThick: 2px;
+  --spacingXS: 4px; --spacingS: 8px; --spacingM: 12px; --spacingL: 16px; --spacingXL: 20px;
+  --fontFamily: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  --fontFamilyMono: 'Cascadia Code', 'Consolas', monospace;
+  --fontSizeCaption1: 10px; --fontSizeBody1: 12px; --fontSizeBody2: 13px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: var(--fontFamily); font-size: var(--fontSizeBody1);
+  background: var(--neutralBg1); color: var(--neutralFg1);
+  display: flex; justify-content: center; align-items: flex-start;
+  min-height: 100vh; padding: var(--spacingXL);
+}
+.plugin-panel {
+  width: 440px;
+  background: var(--neutralBg2);
+  border-radius: var(--radiusXLarge);
+  border: var(--strokeThin) solid var(--neutralStroke1);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  overflow: hidden;
+}
+
+/* Context Bar */
+.ctx-bar { display:flex; gap:0; border-bottom:var(--strokeThin) solid var(--neutralStroke1); padding:0 var(--spacingS); }
+.ctx-tab { padding:var(--spacingS) var(--spacingM); font-size:var(--fontSizeBody1); color:var(--neutralFg2); cursor:pointer; border-bottom:var(--strokeThick) solid transparent; transition:0.15s; }
+.ctx-tab:hover { color:var(--neutralFg1); background:var(--neutralBg3); }
+.ctx-tab.active { color:var(--brandFg1); border-bottom-color:var(--brandFg1); }
+
+/* Plugin Header */
+.plugin-header {
+  display:flex; align-items:center; gap:var(--spacingM); padding:var(--spacingL);
+  border-bottom:var(--strokeThin) solid var(--neutralStroke1);
+}
+.plugin-icon {
+  width:40px; height:40px; border-radius:var(--radiusMedium);
+  background:rgba(239,68,68,0.12); color:var(--pluginColor);
+  display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0;
+}
+.plugin-meta { flex:1; }
+.plugin-name { font-size:14px; font-weight:600; }
+.plugin-id { font-size:var(--fontSizeCaption1); color:var(--neutralFg4); font-family:var(--fontFamilyMono); margin-top:2px; }
+.plugin-tags { display:flex; gap:var(--spacingXS); margin-top:4px; flex-wrap:wrap; }
+.badge { padding:1px 6px; border-radius:var(--radiusSmall); font-size:9px; font-weight:600; display:inline-flex; align-items:center; gap:2px; }
+.badge--cat { background:rgba(239,68,68,0.10); color:var(--pluginColor); }
+.badge--tag { background:var(--neutralBg3); color:var(--neutralFg2); }
+.badge--version { background:none; color:var(--neutralFg4); }
+.plugin-hw { margin-top:6px; font-size:var(--fontSizeCaption1); color:var(--neutralFg4); display:flex; gap:var(--spacingL); }
+
+/* Description */
+.plugin-desc { padding:var(--spacingM) var(--spacingL); font-size:var(--fontSizeBody1); color:var(--neutralFg2); line-height:1.5; border-bottom:var(--strokeThin) solid var(--neutralStroke1); }
+
+/* Section divider */
+.sec-divider { height:1px; background:var(--neutralStroke1); margin:0 var(--spacingL); }
+
+/* Accordion */
+.acc-item { border-bottom:var(--strokeThin) solid var(--neutralStroke1); }
+.acc-header { display:flex; align-items:center; gap:var(--spacingS); padding:var(--spacingS) var(--spacingL); cursor:pointer; user-select:none; font-size:var(--fontSizeBody1); }
+.acc-header:hover { background:var(--neutralBg3); }
+.acc-caret { font-size:7px; color:var(--neutralFg3); width:14px; flex-shrink:0; transition:transform 0.15s; }
+.acc-item.collapsed .acc-caret { transform:rotate(-90deg); }
+.acc-title { font-weight:600; color:var(--neutralFg2); flex:1; display:flex; align-items:center; gap:var(--spacingS); }
+.acc-badge { font-size:9px; padding:0 6px; border-radius:var(--radiusSmall); height:16px; display:inline-flex; align-items:center; font-weight:600; }
+.acc-badge--count { background:var(--neutralBg4); color:var(--neutralFg3); }
+.acc-badge--default-collapsed { background:rgba(71,158,245,0.08); color:var(--brandFg1); }
+.acc-badge--advanced { background:rgba(213,153,0,0.08); color:var(--warningFg); }
+.acc-panel { padding:0 var(--spacingL) var(--spacingM); display:none; }
+.acc-item:not(.collapsed) .acc-panel { display:block; }
+
+/* Parameter Row */
+.param-row { display:flex; align-items:center; gap:var(--spacingS); margin-bottom:var(--spacingS); }
+.param-label { width:110px; text-align:right; font-size:var(--fontSizeBody1); color:var(--neutralFg2); flex-shrink:0; }
+.param-body { flex:1; display:flex; align-items:center; gap:6px; }
+.param-desc { font-size:9px; color:var(--neutralFg4); margin:-2px 0 6px 118px; line-height:1.4; }
+
+/* Widgets */
+.fui-Dropdown { flex:1; height:30px; padding:0 var(--spacingS); background:var(--neutralBg1); border:var(--strokeThin) solid var(--neutralStroke1); border-radius:var(--radiusMedium); color:var(--neutralFg1); font-family:var(--fontFamily); font-size:var(--fontSizeBody1); outline:none; cursor:pointer; appearance:auto; }
+.fui-Input { flex:1; height:30px; padding:0 var(--spacingS); background:var(--neutralBg1); border:var(--strokeThin) solid var(--neutralStroke1); border-radius:var(--radiusMedium); color:var(--neutralFg1); font-family:var(--fontFamily); font-size:var(--fontSizeBody1); outline:none; }
+.fui-Input:focus { border-color:var(--brandFg1); border-bottom:var(--strokeThick) solid var(--brandFg1); }
+.fui-Input::placeholder { color:var(--neutralFg4); }
+.fui-Switch { display:flex; align-items:center; gap:var(--spacingS); cursor:pointer; }
+.fui-SwitchTrack { width:36px;height:18px;background:var(--neutralStroke2);border-radius:9px;position:relative;transition:background 0.15s;flex-shrink:0; }
+.fui-SwitchTrack.on { background:var(--brandFg1); }
+.fui-SwitchThumb { position:absolute;top:2px;left:2px;width:14px;height:14px;background:white;border-radius:50%;transition:left 0.15s; }
+.fui-SwitchTrack.on .fui-SwitchThumb { left:20px; }
+.fui-SwitchLabel { font-size:var(--fontSizeBody1); color:var(--neutralFg2); }
+.fui-Recommended { font-size:9px; color:var(--brandFg1); margin-left:2px; }
+
+/* Override */
+.override-dot { width:8px;height:8px;border-radius:50%;flex-shrink:0;cursor:pointer; }
+.override-dot--inherited { border:1.5px solid var(--neutralStroke2);background:transparent; }
+.override-dot--override { background:var(--warningFg); }
+
+/* Preview & Aux */
+.preview-area, .aux-area { padding:var(--spacingM) var(--spacingL); border-bottom:var(--strokeThin) solid var(--neutralStroke1); }
+.preview-none, .aux-none { display:flex; align-items:center; justify-content:center; padding:var(--spacingL); background:var(--neutralBg1); border-radius:var(--radiusLarge); border:var(--strokeThin) dashed var(--neutralStroke1); }
+.preview-none span, .aux-none span { font-size:var(--fontSizeBody1); color:var(--neutralFg4); }
+
+/* Footer */
+.footer { padding:var(--spacingM) var(--spacingL); }
+.fui-Button { display:inline-flex;align-items:center;gap:var(--spacingS);padding:4px var(--spacingM);height:30px;border:var(--strokeThin) solid var(--neutralStroke1);background:var(--neutralBg2);color:var(--neutralFg1);border-radius:var(--radiusMedium);font-family:var(--fontFamily);font-size:var(--fontSizeBody1);cursor:pointer; }
+.fui-Button--danger { background:transparent;border-color:var(--dangerFg);color:var(--dangerFg);width:100%; }
+.fui-Button--danger:hover { background:rgba(209,52,71,0.08); }
+
+/* Advanced marker */
+.param-advanced { display:inline-block; padding:0 4px; border-radius:var(--radiusSmall); background:rgba(213,153,0,0.08); color:var(--warningFg); font-size:8px; font-weight:600; margin-left:4px; vertical-align:middle; }
+</style>
+</head>
+<body>
+<div class="plugin-panel">
+
+  <!-- Context Bar -->
+  <div class="ctx-bar">
+    <div class="ctx-tab active">All</div>
+    <div class="ctx-tab">Template</div>
+    <div class="ctx-tab">High ISO</div>
+    <div class="ctx-tab">DSC_0034</div>
+  </div>
+
+  <!-- Plugin Header -->
+  <div class="plugin-header">
+    <div class="plugin-icon">📷</div>
+    <div class="plugin-meta">
+      <div class="plugin-name">RAW Input</div>
+      <div class="plugin-id">photopipeline.plugins.raw_input</div>
+      <div class="plugin-tags">
+        <span class="badge badge--cat">Input</span>
+        <span class="badge badge--version">v1.0.0</span>
+        <span class="badge badge--tag">input</span>
+        <span class="badge badge--tag">raw</span>
+        <span class="badge badge--tag">camera</span>
+        <span class="badge badge--tag">decode</span>
+      </div>
+      <div class="plugin-hw">
+        <span>FormatProcessor</span>
+        <span>·</span>
+        <span>RAM ≥ 512 MB</span>
+        <span>·</span>
+        <span>No pixel input</span>
+        <span>·</span>
+        <span>Produces pixels</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Description -->
+  <div class="plugin-desc">
+    Read RAW camera files (ARW, CR2, CR3, NEF, DNG, RAF, ORF, RW2, PEF)
+  </div>
+
+  <!-- Section 1: raw_format (Card, title_visible=true) -->
+  <div class="acc-item">
+    <div class="acc-header">
+      <span class="acc-caret">▼</span>
+      <span class="acc-title">RAW Format</span>
+      <span class="acc-badge acc-badge--count">1 param</span>
+    </div>
+    <div class="acc-panel">
+      <!-- raw_mode — Enum, default "auto", recommended=auto -->
+      <div class="param-row">
+        <span class="param-label">Decode Mode</span>
+        <div class="param-body">
+          <select class="fui-Dropdown">
+            <option>Auto ★ — Detect from file, use best method</option>
+            <option>dcraw — Use dcraw for raw conversion</option>
+            <option>LibRaw — Use LibRaw via FFI (when available)</option>
+            <option>RawTherapee — Use RawTherapee CLI</option>
+          </select>
+        </div>
+        <span class="override-dot override-dot--inherited" title="Inherited from Template"></span>
+      </div>
+      <div class="param-desc">default: <code>auto</code> · allow_override: ✓ · supports_expression: ✗</div>
+    </div>
+  </div>
+
+  <!-- Section 2: output (Card, title_visible=true) -->
+  <div class="acc-item">
+    <div class="acc-header">
+      <span class="acc-caret">▼</span>
+      <span class="acc-title">Output</span>
+      <span class="acc-badge acc-badge--count">3 params</span>
+    </div>
+    <div class="acc-panel">
+
+      <!-- output_format — Enum, default "u16", recommended=u16 -->
+      <div class="param-row">
+        <span class="param-label">Output Pixel Format</span>
+        <div class="param-body">
+          <select class="fui-Dropdown">
+            <option>16-bit ★ — Standard 16-bit integer</option>
+            <option>32-bit float — Floating-point for HDR processing</option>
+          </select>
+        </div>
+        <span class="override-dot override-dot--inherited"></span>
+      </div>
+      <div class="param-desc">default: <code>u16</code> · allow_override: ✓ · supports_expression: ✗</div>
+
+      <!-- half_size — Boolean, default=false, label_true="Half", label_false="Full" -->
+      <div class="param-row">
+        <span class="param-label">Half Size</span>
+        <div class="param-body">
+          <div class="fui-Switch">
+            <div class="fui-SwitchTrack"><div class="fui-SwitchThumb"></div></div>
+            <span class="fui-SwitchLabel">Full</span>
+          </div>
+        </div>
+        <span class="override-dot override-dot--inherited"></span>
+      </div>
+      <div class="param-desc">Decode at half resolution for faster previews · default: <code>false</code></div>
+
+      <!-- apply_white_balance — Boolean, default=true, label_true="Apply", label_false="As-Shot", advanced=true, default_collapsed=true -->
+      <div class="param-row">
+        <span class="param-label">White Balance<span class="param-advanced">advanced</span></span>
+        <div class="param-body">
+          <div class="fui-Switch">
+            <div class="fui-SwitchTrack on"><div class="fui-SwitchThumb"></div></div>
+            <span class="fui-SwitchLabel">Apply</span>
+          </div>
+        </div>
+        <span class="override-dot override-dot--override" title="Overridden at Group level"></span>
+      </div>
+      <div class="param-desc">Apply camera white balance during decode · default: <code>true</code> · advanced</div>
+    </div>
+  </div>
+
+  <!-- Section 3: dcraw_options (CollapsibleCard, default_collapsed=true) -->
+  <div class="acc-item collapsed">
+    <div class="acc-header">
+      <span class="acc-caret">▶</span>
+      <span class="acc-title">dcraw Options</span>
+      <span class="acc-badge acc-badge--default-collapsed">default collapsed</span>
+    </div>
+    <div class="acc-panel">
+
+      <!-- dcraw_path — String, default="dcraw", placeholder="/usr/bin/dcraw", advanced=true -->
+      <div class="param-row">
+        <span class="param-label">dcraw Path<span class="param-advanced">advanced</span></span>
+        <div class="param-body">
+          <input class="fui-Input" type="text" value="dcraw" placeholder="/usr/bin/dcraw">
+        </div>
+        <span class="override-dot override-dot--inherited"></span>
+      </div>
+      <div class="param-desc">Path to the dcraw binary · default: <code>"dcraw"</code> · max_length: 1024</div>
+
+      <!-- dcraw_extra_args — String, default="", placeholder="-H 2", advanced=true -->
+      <div class="param-row">
+        <span class="param-label">Extra Arguments<span class="param-advanced">advanced</span></span>
+        <div class="param-body">
+          <input class="fui-Input" type="text" placeholder="-H 2" value="">
+        </div>
+        <span class="override-dot override-dot--inherited"></span>
+      </div>
+      <div class="param-desc">Additional dcraw command-line arguments · default: <code>""</code> · max_length: 512</div>
+    </div>
+  </div>
+
+  <!-- Preview (GuiSchema.preview = None) -->
+  <div class="preview-area">
+    <div style="font-size:10px;font-weight:600;color:var(--neutralFg3);text-transform:uppercase;margin-bottom:var(--spacingS);">Preview</div>
+    <div class="preview-none"><span>PreviewMode::None — No preview available for input nodes</span></div>
+  </div>
+
+  <!-- Aux Views (GuiSchema.aux_views = []) -->
+  <div class="aux-area">
+    <div style="font-size:10px;font-weight:600;color:var(--neutralFg3);text-transform:uppercase;margin-bottom:var(--spacingS);">Auxiliary Views</div>
+    <div class="aux-none"><span>vec![] — No auxiliary views defined</span></div>
+  </div>
+
+  <!-- GuiSchema footer info -->
+  <div style="padding:4px var(--spacingL); font-size:9px; color:var(--neutralFg4); border-bottom:var(--strokeThin) solid var(--neutralStroke1); display:flex; gap:var(--spacingXL);">
+    <span>icon: camera</span><span>color: #ef4444</span><span>min_panel_width: 320px</span>
+  </div>
+
+  <!-- Remove -->
+  <div class="footer">
+    <button class="fui-Button fui-Button--danger">🗑 Remove raw_input from Pipeline</button>
+  </div>
+
+</div>
+</body>
+</html>

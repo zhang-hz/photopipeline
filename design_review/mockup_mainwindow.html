@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Photopipeline — MainWindow Design v3</title>
+<style>
+:root {
+  --bg-mica: #222225ee; --card: #2b2b2e; --card-h: #35353a; --inp: #3a3a3d;
+  --border: #404045; --div: #35353a;
+  --t1: #fafafa; --t2: #a0a0a4; --t3: #6a6a6e;
+  --accent: #60cdff; --accent-bg: rgba(96,205,255,0.10);
+  --success: #6ccb5f; --danger: #ff6b6b; --warn: #f0c040;
+  --purple: #b084f4; --cyan: #5edee3; --orange: #f0a060; --green: #6cdb80;
+  --radius: 6px;
+  --font: 'Segoe UI', system-ui, sans-serif;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:var(--font); background:#1a1a1c; color:var(--t1); font-size:12px; display:flex; justify-content:center; align-items:center; min-height:100vh; }
+.window { width:1440px; height:880px; background:linear-gradient(170deg,#2d2d30 0%,#26262a 30%,#222225 60%,#28282c 100%); border-radius:8px; border:1px solid #404045; box-shadow:0 12px 60px rgba(0,0,0,0.6); display:flex; flex-direction:column; overflow:hidden; }
+
+.titlebar { height:38px; display:flex; align-items:center; padding:0 14px; gap:10px; flex-shrink:0; }
+.titlebar-icon { width:18px;height:18px;background:var(--accent);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px; }
+.titlebar-title { font-size:12.5px;font-weight:600;flex:1; }
+.tbtn { width:32px;height:28px;border:none;background:transparent;border-radius:4px;cursor:pointer;color:var(--t2);font-size:14px;display:flex;align-items:center;justify-content:center; }
+.tbtn:hover { background:rgba(255,255,255,0.06);color:var(--t1); }
+
+.main { flex:1;display:flex;overflow:hidden; }
+
+/* LEFT */
+.col-left { width:260px;display:flex;flex-direction:column;border-right:1px solid var(--div);background:rgba(0,0,0,0.10); }
+.sec-hdr { padding:8px 12px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--t2);display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--div);background:rgba(255,255,255,0.015); }
+.sec-hdr .ico { width:16px;height:16px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:10px; }
+.files-count { margin-left:auto;font-size:10px;color:var(--t3); }
+.toolbar { display:flex;gap:4px;padding:6px 8px;border-bottom:1px solid var(--div);flex-wrap:wrap; }
+.btn { padding:4px 10px;border:1px solid var(--border);background:var(--card);color:var(--t1);border-radius:4px;font-size:10.5px;cursor:pointer;display:flex;align-items:center;gap:4px;white-space:nowrap; }
+.btn:hover { background:var(--card-h); }
+.btn.accent { background:var(--accent-bg);border-color:var(--accent);color:var(--accent); }
+.btn.ghost { border-color:transparent;background:transparent;color:var(--t2); }
+.btn.ghost:hover { background:rgba(255,255,255,0.04); }
+.btn.danger { border-color:var(--danger);color:var(--danger); }
+.btn.sm { padding:2px 8px;font-size:9px; }
+
+.panel-body { flex:1;overflow-y:auto;padding:4px 6px; }
+.panel-body::-webkit-scrollbar { width:5px; }
+.panel-body::-webkit-scrollbar-thumb { background:var(--border);border-radius:3px; }
+
+.img-card { display:flex;gap:8px;padding:6px 8px;margin:2px 0;background:var(--card);border-radius:var(--radius);border:1px solid transparent;cursor:pointer;align-items:center;transition:all 0.1s;position:relative; }
+.img-card:hover { background:var(--card-h); }
+.img-card.sel { border-color:var(--accent);background:rgba(96,205,255,0.06); }
+.img-card.multi { border-color:var(--accent);border-style:dashed;background:rgba(96,205,255,0.03); }
+.img-card .chk { display:none;position:absolute;left:6px;top:6px;width:16px;height:16px;border-radius:3px;background:var(--accent);align-items:center;justify-content:center;font-size:9px;z-index:2; }
+.img-card.multi .chk { display:flex; }
+.img-thumb { width:48px;height:34px;border-radius:3px;background:var(--inp);flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:18px; }
+.img-info { flex:1;min-width:0; }
+.img-name { font-size:11px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.img-meta { font-size:10px;color:var(--t3);display:flex;gap:6px; }
+.img-group-tag { font-size:8px;background:rgba(240,192,64,0.15);color:var(--warn);padding:1px 5px;border-radius:3px;margin-top:2px;display:inline-block; }
+.img-size { font-size:10px;color:var(--t3);flex-shrink:0; }
+
+/* Group section */
+.groups { border-top:1px solid var(--div);padding:6px 8px;flex-shrink:0; }
+.grp-hdr { display:flex;align-items:center;gap:6px;padding:2px 6px 6px; }
+.grp-hdr span { font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:0.5px;flex:1; }
+.grp-item { display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:4px;cursor:pointer;font-size:10.5px;color:var(--t2);position:relative; }
+.grp-item:hover { background:rgba(255,255,255,0.04); }
+.grp-item:hover .grp-actions { display:flex; }
+.grp-item .cnt { margin-left:auto;font-size:9px;color:var(--t3);background:var(--inp);padding:1px 6px;border-radius:8px; }
+.grp-item .dot { width:6px;height:6px;border-radius:50%;flex-shrink:0; }
+.grp-actions { display:none;position:absolute;right:4px;gap:2px; }
+.grp-actions button { width:20px;height:18px;border:none;background:transparent;border-radius:3px;cursor:pointer;font-size:10px;color:var(--t3); }
+.grp-actions button:hover { background:rgba(255,255,255,0.08);color:var(--t1); }
+.grp-actions button.del:hover { color:var(--danger); }
+.grp-add { display:flex;gap:6px;padding:4px 8px;align-items:center; }
+.grp-add button { font-size:10px;color:var(--t3);background:transparent;border:1px dashed var(--border);border-radius:4px;padding:3px 10px;cursor:pointer;width:100%;text-align:left; }
+.grp-add button:hover { color:var(--t1);border-color:var(--t3); }
+.grp-add .auto-dropdown { font-size:10px;color:var(--t3);background:transparent;border:1px dashed var(--border);border-radius:4px;padding:3px 8px;cursor:pointer; }
+.grp-add .auto-dropdown:hover { color:var(--t1);border-color:var(--t3); }
+
+/* Multi-select bar */
+.msbar { display:none;padding:6px 8px;border-bottom:1px solid var(--div);background:rgba(240,192,64,0.05);align-items:center;gap:8px; }
+.msbar.show { display:flex; }
+.msbar span { font-size:10px;color:var(--warn);flex:1; }
+.msbar button { font-size:9px;padding:2px 8px;border:1px solid var(--border);background:transparent;color:var(--t2);border-radius:3px;cursor:pointer; }
+.msbar button:hover { background:rgba(255,255,255,0.04); }
+
+/* CENTER */
+.col-center { flex:1;min-width:380px;display:flex;flex-direction:column;border-right:1px solid var(--div); }
+.dag-toolbar { display:flex;gap:4px;padding:6px 8px;border-bottom:1px solid var(--div);align-items:center; }
+.dag-toolbar .sep { width:1px;height:16px;background:var(--div);margin:0 4px; }
+.dag-canvas { flex:1;margin:8px;background:rgba(0,0,0,0.20);border-radius:var(--radius);border:1px solid var(--border);position:relative;overflow:hidden; }
+.dag-grid { width:100%;height:100%;background-image:linear-gradient(rgba(255,255,255,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.025) 1px,transparent 1px);background-size:28px 28px; }
+
+.dnode { position:absolute;min-width:130px;background:var(--card);border:1.5px solid var(--border);border-radius:7px;padding:8px 14px 8px 18px;font-size:11px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,0.35);transition:border-color 0.15s;z-index:2; }
+.dnode:hover { border-color:rgba(255,255,255,0.25); }
+.dnode.sel { border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg),0 4px 16px rgba(0,0,0,0.5);z-index:5; }
+.dnode .dnl { font-weight:600;font-size:11px; }
+.dnode .dnt { font-size:9px;color:var(--t3);margin-top:2px; }
+.dnode .dnstat { position:absolute;right:8px;top:10px;width:7px;height:7px;border-radius:50%; }
+.dnode .dnstat.ok { background:var(--success); }
+.dport { position:absolute;width:12px;height:12px;border-radius:3px;z-index:6; }
+.dport.out { right:-7px;top:50%;transform:translateY(-50%);background:var(--card);border:2px solid var(--accent); }
+.dport.in { left:-7px;top:50%;transform:translateY(-50%);background:var(--card);border:2px solid var(--success); }
+
+.dag-edges { position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1; }
+.dag-edges path { stroke:var(--accent);stroke-width:2.5;fill:none;opacity:0.5; }
+.minimap { position:absolute;bottom:10px;right:10px;width:110px;height:75px;background:rgba(0,0,0,0.55);border:1px solid var(--border);border-radius:4px;z-index:5; }
+.mm-vp { position:absolute;border:1px solid var(--accent);background:rgba(96,205,255,0.06);border-radius:1px; }
+
+.auto-node-badge { position:absolute;left:8px;top:8px;font-size:8px;background:var(--accent-bg);color:var(--accent);padding:1px 5px;border-radius:3px;white-space:nowrap; }
+
+/* RIGHT */
+.col-right { width:420px;display:flex;flex-direction:column;overflow-y:auto; }
+.col-right::-webkit-scrollbar { width:5px; }
+.col-right::-webkit-scrollbar-thumb { background:var(--border);border-radius:3px; }
+
+.cbar { display:flex;gap:4px;padding:6px 10px;border-bottom:1px solid var(--div);background:rgba(0,0,0,0.08);flex-shrink:0; }
+.cbtn { padding:3px 12px;border:1px solid var(--border);background:transparent;color:var(--t2);border-radius:3px;font-size:10px;cursor:pointer; }
+.cbtn:hover { background:rgba(255,255,255,0.04); }
+.cbtn.act { background:var(--accent-bg);border-color:var(--accent);color:var(--accent); }
+
+.plug-browser { flex-shrink:0;border-bottom:1px solid var(--div); }
+.plug-search { display:flex;gap:6px;padding:6px 10px; }
+.plug-input { flex:1;padding:5px 8px;background:var(--inp);border:1px solid var(--border);border-radius:4px;color:var(--t1);font-size:11px;outline:none; }
+.plug-input:focus { border-color:var(--accent); }
+.plug-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px 10px 8px; }
+.pcard { padding:8px 10px;background:var(--card);border-radius:var(--radius);border:1px solid transparent;cursor:pointer;display:flex;flex-direction:column;gap:3px;transition:all 0.1s; }
+.pcard:hover { background:var(--card-h);border-color:var(--border); }
+.pcard.hl { border-color:var(--accent);background:rgba(96,205,255,0.06); }
+.pcard .pname { font-size:10.5px;font-weight:600; }
+.pcard .pcat { font-size:9px;color:var(--t3);background:var(--inp);padding:1px 6px;border-radius:3px;align-self:flex-start; }
+
+.sec-label { padding:6px 12px;font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid var(--div);background:rgba(0,0,0,0.05); }
+
+.psection { padding:10px 14px;border-bottom:1px solid var(--div); }
+.psection.collapsed .psbody { display:none; }
+.psection.collapsed .pscaret { transform:rotate(-90deg); }
+.psheader { display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:8px; }
+.psheader:hover .pstitle { color:var(--t1); }
+.pscaret { font-size:8px;color:var(--t3);transition:transform 0.15s; }
+.pstitle { font-size:10.5px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:0.5px;flex:1; }
+.psbadge { font-size:9px;padding:1px 7px;border-radius:8px;font-weight:600; }
+.psbadge.override { background:var(--warn);color:#1a1a1c; }
+.psbadge.inherit { border:1px solid var(--border);color:var(--t3);background:transparent; }
+
+.prow { display:flex;align-items:center;gap:8px;margin-bottom:7px; }
+.prow:last-child { margin-bottom:0; }
+.plabel { font-size:11px;color:var(--t2);width:85px;text-align:right;flex-shrink:0; }
+.pinput { flex:1;padding:4px 8px;background:var(--inp);border:1px solid var(--border);border-radius:3px;color:var(--t1);font-size:11px;outline:none; }
+.pinput:focus { border-color:var(--accent); }
+.pslider { flex:1;display:flex;align-items:center;gap:6px; }
+.pslider input[type=range] { flex:1;height:4px;-webkit-appearance:none;background:var(--border);border-radius:2px; }
+.pslider input[type=range]::-webkit-slider-thumb {-webkit-appearance:none;width:14px;height:14px;background:var(--accent);border-radius:50%;cursor:pointer; }
+.pval { font-size:11px;font-family:'Cascadia Code',monospace;width:48px;text-align:right; }
+.omark { width:7px;height:7px;border-radius:50%;flex-shrink:0;cursor:pointer; }
+.omark.override { background:var(--warn); }
+.omark.inherited { border:1.5px solid var(--border);background:transparent; }
+.vsource { font-size:9px;color:var(--t3);margin-left:93px;margin-top:-4px;margin-bottom:6px; }
+
+.expr-box { padding:8px 10px;background:rgba(176,132,244,0.06);border:1px solid rgba(176,132,244,0.2);border-radius:4px;margin-top:6px; }
+.expr-input { width:100%;padding:4px 8px;background:transparent;border:none;color:var(--t1);font-family:'Cascadia Code',monospace;font-size:11px;outline:none; }
+.expr-preview { display:flex;gap:12px;margin-top:4px;font-size:9px;color:var(--t3);font-family:'Cascadia Code',monospace;flex-wrap:wrap; }
+
+.aux { padding:10px 14px;border-bottom:1px solid var(--div); }
+.aux-title { font-size:10px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px; }
+.hbars { display:flex;gap:1px;align-items:flex-end;height:50px;padding:2px 0; }
+.hbars .b { flex:1;background:var(--accent);border-radius:1px 1px 0 0;opacity:0.7; }
+
+.rm-section { padding:10px 14px; }
+.rm-btn { width:100%;padding:6px;border:1px solid var(--danger);background:transparent;color:var(--danger);border-radius:4px;font-size:11px;cursor-pointer; }
+.rm-btn:hover { background:rgba(255,107,107,0.08); }
+
+/* Multi-select state in right panel */
+.ms-param-note { padding:8px 12px;background:rgba(240,192,64,0.06);border:1px solid rgba(240,192,64,0.15);border-radius:4px;font-size:10px;color:var(--t2);margin:8px 14px; }
+.ms-param-note span { color:var(--warn); }
+
+/* STATUS BAR */
+.statusbar { height:32px;background:var(--card);border-top:1px solid var(--div);display:flex;align-items:center;padding:0 14px;gap:14px;font-size:11px;flex-shrink:0; }
+.sitem { display:flex;align-items:center;gap:6px;color:var(--t2); }
+.sdot { width:7px;height:7px;border-radius:50%;background:var(--success); }
+.sprog { flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden; }
+.sprog-f { height:100%;width:65%;background:var(--accent);border-radius:2px; }
+.stext { font-size:11px;color:var(--t2);white-space:nowrap; }
+</style>
+</head>
+<body>
+<div class="window">
+  <div class="titlebar">
+    <div class="titlebar-icon">◆</div>
+    <span class="titlebar-title">Photopipeline — HDR Pipeline v1</span>
+    <button class="tbtn">🌓</button>
+    <button class="tbtn">⚙</button>
+  </div>
+
+  <div class="main">
+
+    <!-- ========== LEFT ========== -->
+    <div class="col-left">
+      <div class="sec-hdr">
+        <div class="ico" style="background:var(--cyan)">▣</div>
+        Candidate Files <span class="files-count">12 files</span>
+      </div>
+      <div class="toolbar">
+        <button class="btn accent">📂 Import</button>
+        <button class="btn ghost">🗑 Clear</button>
+        <button class="btn ghost">📤 To Batch</button>
+        <select class="btn" style="font-size:10px;padding:3px 6px;"><option>Sort: Name</option></select>
+      </div>
+
+      <!-- Multi-select bar -->
+      <div class="msbar show" id="msbar">
+        <span>📋 4 selected</span>
+        <button>Add to Group ▾</button>
+        <button>Send to Batch</button>
+        <button>Clear selection</button>
+      </div>
+
+      <!-- Thumbnails -->
+      <div class="panel-body">
+        <!-- Single-selected -->
+        <div class="img-card sel">
+          <div class="img-thumb" style="background:linear-gradient(135deg,#444,#555);">🌄</div>
+          <div class="img-info">
+            <div class="img-name">DSC_0034.ARW</div>
+            <div class="img-meta"><span>6000×4000</span><span>ARW</span><span>ISO 6400</span></div>
+            <span class="img-group-tag">High ISO</span>
+          </div>
+          <div class="img-size">24.3 MB</div>
+        </div>
+        <!-- Multi-selected -->
+        <div class="img-card multi">
+          <div class="chk">✓</div>
+          <div class="img-thumb" style="background:linear-gradient(135deg,#335,#446);">🏔</div>
+          <div class="img-info">
+            <div class="img-name">PANO_2025_001.DNG</div>
+            <div class="img-meta"><span>8256×5504</span><span>DNG</span><span>ISO 100</span></div>
+            <span class="img-group-tag">GPS Chengdu</span>
+          </div>
+          <div class="img-size">45.1 MB</div>
+        </div>
+        <div class="img-card multi">
+          <div class="chk">✓</div>
+          <div class="img-thumb" style="background:linear-gradient(135deg,#533,#644);">🌆</div>
+          <div class="img-info">
+            <div class="img-name">IMG_8821.CR3</div>
+            <div class="img-meta"><span>6960×4640</span><span>CR3</span><span>ISO 800</span></div>
+          </div>
+          <div class="img-size">31.8 MB</div>
+        </div>
+        <div class="img-card multi">
+          <div class="chk">✓</div>
+          <div class="img-thumb" style="background:linear-gradient(135deg,#223,#334);">🎆</div>
+          <div class="img-info">
+            <div class="img-name">night_sky_012.NEF</div>
+            <div class="img-meta"><span>6016×4016</span><span>NEF</span><span>ISO 3200</span></div>
+          </div>
+          <div class="img-size">28.7 MB</div>
+        </div>
+        <div class="img-card multi">
+          <div class="chk">✓</div>
+          <div class="img-thumb" style="background:linear-gradient(135deg,#252,#363);">🌿</div>
+          <div class="img-info">
+            <div class="img-name">macro_flower_03.RAF</div>
+            <div class="img-meta"><span>6240×4160</span><span>RAF</span><span>ISO 200</span></div>
+          </div>
+          <div class="img-size">26.2 MB</div>
+        </div>
+        <div class="img-card">
+          <div class="img-thumb" style="background:linear-gradient(135deg,#444,#533);">📷</div>
+          <div class="img-info">
+            <div class="img-name">street_044.ORF</div>
+            <div class="img-meta"><span>5184×3888</span><span>ORF</span><span>ISO 400</span></div>
+          </div>
+          <div class="img-size">19.5 MB</div>
+        </div>
+      </div>
+
+      <!-- Group Management -->
+      <div class="groups">
+        <div class="grp-hdr">
+          <span>Groups</span>
+        </div>
+        <div class="grp-item" style="background:rgba(255,255,255,0.02);">
+          <span class="dot" style="background:var(--warn);"></span>
+          <span>High ISO (≥1600)</span>
+          <span class="cnt">4</span>
+          <div class="grp-actions">
+            <button title="Edit group">✎</button>
+            <button class="del" title="Delete group">🗑</button>
+          </div>
+        </div>
+        <div class="grp-item">
+          <span class="dot" style="background:var(--purple);"></span>
+          <span>Night (21:00-05:00)</span>
+          <span class="cnt">3</span>
+          <div class="grp-actions">
+            <button title="Edit group">✎</button>
+            <button class="del" title="Delete group">🗑</button>
+          </div>
+        </div>
+        <div class="grp-item">
+          <span class="dot" style="background:var(--green);"></span>
+          <span>GPS: Chengdu</span>
+          <span class="cnt">5</span>
+          <div class="grp-actions">
+            <button title="Edit group">✎</button>
+            <button class="del" title="Delete group">🗑</button>
+          </div>
+        </div>
+        <div class="grp-add">
+          <button>+ Create Group...</button>
+          <button class="auto-dropdown">Auto-group ▾</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== CENTER ========== -->
+    <div class="col-center">
+      <div class="sec-hdr">
+        <div class="ico" style="background:var(--orange)">⇶</div>
+        Pipeline Editor
+        <span style="margin-left:8px;font-size:10px;color:var(--success);">● Valid</span>
+        <span style="margin-left:auto;font-size:10px;color:var(--t3);">5 nodes · 5 edges</span>
+      </div>
+      <div class="dag-toolbar">
+        <button class="btn ghost">📄 New</button>
+        <button class="btn ghost">💾 Save</button>
+        <button class="btn ghost">📂 Load</button>
+        <span class="sep"></span>
+        <button class="btn ghost">✓ Validate</button>
+        <span class="sep"></span>
+        <button class="btn accent">▶ Run</button>
+        <button class="btn ghost" style="color:var(--danger)">⏹ Cancel</button>
+        <span class="sep"></span>
+        <button class="btn ghost">🔍+</button>
+        <button class="btn ghost">🔍-</button>
+        <button class="btn ghost">⊞ Fit</button>
+        <span style="margin-left:auto;font-size:10px;color:var(--t3);">1.2x</span>
+      </div>
+      <div class="dag-canvas">
+        <div class="dag-grid"></div>
+
+        <svg class="dag-edges" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 246,110 L 270,110 Q 300,110 300,160 L 300,190 Q 300,220 340,220"/>
+          <path d="M 246,110 L 270,110 Q 300,110 300,300 Q 300,340 340,340"/>
+          <path d="M 490,220 L 520,220 Q 550,220 550,190 Q 550,160 590,160"/>
+          <path d="M 490,220 L 520,220 Q 550,220 550,240 Q 550,270 590,270"/>
+          <path d="M 490,220 L 520,220 Q 550,220 550,340 Q 550,370 590,370"/>
+        </svg>
+
+        <!-- raw_input (auto-generated, has badge) -->
+        <div class="dnode" style="left:90px;top:80px;border-color:rgba(94,222,227,0.5);">
+          <div class="auto-node-badge">auto</div>
+          <div class="dnode"><div class="dnstat ok"></div>
+          <div class="dnl">raw_input</div>
+          <div class="dnt">Input · 12 files</div></div>
+          <div class="dport out"></div>
+        </div>
+
+        <!-- transform (selected) -->
+        <div class="dnode sel" style="left:340px;top:193px;">
+          <div class="dnode"><div class="dnstat ok"></div>
+          <div class="dnl">transform</div>
+          <div class="dnt">Transform</div></div>
+          <div class="dport in"></div>
+          <div class="dport out"></div>
+        </div>
+
+        <!-- colorspace -->
+        <div class="dnode" style="left:340px;top:310px;border-color:rgba(139,92,246,0.4);">
+          <div class="dnode"><div class="dnstat ok"></div>
+          <div class="dnl">colorspace</div>
+          <div class="dnt">Color</div></div>
+          <div class="dport in"></div>
+          <div class="dport out"></div>
+        </div>
+
+        <!-- ai_denoise -->
+        <div class="dnode" style="left:590px;top:130px;border-color:rgba(168,85,247,0.4);">
+          <div class="dnode"><div class="dnstat ok"></div>
+          <div class="dnl">ai_denoise</div>
+          <div class="dnt">Enhance</div></div>
+          <div class="dport in"></div>
+          <div class="dport out"></div>
+        </div>
+
+        <!-- jxl_encoder -->
+        <div class="dnode" style="left:590px;top:240px;border-color:rgba(249,115,22,0.4);">
+          <div class="dnode"><div class="dnstat ok"></div>
+          <div class="dnl">jxl_encoder</div>
+          <div class="dnt">Export</div></div>
+          <div class="dport in"></div>
+        </div>
+
+        <!-- heif_encoder -->
+        <div class="dnode" style="left:590px;top:340px;border-color:rgba(20,184,166,0.4);">
+          <div class="dnode"><div class="dnstat ok"></div>
+          <div class="dnl">heif_encoder</div>
+          <div class="dnt">Export</div></div>
+          <div class="dport in"></div>
+        </div>
+
+        <div class="minimap"><div class="mm-vp" style="left:5%;top:6%;width:82%;height:62%;"></div></div>
+      </div>
+    </div>
+
+    <!-- ========== RIGHT ========== -->
+    <div class="col-right">
+      <div class="cbar">
+        <button class="cbtn act">All</button>
+        <button class="cbtn">Template</button>
+        <button class="cbtn">Group: High ISO</button>
+        <button class="cbtn">Image DSC_0034</button>
+      </div>
+
+      <!-- 4-image multi-select note -->
+      <div class="ms-param-note">
+        📋 <span>4 images selected</span> — Some parameter values differ across selection.
+        <a href="#" style="color:var(--accent);margin-left:8px;">Unify values</a>
+      </div>
+
+      <div class="plug-browser">
+        <div class="plug-search">
+          <input type="text" class="plug-input" placeholder="Search plugins...">
+          <select class="plug-input" style="width:100px;"><option>All</option></select>
+        </div>
+        <div class="plug-grid">
+          <div class="pcard"><span class="pname">raw_input</span><span class="pcat">Input</span></div>
+          <div class="pcard hl"><span class="pname">transform</span><span class="pcat">Transform</span></div>
+          <div class="pcard"><span class="pname">colorspace</span><span class="pcat">Color</span></div>
+          <div class="pcard"><span class="pname">lut3d</span><span class="pcat">Color</span></div>
+          <div class="pcard"><span class="pname">ai_denoise</span><span class="pcat">Enhance</span></div>
+          <div class="pcard"><span class="pname">lens_correct</span><span class="pcat">Correct</span></div>
+          <div class="pcard"><span class="pname">exif_rw</span><span class="pcat">Metadata</span></div>
+          <div class="pcard"><span class="pname">gps_set</span><span class="pcat">Metadata</span></div>
+          <div class="pcard"><span class="pname">heif_encoder</span><span class="pcat">Export</span></div>
+        </div>
+      </div>
+
+      <div class="sec-label">Plugin Details · transform</div>
+
+      <div class="psection">
+        <div class="psheader"><span class="pscaret">▼</span><span class="pstitle">Resize</span><span class="psbadge inherit">inherited</span></div>
+        <div class="psbody">
+          <div class="prow"><span class="plabel">Width</span><div class="pslider"><input type="range" min="1" max="65535" value="1920"><span class="pval">1920</span></div><span class="omark inherited"></span></div>
+          <div class="vsource">← Inherited from Template · 4 selected images all use this value</div>
+          <div class="prow"><span class="plabel">Height</span><div class="pslider"><input type="range" min="1" max="65535" value="1080"><span class="pval">1080</span></div><span class="omark inherited"></span></div>
+          <div class="prow"><span class="plabel">Filter</span><select class="pinput" style="flex:1;"><option>Lanczos3</option></select><span class="omark inherited"></span></div>
+        </div>
+      </div>
+
+      <div class="psection">
+        <div class="psheader"><span class="pscaret">▼</span><span class="pstitle">Denoise</span><span class="psbadge override">values vary</span></div>
+        <div class="psbody">
+          <div class="prow"><span class="plabel">Strength</span><div class="pslider"><input type="range" min="0" max="1" value="0.7" step="0.01"><span class="pval">vary</span></div><span class="omark override"></span></div>
+          <div class="vsource">← 4 selected images have different values: 0.3, 0.8, 0.8, 0.9</div>
+          <div style="margin-left:93px;margin-bottom:6px;display:flex;gap:4px;">
+            <button class="btn sm">Unify to: ____</button>
+            <button class="btn sm">Clear all overrides</button>
+          </div>
+          <div class="prow"><span class="plabel">Luma</span><div class="pslider"><input type="range" min="0" max="1" value="0.6" step="0.01"><span class="pval">varies</span></div><span class="omark override"></span></div>
+          <div class="vsource">← 4 selected images have different values: 0.3, 0.5, 0.6, 0.6</div>
+        </div>
+      </div>
+
+      <div class="psection collapsed">
+        <div class="psheader"><span class="pscaret">▶</span><span class="pstitle">Crop</span><span class="psbadge inherit">inherited</span></div>
+        <div class="psbody"></div>
+      </div>
+
+      <div class="psection">
+        <div class="expr-box">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><span style="color:var(--purple);">ƒ</span><span style="font-size:11px;color:var(--purple);">Expression</span></div>
+          <input type="text" class="expr-input" value="clamp(iso / 12800, 0, 1)">
+          <div class="expr-preview"><span>DSC_0034: 6400 → 0.50</span><span>night_012: 3200 → 0.25</span></div>
+        </div>
+      </div>
+
+      <div class="aux">
+        <div class="aux-title">📊 Histogram</div>
+        <div class="hbars">
+          <div class="b" style="height:25%"></div><div class="b" style="height:38%"></div><div class="b" style="height:55%"></div><div class="b" style="height:70%"></div>
+          <div class="b" style="height:82%"></div><div class="b" style="height:92%"></div><div class="b" style="height:100%"></div><div class="b" style="height:88%"></div>
+          <div class="b" style="height:72%"></div><div class="b" style="height:55%"></div><div class="b" style="height:38%"></div><div class="b" style="height:22%"></div>
+        </div>
+      </div>
+
+      <div class="rm-section"><button class="rm-btn">🗑 Remove transform from Pipeline</button></div>
+    </div>
+  </div>
+
+  <!-- Status Bar -->
+  <div class="statusbar">
+    <div class="sitem"><span style="font-size:14px;">▶</span><span>Batch:</span></div>
+    <span class="stext">8/12</span>
+    <div class="sprog"><div class="sprog-f"></div></div>
+    <span class="stext" style="font-weight:600;">65%</span>
+    <span class="stext">12 done · 3 failed</span>
+    <span class="stext" style="color:var(--t3);">|</span>
+    <span class="stext">⏱ 00:03:15 · ~00:01:20 · 12 img/min</span>
+    <span style="margin-left:auto;"></span>
+    <span class="stext" style="color:var(--t3);">Mem:512MB · GPU:Ready</span>
+    <span class="stext" style="color:var(--t3);">|</span>
+    <div class="sitem"><span>Backend:</span><div class="sdot"></div><span>Connected</span></div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,187 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Photopipeline — Fluent 2 · lut3d</title>
+<style>
+:root{--nBg1:#141414;--nBg2:#1f1f1f;--nBg3:#292929;--nBg4:#333;--nStr1:#383838;--nStr2:#4a4a4a;--nFg1:#f5f5f5;--nFg2:#adadad;--nFg3:#6e6e6e;--nFg4:#505050;--brand:#479ef5;--ok:#54b054;--err:#d13447;--warn:#d59900;--pColor:#ec4899;--rS:2px;--rM:4px;--rL:8px;--rXL:12px;--rCirc:50%;--st:1px;--sT:2px;--sXS:4px;--sS:8px;--sM:12px;--sL:16px;--sXL:20px;--ff:'Segoe UI Variable','Segoe UI',system-ui,sans-serif;--ffm:'Cascadia Code','Consolas',monospace;--f10:10px;--f12:12px;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:var(--ff);font-size:var(--f12);color:var(--nFg1);background:var(--nBg1);display:flex;justify-content:center;align-items:center;min-height:100vh;padding:16px;}
+.app{width:1500px;height:920px;background:var(--nBg2);border-radius:var(--rXL);border:var(--st) solid var(--nStr1);box-shadow:0 8px 32px rgba(0,0,0,0.5);display:flex;flex-direction:column;overflow:hidden;}
+.titlebar{height:44px;display:flex;align-items:center;padding:0 var(--sL);gap:var(--sS);flex-shrink:0;background:linear-gradient(180deg,rgba(255,255,255,0.02) 0%,transparent 100%);border-bottom:var(--st) solid var(--nStr1);-webkit-app-region:drag;user-select:none;}
+.tb-logo{width:22px;height:22px;background:var(--brand);border-radius:var(--rM);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--nBg1);}
+.tb-title{font-size:var(--f12);font-weight:600;flex:1;}.tb-btn{width:32px;height:32px;border:none;background:transparent;border-radius:var(--rM);cursor:pointer;color:var(--nFg3);font-size:14px;display:flex;align-items:center;justify-content:center;-webkit-app-region:no-drag;}
+.tb-btn:hover{background:var(--nBg4);color:var(--nFg1);}.main{flex:1;display:flex;overflow:hidden;}
+.sidebar{width:272px;display:flex;flex-direction:column;border-right:var(--st) solid var(--nStr1);background:var(--nBg1);}
+.sb-hdr{padding:var(--sS) var(--sL);font-size:var(--f10);font-weight:600;color:var(--nFg3);text-transform:uppercase;border-bottom:var(--st) solid var(--nStr1);}.sb-hdr .cnt{margin-left:auto;font-size:9px;color:var(--nFg4);}
+.sb-bar{display:flex;gap:var(--sXS);padding:var(--sS) var(--sM);border-bottom:var(--st) solid var(--nStr1);}
+.sb-list{flex:1;overflow-y:auto;padding:var(--sXS);}.sb-list::-webkit-scrollbar{width:6px;}.sb-list::-webkit-scrollbar-thumb{background:var(--nStr2);border-radius:3px;}
+.ic{display:flex;gap:var(--sS);padding:var(--sS);background:var(--nBg2);border:var(--st) solid transparent;border-radius:var(--rL);cursor:pointer;align-items:center;margin:1px 0;}
+.ic:hover{background:var(--nBg3);}.ic--sel{border-color:var(--brand);background:rgba(71,158,245,0.06);}
+.ic-th{width:52px;height:36px;border-radius:var(--rM);background:var(--nBg3);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px;}
+.ic-info{flex:1;min-width:0;}.ic-name{font-size:var(--f12);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ic-meta{font-size:var(--f10);color:var(--nFg4);display:flex;gap:6px;margin-top:1px;}.ic-tag{display:inline-block;margin-top:2px;padding:0 5px;border-radius:var(--rS);font-size:8px;font-weight:600;background:rgba(213,153,0,0.08);color:var(--warn);}
+.groups{border-top:var(--st) solid var(--nStr1);padding:var(--sXS);}.grp-hdr{font-size:var(--f10);color:var(--nFg4);padding:var(--sXS) var(--sM);text-transform:uppercase;}
+.grp-item{display:flex;align-items:center;gap:var(--sS);padding:5px var(--sM);border-radius:var(--rM);cursor:pointer;font-size:var(--f12);color:var(--nFg2);}
+.grp-item:hover{background:var(--nBg3);}.grp-dot{width:6px;height:6px;border-radius:var(--rCirc);flex-shrink:0;}.grp-dot--w{background:var(--warn);}
+.grp-cnt{margin-left:auto;font-size:var(--f10);color:var(--nFg3);background:var(--nBg3);padding:1px 6px;border-radius:var(--rS);}
+.grp-add{display:flex;gap:var(--sXS);padding:var(--sXS) var(--sM);}.grp-add button{font-size:var(--f12);color:var(--nFg3);background:transparent;border:var(--st) dashed var(--nStr1);border-radius:var(--rM);padding:3px var(--sM);cursor:pointer;}
+.grp-add button:hover{color:var(--nFg1);border-color:var(--nStr2);}
+.content{flex:1;min-width:480px;display:flex;flex-direction:column;background:var(--nBg2);}
+.ct-hdr{padding:var(--sS) var(--sL);font-size:var(--f10);font-weight:600;color:var(--nFg3);text-transform:uppercase;border-bottom:var(--st) solid var(--nStr1);display:flex;align-items:center;gap:var(--sS);}
+.ct-bar{display:flex;gap:var(--sXS);padding:var(--sS) var(--sM);border-bottom:var(--st) solid var(--nStr1);align-items:center;}
+.ct-canvas{flex:1;margin:var(--sS);background:var(--nBg1);border-radius:var(--rL);border:var(--st) solid var(--nStr1);position:relative;overflow:hidden;min-height:320px;}
+.btn{display:inline-flex;align-items:center;gap:var(--sS);padding:4px var(--sM);height:30px;border:var(--st) solid var(--nStr1);background:var(--nBg2);color:var(--nFg1);border-radius:var(--rM);font-family:var(--ff);font-size:var(--f12);cursor:pointer;white-space:nowrap;transition:0.1s;}
+.btn:hover{background:var(--nBg3);}.btn--p{background:var(--brand);color:var(--nBg1);border-color:var(--brand);}.btn--s{background:transparent;border-color:transparent;color:var(--nFg2);}
+.btn--s:hover{background:var(--nBg3);color:var(--nFg1);}.btn--xs{height:24px;padding:2px var(--sS);font-size:var(--f10);}.btn--d{background:transparent;border-color:var(--err);color:var(--err);width:100%;}
+.sep{width:1px;height:20px;background:var(--nStr1);margin:0 var(--sXS);}
+.dag-grid{width:100%;height:100%;background-image:linear-gradient(rgba(255,255,255,0.015) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.015) 1px,transparent 1px);background-size:32px 32px;position:relative;}
+.dnode{position:absolute;min-width:136px;background:var(--nBg2);border:1.5px solid var(--nStr2);border-radius:var(--rL);padding:8px 14px 8px 20px;font-size:var(--f12);cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.3);z-index:2;}
+.dnode:hover{border-color:var(--nFg4);}.dnode.sel{border-color:var(--brand);box-shadow:0 0 0 3px rgba(71,158,245,0.12),0 4px 16px rgba(0,0,0,0.4);z-index:5;}
+.dn-name{font-weight:600;}.dn-type{font-size:var(--f10);color:var(--nFg4);margin-top:2px;}.dport{position:absolute;width:14px;height:14px;border-radius:var(--rS);z-index:6;}
+.dport--o{right:-8px;top:50%;transform:translateY(-50%);background:var(--nBg2);border:2px solid var(--brand);}.dport--i{left:-8px;top:50%;transform:translateY(-50%);background:var(--nBg2);border:2px solid var(--ok);}
+.minimap{position:absolute;bottom:12px;right:12px;width:128px;height:84px;background:rgba(0,0,0,0.55);border:var(--st) solid var(--nStr1);border-radius:var(--rM);z-index:5;}
+.plug-bar{display:flex;align-items:center;gap:var(--sS);padding:var(--sS) var(--sM);border-top:var(--st) solid var(--nStr1);border-bottom:var(--st) solid var(--nStr1);background:var(--nBg1);}
+.plug-bar-t{font-size:var(--f10);font-weight:600;color:var(--nFg3);text-transform:uppercase;}.plug-input{height:28px;padding:0 var(--sS);background:var(--nBg2);border:var(--st) solid var(--nStr1);border-radius:var(--rM);color:var(--nFg1);font-family:var(--ff);font-size:var(--f12);outline:none;width:160px;}
+.plug-scroll{display:flex;gap:var(--sXS);overflow-x:auto;padding:var(--sS) var(--sM);background:var(--nBg1);}.plug-scroll::-webkit-scrollbar{height:4px;}.plug-scroll::-webkit-scrollbar-thumb{background:var(--nStr2);border-radius:2px;}
+.pcard{display:flex;flex-direction:column;gap:2px;padding:var(--sS) var(--sM);background:var(--nBg2);border:var(--st) solid transparent;border-radius:var(--rL);cursor:pointer;white-space:nowrap;min-width:100px;transition:0.1s;flex-shrink:0;}
+.pcard:hover{background:var(--nBg3);border-color:var(--nStr1);}.pcard--sel{border-color:var(--brand);background:rgba(71,158,245,0.06);}.pcard-name{font-size:var(--f12);font-weight:600;}.pcard-cat{font-size:9px;color:var(--nFg4);background:var(--nBg3);padding:1px 6px;border-radius:var(--rS);align-self:flex-start;}
+
+.panel{width:420px;display:flex;flex-direction:column;border-left:var(--st) solid var(--nStr1);background:var(--nBg2);overflow-y:auto;}.panel::-webkit-scrollbar{width:6px;}.panel::-webkit-scrollbar-thumb{background:var(--nStr2);border-radius:3px;}
+.sec-hdr{padding:var(--sS) var(--sL);font-size:var(--f10);font-weight:600;color:var(--nFg3);text-transform:uppercase;border-bottom:var(--st) solid var(--nStr1);}
+.ctx-bar{display:flex;gap:0;border-bottom:var(--st) solid var(--nStr1);padding:0 var(--sS);}
+.ctx-tab{padding:var(--sS) var(--sM);font-size:var(--f12);color:var(--nFg2);cursor:pointer;border-bottom:var(--sT) solid transparent;transition:0.15s;}.ctx-tab:hover{color:var(--nFg1);background:var(--nBg3);}.ctx-tab.act{color:var(--brand);border-bottom-color:var(--brand);}
+.plugin-header{display:flex;align-items:center;gap:var(--sM);padding:var(--sL);border-bottom:var(--st) solid var(--nStr1);}
+.plugin-icon{width:40px;height:40px;border-radius:var(--rM);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+.plugin-meta{flex:1;}.plugin-name{font-size:14px;font-weight:600;}.plugin-id{font-size:var(--f10);color:var(--nFg4);font-family:var(--ffm);margin-top:2px;}
+.plugin-tags{display:flex;gap:var(--sXS);margin-top:4px;}.badge{padding:1px 6px;border-radius:var(--rS);font-size:9px;font-weight:600;}
+.badge--tag{background:var(--nBg3);color:var(--nFg2);}.plugin-hw{margin-top:6px;font-size:var(--f10);color:var(--nFg4);display:flex;gap:var(--sL);}
+.plugin-desc{padding:var(--sM) var(--sL);font-size:var(--f12);color:var(--nFg2);line-height:1.5;border-bottom:var(--st) solid var(--nStr1);}
+.acc-item{border-bottom:var(--st) solid var(--nStr1);}.acc-header{display:flex;align-items:center;gap:var(--sS);padding:var(--sS) var(--sL);cursor:pointer;font-size:var(--f12);}.acc-header:hover{background:var(--nBg3);}
+.acc-caret{font-size:7px;color:var(--nFg3);width:14px;flex-shrink:0;transition:transform 0.15s;}.acc-item.collapsed .acc-caret{transform:rotate(-90deg);}
+.acc-title{font-weight:600;color:var(--nFg2);flex:1;}.acc-count{font-size:9px;padding:0 6px;border-radius:var(--rS);height:16px;display:inline-flex;align-items:center;font-weight:600;background:var(--nBg4);color:var(--nFg3);}
+.acc-collapsed{font-size:9px;padding:0 6px;border-radius:var(--rS);height:16px;display:inline-flex;align-items:center;font-weight:600;background:rgba(71,158,245,0.08);color:var(--brand);}
+.acc-panel{padding:0 var(--sL) var(--sM);display:none;}.acc-item:not(.collapsed) .acc-panel{display:block;}
+.prow{display:flex;align-items:center;gap:var(--sS);margin-bottom:var(--sS);min-width:0;}
+.plbl{width:95px;text-align:right;font-size:var(--f12);color:var(--nFg2);flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pbody{flex:1;display:flex;align-items:center;gap:6px;min-width:0;}.pdesc{font-size:9px;color:var(--nFg4);margin:-2px 0 6px 103px;line-height:1.4;}
+.padv{font-size:8px;padding:0 4px;border-radius:var(--rS);background:rgba(213,153,0,0.08);color:var(--warn);font-weight:600;margin-left:4px;vertical-align:middle;}.pval-mono{width:52px;text-align:right;font-family:var(--ffm);flex-shrink:0;}
+.fui-Dropdown{flex:1;height:30px;padding:0 var(--sS);background:var(--nBg1);border:var(--st) solid var(--nStr1);border-radius:var(--rM);color:var(--nFg1);font-family:var(--ff);font-size:var(--f12);outline:none;cursor:pointer;appearance:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.fui-Input{flex:1;height:30px;padding:0 var(--sS);background:var(--nBg1);border:var(--st) solid var(--nStr1);border-radius:var(--rM);color:var(--nFg1);font-family:var(--ff);font-size:var(--f12);outline:none;}
+.fui-Input::placeholder{color:var(--nFg4);}
+
+/* Slider with ticks (ParameterType::Slider) */
+.tick-slider{flex:1;display:flex;flex-direction:column;gap:2px;}
+.tick-slider input[type=range]{width:100%;height:4px;-webkit-appearance:none;background:var(--nStr2);border-radius:2px;}
+.tick-slider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;background:var(--brand);border-radius:50%;cursor:pointer;border:2px solid var(--nBg2);}
+.tick-marks{display:flex;justify-content:space-between;padding:0 2px;}
+.tick-marks span{font-size:8px;color:var(--nFg4);}
+
+.fui-Switch{display:flex;align-items:center;gap:var(--sS);cursor:pointer;}.sw-track{width:36px;height:18px;background:var(--nStr2);border-radius:9px;position:relative;transition:background 0.15s;flex-shrink:0;}
+.sw-track.on{background:var(--brand);}.sw-thumb{position:absolute;top:2px;left:2px;width:14px;height:14px;background:white;border-radius:50%;transition:left 0.15s;}.sw-track.on .sw-thumb{left:20px;}.sw-lbl{font-size:var(--f12);color:var(--nFg2);}
+.odot{width:8px;height:8px;border-radius:50%;flex-shrink:0;cursor:pointer;}.odot--inh{border:1.5px solid var(--nStr2);background:transparent;}.odot--ovr{background:var(--warn);}
+.expr-box{margin:0 var(--sL) var(--sM);padding:var(--sS) var(--sM);background:rgba(176,132,244,0.04);border:var(--st) solid rgba(176,132,244,0.15);border-radius:var(--rL);}
+.expr-label{display:flex;align-items:center;gap:var(--sS);margin-bottom:4px;}.expr-label span{font-size:var(--f12);color:#b084f4;font-weight:600;}
+.expr-input{width:100%;background:transparent;border:none;color:var(--nFg1);font-family:var(--ffm);font-size:var(--f12);outline:none;padding:2px 0;}
+.placeholder-box{display:flex;align-items:center;justify-content:center;padding:var(--sL);background:var(--nBg1);border-radius:var(--rL);border:var(--st) dashed var(--nStr1);margin:0 var(--sL);}.placeholder-box span{font-size:var(--f12);color:var(--nFg4);}
+.section-label{font-size:var(--f10);font-weight:600;color:var(--nFg3);text-transform:uppercase;margin-bottom:var(--sS);}.preview-area{padding:var(--sM) var(--sL);border-bottom:var(--st) solid var(--nStr1);}
+.hist-bars{display:flex;gap:1px;align-items:flex-end;height:48px;margin:0 var(--sL);padding:var(--sS) 0;}.hist-bars div{flex:1;background:var(--brand);border-radius:1px 1px 0 0;opacity:0.7;}
+.vectorscope{display:flex;align-items:center;justify-content:center;height:100px;margin:0 var(--sL);background:var(--nBg1);border-radius:var(--rL);border:var(--st) solid var(--nStr1);font-size:var(--f10);color:var(--nFg4);}
+.gui-footer{padding:4px var(--sL);font-size:9px;color:var(--nFg4);border-bottom:var(--st) solid var(--nStr1);display:flex;gap:var(--sXL);flex-wrap:wrap;}.footer-area{padding:var(--sM) var(--sL);}
+.statusbar{height:36px;background:var(--nBg2);border-top:var(--st) solid var(--nStr1);display:flex;align-items:center;padding:0 var(--sL);gap:var(--sM);font-size:var(--f12);flex-shrink:0;}
+.sb-dot{width:8px;height:8px;border-radius:50%;background:var(--ok);}
+</style></head><body><div class="app">
+  <div class="titlebar"><span class="tb-logo">◆</span><span class="tb-title">Photopipeline — HDR Pipeline v1</span><button class="tb-btn">◐</button><button class="tb-btn">⚙</button></div>
+  <div class="main">
+    <div class="sidebar">
+      <div class="sb-hdr">Candidate Files<span class="cnt">12</span></div>
+      <div class="sb-bar"><button class="btn btn--p btn--xs">📂 Import</button><button class="btn btn--s btn--xs">🗑 Clear</button><button class="btn btn--s btn--xs">📤 To Batch</button></div>
+      <div class="sb-list">
+        <div class="ic ic--sel"><div class="ic-th" style="background:linear-gradient(135deg,#2a2a,#3a3a)">🌄</div><div class="ic-info"><div class="ic-name">DSC_0034.ARW</div><div class="ic-meta"><span>6000×4000 ARW</span></div><span class="ic-tag">High ISO</span></div></div>
+        <div class="ic"><div class="ic-th" style="background:linear-gradient(135deg,#112,#223)">🎆</div><div class="ic-info"><div class="ic-name">night_012.NEF</div><div class="ic-meta"><span>6016×4016 NEF</span></div><span class="ic-tag">Night</span></div></div>
+      </div>
+      <div class="groups"><div class="grp-hdr">Groups</div><div class="grp-item"><span class="grp-dot grp-dot--w"></span>High ISO<span class="grp-cnt">4</span></div><div class="grp-add"><button style="flex:1">+ Create Group…</button></div></div>
+    </div>
+    <div class="content"><div class="ct-hdr"><span style="width:8px;height:8px;border-radius:50%;background:var(--ok)"></span>Pipeline Editor<span style="margin-left:auto;font-size:var(--f10);color:var(--nFg4);">3 nodes</span></div>
+      <div class="ct-bar"><button class="btn btn--s">📄 New</button><button class="btn btn--s">💾 Save</button><span class="sep"></span><button class="btn btn--s">✓ Validate</button><span class="sep"></span><button class="btn btn--p">▶ Run</button><span class="sep"></span><button class="btn btn--s" style="min-width:30px;justify-content:center;padding:4px;">🔍+</button><button class="btn btn--s">⊞ Fit</button></div>
+      <div class="ct-canvas"><div class="dag-grid">
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1;" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 266,100 L 290,100 Q 320,100 320,160 L 320,200 Q 320,240 360,240" stroke="#479ef5" stroke-width="2" fill="none" opacity="0.55" stroke-linecap="round"/>
+          <path d="M 530,240 L 560,240 Q 590,240 590,280 Q 590,310 630,310" stroke="#479ef5" stroke-width="2" fill="none" opacity="0.55" stroke-linecap="round"/>
+        </svg>
+        <div class="dnode" style="left:104px;top:70px;"><div class="dn-name">raw_input</div><div class="dn-type">Input</div><div class="dport dport--o"></div></div>
+        <div class="dnode" style="left:360px;top:210px;"><div class="dn-name">colorspace</div><div class="dn-type">Color</div><div class="dport dport--i"></div><div class="dport dport--o"></div></div>
+        <div class="dnode sel" style="left:360px;top:340px;"><div class="dn-name">lut3d</div><div class="dn-type">Color</div><div class="dport dport--i"></div><div class="dport dport--o"></div></div>
+        <div class="dnode" style="left:630px;top:280px;border-color:rgba(20,184,166,0.4);"><div class="dn-name">heif_encoder</div><div class="dn-type">Export</div><div class="dport dport--i"></div></div>
+        <div class="minimap"></div>
+      </div></div>
+      <div class="plug-bar"><span class="plug-bar-t">Plugins</span><input class="plug-input" placeholder="Search..."><select class="plug-input" style="width:96px;"><option>All</option></select><span style="flex:1;"></span></div>
+      <div class="plug-scroll">
+        <div class="pcard"><div class="pcard-name">raw_input</div><span class="pcard-cat">Input</span></div>
+        <div class="pcard"><div class="pcard-name">colorspace</div><span class="pcard-cat">Color</span></div>
+        <div class="pcard pcard--sel"><div class="pcard-name">lut3d</div><span class="pcard-cat">Color</span></div>
+        <div class="pcard"><div class="pcard-name">ai_denoise</div><span class="pcard-cat">Enhance</span></div>
+        <div class="pcard"><div class="pcard-name">heif_encoder</div><span class="pcard-cat">Export</span></div>
+        <div class="pcard"><div class="pcard-name">jxl_encoder</div><span class="pcard-cat">Export</span></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="sec-hdr">Plugin Details · lut3d</div>
+      <div class="ctx-bar"><div class="ctx-tab act">All</div><div class="ctx-tab">Template</div><div class="ctx-tab">High ISO</div><div class="ctx-tab">DSC_0034</div></div>
+      <div class="plugin-header">
+        <div class="plugin-icon" style="background:rgba(236,72,153,0.12);color:var(--pColor);">🧊</div>
+        <div class="plugin-meta"><div class="plugin-name">3D LUT</div><div class="plugin-id">photopipeline.plugins.lut3d</div>
+        <div class="plugin-tags"><span class="badge badge--tag" style="background:rgba(236,72,153,0.10);color:var(--pColor);">Color</span><span class="badge badge--tag">v1.0.0</span><span class="badge badge--tag">lut</span><span class="badge badge--tag">grading</span></div>
+        <div class="plugin-hw">PixelProcessor · RAM ≥ 256 MB · <span style="color:var(--warn);">GPU recommended</span></div></div>
+      </div>
+      <div class="plugin-desc">Apply 3D Look-Up Tables for color grading and film emulation</div>
+
+      <!-- LUT File -->
+      <div class="acc-item"><div class="acc-header"><span class="acc-caret">▼</span><span class="acc-title">3D LUT File</span><span class="acc-count">2 params</span></div>
+      <div class="acc-panel">
+        <div class="prow"><span class="plbl">LUT File</span><div class="pbody"><input class="fui-Input" placeholder="Path to .cube/.3dl file" value=""><button class="btn btn--s" style="padding:4px 8px;height:30px;">📂</button></div><span class="odot odot--inh"></span></div>
+        <div class="pdesc">Path to .cube, .3dl, or .look file · must_exist: true · filters: *.cube, *.3dl, *.look</div>
+        <div class="prow"><span class="plbl">Format</span><div class="pbody"><select class="fui-Dropdown"><option>Iridas .cube ★ — Adobe/DaVinci Resolve</option><option>Autodesk .3dl — Flame/Lustre</option><option>Assimilate .look — Scratch</option><option>Rising Sun .csp — CineSpace</option></select></div><span class="odot odot--inh"></span></div>
+        <div class="pdesc">Format of the 3D LUT file · default: cube</div>
+      </div></div>
+
+      <!-- Transform -->
+      <div class="acc-item"><div class="acc-header"><span class="acc-caret">▼</span><span class="acc-title">Transform</span><span class="acc-count">3 params</span></div>
+      <div class="acc-panel">
+        <!-- Intensity: ParameterType::Slider with show_ticks=true -->
+        <div class="prow"><span class="plbl">Intensity</span><div class="pbody">
+          <div class="tick-slider"><input type="range" min="0" max="100" value="100" step="1"><div class="tick-marks"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div></div>
+          <span class="pval-mono">100%</span>
+        </div><span class="odot odot--inh"></span></div>
+        <div class="pdesc">Blend between original and LUT · default: 100% · step: 1 · ParameterType::Slider</div>
+        <!-- Input Color Space (advanced) -->
+        <div class="prow"><span class="plbl">Input CS<span class="padv">advanced</span></span><div class="pbody"><select class="fui-Dropdown"><option>sRGB ★</option><option>Display P3</option><option>Rec.709</option><option>Rec.2020 [hdr]</option></select></div><span class="odot odot--inh"></span></div>
+        <div class="pdesc">Color space the LUT expects · default: srgb · advanced</div>
+        <!-- Clamp -->
+        <div class="prow"><span class="plbl">Clamp Output</span><div class="pbody"><div class="fui-Switch"><div class="sw-track on"><div class="sw-thumb"></div></div><span class="sw-lbl">Clamp</span></div></div><span class="odot odot--inh"></span></div>
+        <div class="pdesc">Clamp output to 0–1 range · default: true</div>
+      </div></div>
+
+      <!-- Interpolation (collapsed) -->
+      <div class="acc-item collapsed"><div class="acc-header"><span class="acc-caret">▶</span><span class="acc-title">Interpolation</span><span class="acc-collapsed">default collapsed</span></div>
+      <div class="acc-panel">
+        <div class="prow"><span class="plbl">Method<span class="padv">advanced</span></span><div class="pbody"><select class="fui-Dropdown"><option>Tetrahedral ★ — Better quality, good performance</option><option>Trilinear — Fast, may show banding</option></select></div><span class="odot odot--inh"></span></div>
+        <div class="pdesc">LUT sample interpolation · default: tetrahedral · advanced</div>
+      </div></div>
+
+      <!-- Expression -->
+      <div style="padding:var(--sM) var(--sL);border-bottom:var(--st) solid var(--nStr1);"><div class="expr-box"><div class="expr-label"><span>𝑓</span><span>Expression</span></div><input class="expr-input" placeholder="e.g. lut_intensity * 0.8" value=""></div></div>
+
+      <!-- Aux: Histogram -->
+      <div class="preview-area"><div class="section-label">📊 Histogram</div><div class="hist-bars"><div style="height:22%"></div><div style="height:34%"></div><div style="height:48%"></div><div style="height:64%"></div><div style="height:78%"></div><div style="height:90%"></div><div style="height:100%"></div><div style="height:88%"></div><div style="height:72%"></div><div style="height:54%"></div><div style="height:36%"></div><div style="height:20%"></div></div></div>
+
+      <!-- Aux: Vectorscope -->
+      <div class="preview-area"><div class="section-label">🎯 Vectorscope</div><div class="vectorscope">Vectorscope — hue/saturation polar display</div></div>
+
+      <!-- Preview -->
+      <div class="preview-area"><div class="section-label">Preview</div><div class="placeholder-box"><span>PreviewMode::BeforeAfter — lock_zoom: true</span></div></div>
+
+      <div class="gui-footer"><span>icon: grid3x3</span><span>color: #ec4899</span><span>preview: BeforeAfter(lockZoom)</span><span>aux: [Histogram, Vectorscope]</span><span>min: 320px</span></div>
+      <div class="footer-area"><button class="btn btn--d">🗑 Remove from Pipeline</button></div>
+    </div>
+  </div>
+  <div class="statusbar"><span style="color:var(--nFg2);">▶ Batch: 8/12</span><div style="flex:1;max-width:180px;height:4px;background:var(--nStr1);border-radius:2px;"><div style="width:65%;height:100%;background:var(--brand);border-radius:2px;"></div></div><span style="font-weight:600;">65%</span><span style="color:var(--nFg2);">12 done</span><span style="color:var(--nFg4);">·</span><span style="color:var(--nFg2);">⏱ 00:03:15</span><span style="margin-left:auto;color:var(--nFg4);">Mem:512MB · GPU:Ready</span><span style="color:var(--nFg4);">·</span><span>Backend</span><span class="sb-dot"></span><span>Connected</span></div>
+</div></body></html>

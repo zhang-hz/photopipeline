@@ -1,0 +1,313 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Photopipeline — Fluent 2 Design Language</title>
+<style>
+:root {
+  --neutralBg1: #141414; --neutralBg2: #1f1f1f; --neutralBg3: #292929; --neutralBg4: #333333;
+  --neutralStroke1: #383838; --neutralStroke2: #4a4a4a;
+  --neutralFg1: #f5f5f5; --neutralFg2: #adadad; --neutralFg3: #6e6e6e; --neutralFg4: #505050;
+  --brandFg1: #479ef5; --successFg: #54b054; --dangerFg: #d13447; --warningFg: #d59900;
+  --pluginColors: #ef4444, #06b6d4, #8b5cf6, #ec4899, #6366f1, #a855f7, #3b82f6, #10b981, #f59e0b, #14b8a6, #f97316, #22c55e, #64748b, #0ea5e9;
+  --radiusSmall: 2px; --radiusMedium: 4px; --radiusLarge: 8px; --radiusXLarge: 12px; --radiusCircular: 50%;
+  --strokeThin: 1px; --strokeThick: 2px;
+  --spacingXS: 4px; --spacingS: 8px; --spacingM: 12px; --spacingL: 16px; --spacingXL: 20px; --spacingXXL: 24px;
+  --fontFamily: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  --fontFamilyMono: 'Cascadia Code', 'Consolas', monospace;
+  --fontSizeCaption1: 10px; --fontSizeBody1: 12px; --fontSizeBody2: 13px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:var(--fontFamily);font-size:var(--fontSizeBody1);color:var(--neutralFg1);background:var(--neutralBg1);display:flex;justify-content:center;align-items:center;min-height:100vh;padding:16px; }
+.app { width:1500px;height:920px;background:var(--neutralBg2);border-radius:var(--radiusXLarge);border:var(--strokeThin) solid var(--neutralStroke1);box-shadow:0 8px 32px rgba(0,0,0,0.5);display:flex;flex-direction:column;overflow:hidden; }
+
+/* TitleBar */
+.titlebar { height:44px;display:flex;align-items:center;padding:0 var(--spacingL);gap:var(--spacingS);flex-shrink:0;background:linear-gradient(180deg,rgba(255,255,255,0.02) 0%,transparent 100%);border-bottom:var(--strokeThin) solid var(--neutralStroke1);-webkit-app-region:drag;user-select:none; }
+.tb-logo { width:22px;height:22px;background:var(--brandFg1);border-radius:var(--radiusMedium);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--neutralBg1); }
+.tb-title { font-size:var(--fontSizeBody1);font-weight:600;flex:1; }
+.tb-btn { width:32px;height:32px;border:none;background:transparent;border-radius:var(--radiusMedium);cursor:pointer;color:var(--neutralFg3);display:flex;align-items:center;justify-content:center;-webkit-app-region:no-drag;font-size:14px; }
+.tb-btn:hover { background:var(--neutralBg4);color:var(--neutralFg1); }
+.main { flex:1;display:flex;overflow:hidden; }
+
+/* ═══ LEFT: Candidate Files ═══ */
+.sidebar { width:272px;display:flex;flex-direction:column;border-right:var(--strokeThin) solid var(--neutralStroke1);background:var(--neutralBg1); }
+.sb-hdr { padding:var(--spacingS) var(--spacingL);font-size:var(--fontSizeCaption1);font-weight:600;color:var(--neutralFg3);text-transform:uppercase;letter-spacing:0.6px;border-bottom:var(--strokeThin) solid var(--neutralStroke1);display:flex;align-items:center;gap:var(--spacingXS); }
+.sb-hdr .cnt { margin-left:auto;font-size:9px;color:var(--neutralFg4); }
+.sb-bar { display:flex;gap:var(--spacingXS);padding:var(--spacingS) var(--spacingM);border-bottom:var(--strokeThin) solid var(--neutralStroke1); }
+.sb-list { flex:1;overflow-y:auto;padding:var(--spacingXS); }
+.sb-list::-webkit-scrollbar { width:6px; }.sb-list::-webkit-scrollbar-thumb { background:var(--neutralStroke2);border-radius:3px; }
+.ic { display:flex;gap:var(--spacingS);padding:var(--spacingS);background:var(--neutralBg2);border:var(--strokeThin) solid transparent;border-radius:var(--radiusLarge);cursor:pointer;align-items:center;margin:1px 0;transition:0.1s; }
+.ic:hover { background:var(--neutralBg3); }
+.ic--sel { border-color:var(--brandFg1);background:rgba(71,158,245,0.06); }
+.ic--multi { border-color:var(--brandFg1);border-style:dashed; }
+.ic-th { width:52px;height:36px;border-radius:var(--radiusMedium);background:var(--neutralBg3);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px; }
+.ic-info { flex:1;min-width:0; }.ic-name { font-size:var(--fontSizeBody1);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.ic-meta { font-size:var(--fontSizeCaption1);color:var(--neutralFg4);display:flex;gap:6px;margin-top:1px; }
+.ic-tag { display:inline-block;margin-top:2px;padding:0 5px;border-radius:var(--radiusSmall);font-size:8px;font-weight:600;background:rgba(213,153,0,0.08);color:var(--warningFg); }
+.ic-size { font-size:var(--fontSizeCaption1);color:var(--neutralFg4);flex-shrink:0; }
+.msbar { display:none;padding:var(--spacingXS) var(--spacingM);border-bottom:var(--strokeThin) solid var(--neutralStroke1);background:rgba(213,153,0,0.06);align-items:center;gap:var(--spacingS); }
+.msbar.show { display:flex; }.msbar-t { font-size:var(--fontSizeBody1);color:var(--warningFg);flex:1; }
+
+.groups { border-top:var(--strokeThin) solid var(--neutralStroke1);padding:var(--spacingXS); }
+.grp-hdr { font-size:var(--fontSizeCaption1);color:var(--neutralFg4);padding:var(--spacingXS) var(--spacingM);text-transform:uppercase;letter-spacing:0.5px; }
+.grp-item { display:flex;align-items:center;gap:var(--spacingS);padding:5px var(--spacingM);border-radius:var(--radiusMedium);cursor:pointer;font-size:var(--fontSizeBody1);color:var(--neutralFg2); }
+.grp-item:hover { background:var(--neutralBg3); }.grp-item:hover .grp-acts { display:flex; }
+.grp-dot { width:6px;height:6px;border-radius:var(--radiusCircular);flex-shrink:0; }
+.grp-dot--w { background:var(--warningFg); }
+.grp-cnt { margin-left:auto;font-size:var(--fontSizeCaption1);color:var(--neutralFg3);background:var(--neutralBg3);padding:1px 6px;border-radius:var(--radiusSmall); }
+.grp-acts { display:none;gap:2px;margin-left:2px; }
+.grp-acts button { width:22px;height:22px;border:none;background:transparent;border-radius:var(--radiusSmall);cursor:pointer;font-size:10px;color:var(--neutralFg4);display:flex;align-items:center;justify-content:center; }
+.grp-acts button:hover { background:var(--neutralBg4);color:var(--neutralFg1); }.grp-acts .del:hover { color:var(--dangerFg); }
+.grp-add { display:flex;gap:var(--spacingXS);padding:var(--spacingXS) var(--spacingM); }
+.grp-add button { font-size:var(--fontSizeBody1);color:var(--neutralFg3);background:transparent;border:var(--strokeThin) dashed var(--neutralStroke1);border-radius:var(--radiusMedium);padding:3px var(--spacingM);cursor:pointer;text-align:left; }
+.grp-add button:hover { color:var(--neutralFg1);border-color:var(--neutralStroke2); }
+
+/* ═══ CENTER: DAG (top) + Plugin Browser (bottom) ═══ */
+.content { flex:1;min-width:480px;display:flex;flex-direction:column;background:var(--neutralBg2); }
+.ct-hdr { padding:var(--spacingS) var(--spacingL);font-size:var(--fontSizeCaption1);font-weight:600;color:var(--neutralFg3);text-transform:uppercase;letter-spacing:0.6px;border-bottom:var(--strokeThin) solid var(--neutralStroke1);display:flex;align-items:center;gap:var(--spacingS); }
+.ct-bar { display:flex;gap:var(--spacingXS);padding:var(--spacingS) var(--spacingM);border-bottom:var(--strokeThin) solid var(--neutralStroke1);align-items:center; }
+.ct-canvas { flex:1;margin:var(--spacingS);background:var(--neutralBg1);border-radius:var(--radiusLarge);border:var(--strokeThin) solid var(--neutralStroke1);position:relative;overflow:hidden;min-height:300px; }
+
+/* Fluent 2 Buttons */
+.btn { display:inline-flex;align-items:center;gap:var(--spacingS);padding:4px var(--spacingM);height:30px;border:var(--strokeThin) solid var(--neutralStroke1);background:var(--neutralBg2);color:var(--neutralFg1);border-radius:var(--radiusMedium);font-family:var(--fontFamily);font-size:var(--fontSizeBody1);cursor:pointer;white-space:nowrap;transition:all 0.1s;user-select:none; }
+.btn:hover { background:var(--neutralBg3); }
+.btn--p { background:var(--brandFg1);color:var(--neutralBg1);border-color:var(--brandFg1); }
+.btn--s { background:transparent;border-color:transparent;color:var(--neutralFg2); }
+.btn--s:hover { background:var(--neutralBg3);color:var(--neutralFg1); }
+.btn--xs { height:24px;padding:2px var(--spacingS);font-size:var(--fontSizeCaption1);border-radius:var(--radiusSmall); }
+.btn--d { background:transparent;border-color:var(--dangerFg);color:var(--dangerFg);width:100%; }
+.btn--d:hover { background:rgba(209,52,71,0.08); }
+.sep { width:1px;height:20px;background:var(--neutralStroke1);margin:0 var(--spacingXS); }
+
+/* DAG */
+.dag-grid { width:100%;height:100%;background-image:linear-gradient(rgba(255,255,255,0.015) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.015) 1px,transparent 1px);background-size:32px 32px;position:relative; }
+.dnode { position:absolute;min-width:136px;background:var(--neutralBg2);border:1.5px solid var(--neutralStroke2);border-radius:var(--radiusLarge);padding:8px 14px 8px 20px;font-size:var(--fontSizeBody1);cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.3);z-index:2;transition:border-color 0.15s; }
+.dnode:hover { border-color:var(--neutralFg4); }
+.dnode.sel { border-color:var(--brandFg1);box-shadow:0 0 0 3px rgba(71,158,245,0.12),0 4px 16px rgba(0,0,0,0.4);z-index:5; }
+.dn-name { font-weight:600; }.dn-type { font-size:var(--fontSizeCaption1);color:var(--neutralFg4);margin-top:2px; }
+.dn-badge { position:absolute;right:6px;top:6px;font-size:8px;background:rgba(71,158,245,0.12);color:var(--brandFg1);padding:1px 6px;border-radius:var(--radiusSmall); }
+.dport { position:absolute;width:14px;height:14px;border-radius:var(--radiusSmall);z-index:6; }
+.dport--o { right:-8px;top:50%;transform:translateY(-50%);background:var(--neutralBg2);border:2px solid var(--brandFg1); }
+.dport--i { left:-8px;top:50%;transform:translateY(-50%);background:var(--neutralBg2);border:2px solid var(--successFg); }
+.minimap { position:absolute;bottom:12px;right:12px;width:128px;height:84px;background:rgba(0,0,0,0.55);border:var(--strokeThin) solid var(--neutralStroke1);border-radius:var(--radiusMedium);z-index:5; }
+.mm-vp { position:absolute;border:1px solid var(--brandFg1);background:rgba(71,158,245,0.06);border-radius:1px; }
+
+/* ═══ PLUGIN BROWSER (horizontal strip below DAG) ═══ */
+.plug-bar { display:flex;align-items:center;gap:var(--spacingS);padding:var(--spacingS) var(--spacingM);border-top:var(--strokeThin) solid var(--neutralStroke1);border-bottom:var(--strokeThin) solid var(--neutralStroke1);background:var(--neutralBg1); }
+.plug-bar-title { font-size:var(--fontSizeCaption1);font-weight:600;color:var(--neutralFg3);text-transform:uppercase;letter-spacing:0.6px;white-space:nowrap; }
+.plug-input { height:28px;padding:0 var(--spacingS);background:var(--neutralBg2);border:var(--strokeThin) solid var(--neutralStroke1);border-radius:var(--radiusMedium);color:var(--neutralFg1);font-family:var(--fontFamily);font-size:var(--fontSizeBody1);outline:none;width:160px; }
+.plug-input::placeholder { color:var(--neutralFg4); }
+.plug-scroll { display:flex;gap:var(--spacingXS);overflow-x:auto;padding:var(--spacingS) var(--spacingM);background:var(--neutralBg1); }
+.plug-scroll::-webkit-scrollbar { height:4px; }.plug-scroll::-webkit-scrollbar-thumb { background:var(--neutralStroke2);border-radius:2px; }
+.pcard { display:flex;flex-direction:column;gap:2px;padding:var(--spacingS) var(--spacingM);background:var(--neutralBg2);border:var(--strokeThin) solid transparent;border-radius:var(--radiusLarge);cursor:pointer;white-space:nowrap;min-width:100px;transition:0.1s;flex-shrink:0; }
+.pcard:hover { background:var(--neutralBg3);border-color:var(--neutralStroke1); }
+.pcard--sel { border-color:var(--brandFg1);background:rgba(71,158,245,0.06); }
+.pcard-name { font-size:var(--fontSizeBody1);font-weight:600; }
+.pcard-cat { font-size:9px;color:var(--neutralFg4);background:var(--neutralBg3);padding:1px 6px;border-radius:var(--radiusSmall);align-self:flex-start; }
+
+/* ═══ RIGHT: Plugin Control Panel ═══ */
+.panel { width:420px;display:flex;flex-direction:column;border-left:var(--strokeThin) solid var(--neutralStroke1);background:var(--neutralBg2);overflow-y:auto;overflow-x:hidden;min-width:0; }
+.panel::-webkit-scrollbar { width:6px; }.panel::-webkit-scrollbar-thumb { background:var(--neutralStroke2);border-radius:3px; }
+
+.sec-hdr { padding:var(--spacingS) var(--spacingL);font-size:var(--fontSizeCaption1);font-weight:600;color:var(--neutralFg3);text-transform:uppercase;letter-spacing:0.6px;border-bottom:var(--strokeThin) solid var(--neutralStroke1); }
+.ctx-bar { display:flex;gap:0;border-bottom:var(--strokeThin) solid var(--neutralStroke1);padding:0 var(--spacingS);background:var(--neutralBg2); }
+.ctx-tab { padding:var(--spacingS) var(--spacingM);font-size:var(--fontSizeBody1);color:var(--neutralFg2);cursor:pointer;border-bottom:var(--strokeThick) solid transparent;transition:0.15s; }
+.ctx-tab:hover { color:var(--neutralFg1);background:var(--neutralBg3); }
+.ctx-tab.act { color:var(--brandFg1);border-bottom-color:var(--brandFg1); }
+
+.plugin-header { display:flex;align-items:center;gap:var(--spacingM);padding:var(--spacingL);border-bottom:var(--strokeThin) solid var(--neutralStroke1); }
+.plugin-icon { width:40px;height:40px;border-radius:var(--radiusMedium);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0; }
+.plugin-meta { flex:1; }.plugin-name { font-size:14px;font-weight:600; }
+.plugin-id { font-size:var(--fontSizeCaption1);color:var(--neutralFg4);font-family:var(--fontFamilyMono);margin-top:2px; }
+.plugin-tags { display:flex;gap:var(--spacingXS);margin-top:4px;flex-wrap:wrap; }
+.badge { padding:1px 6px;border-radius:var(--radiusSmall);font-size:9px;font-weight:600; }
+.badge--cat { color:inherit; }.badge--tag { background:var(--neutralBg3);color:var(--neutralFg2); }
+.plugin-hw { margin-top:6px;font-size:var(--fontSizeCaption1);color:var(--neutralFg4);display:flex;gap:var(--spacingL); }
+.plugin-desc { padding:var(--spacingM) var(--spacingL);font-size:var(--fontSizeBody1);color:var(--neutralFg2);line-height:1.5;border-bottom:var(--strokeThin) solid var(--neutralStroke1); }
+
+.acc-item { border-bottom:var(--strokeThin) solid var(--neutralStroke1); }
+.acc-header { display:flex;align-items:center;gap:var(--spacingS);padding:var(--spacingS) var(--spacingL);cursor:pointer;user-select:none;font-size:var(--fontSizeBody1); }
+.acc-header:hover { background:var(--neutralBg3); }
+.acc-caret { font-size:7px;color:var(--neutralFg3);width:14px;flex-shrink:0;transition:transform 0.15s; }
+.acc-item.collapsed .acc-caret { transform:rotate(-90deg); }
+.acc-title { font-weight:600;color:var(--neutralFg2);flex:1; }
+.acc-count { font-size:9px;padding:0 6px;border-radius:var(--radiusSmall);height:16px;display:inline-flex;align-items:center;font-weight:600;background:var(--neutralBg4);color:var(--neutralFg3); }
+.acc-badge--collapsed { font-size:9px;padding:0 6px;border-radius:var(--radiusSmall);height:16px;display:inline-flex;align-items:center;font-weight:600;background:rgba(71,158,245,0.08);color:var(--brandFg1); }
+.acc-badge--override { font-size:9px;padding:0 6px;border-radius:var(--radiusSmall);height:16px;display:inline-flex;align-items:center;font-weight:600;background:rgba(213,153,0,0.08);color:var(--warningFg); }
+.acc-panel { padding:0 var(--spacingL) var(--spacingM);display:none; }
+.acc-item:not(.collapsed) .acc-panel { display:block; }
+
+.prow { display:flex;align-items:center;gap:var(--spacingS);margin-bottom:var(--spacingS); }
+.plbl { width:105px;text-align:right;font-size:var(--fontSizeBody1);color:var(--neutralFg2);flex-shrink:0; }
+.pbody { flex:1;display:flex;align-items:center;gap:6px; }
+.pdesc { font-size:9px;color:var(--neutralFg4);margin:-2px 0 6px 113px;line-height:1.4; }
+.padv { font-size:8px;padding:0 4px;border-radius:var(--radiusSmall);background:rgba(213,153,0,0.08);color:var(--warningFg);font-weight:600;margin-left:4px;vertical-align:middle; }
+
+.fui-Dropdown { flex:1;height:30px;padding:0 var(--spacingS);background:var(--neutralBg1);border:var(--strokeThin) solid var(--neutralStroke1);border-radius:var(--radiusMedium);color:var(--neutralFg1);font-family:var(--fontFamily);font-size:var(--fontSizeBody1);outline:none;cursor:pointer;appearance:auto; }
+.fui-Input { flex:1;height:30px;padding:0 var(--spacingS);background:var(--neutralBg1);border:var(--strokeThin) solid var(--neutralStroke1);border-radius:var(--radiusMedium);color:var(--neutralFg1);font-family:var(--fontFamily);font-size:var(--fontSizeBody1);outline:none; }
+.fui-Input::placeholder { color:var(--neutralFg4); }
+.fui-Slider { flex:1;display:flex;align-items:center; }
+.fui-Slider input[type=range] { flex:1;height:4px;-webkit-appearance:none;background:var(--neutralStroke2);border-radius:2px; }
+.fui-Slider input[type=range]::-webkit-slider-thumb { -webkit-appearance:none;width:18px;height:18px;background:var(--brandFg1);border-radius:50%;cursor:pointer;border:2px solid var(--neutralBg2);box-shadow:0 0 2px rgba(0,0,0,0.3); }
+.fui-Switch { display:flex;align-items:center;gap:var(--spacingS);cursor:pointer; }
+.sw-track { width:36px;height:18px;background:var(--neutralStroke2);border-radius:9px;position:relative;transition:background 0.15s;flex-shrink:0; }
+.sw-track.on { background:var(--brandFg1); }
+.sw-thumb { position:absolute;top:2px;left:2px;width:14px;height:14px;background:white;border-radius:50%;transition:left 0.15s; }
+.sw-track.on .sw-thumb { left:20px; }.sw-lbl { font-size:var(--fontSizeBody1);color:var(--neutralFg2); }
+
+.odot { width:8px;height:8px;border-radius:50%;flex-shrink:0;cursor:pointer; }
+.odot--inh { border:1.5px solid var(--neutralStroke2);background:transparent; }.odot--ovr { background:var(--warningFg); }
+
+.expr-box { margin:0 var(--spacingL) var(--spacingM);padding:var(--spacingS) var(--spacingM);background:rgba(176,132,244,0.04);border:var(--strokeThin) solid rgba(176,132,244,0.15);border-radius:var(--radiusLarge); }
+.expr-label { display:flex;align-items:center;gap:var(--spacingS);margin-bottom:4px; }
+.expr-label span { font-size:var(--fontSizeBody1);color:#b084f4;font-weight:600; }
+.expr-input { width:100%;background:transparent;border:none;color:var(--neutralFg1);font-family:var(--fontFamilyMono);font-size:var(--fontSizeBody1);outline:none;padding:2px 0; }
+.expr-preview { display:flex;gap:var(--spacingL);margin-top:var(--spacingXS);font-size:9px;color:var(--neutralFg4);font-family:var(--fontFamilyMono); }
+
+.placeholder-box { display:flex;align-items:center;justify-content:center;padding:var(--spacingL);background:var(--neutralBg1);border-radius:var(--radiusLarge);border:var(--strokeThin) dashed var(--neutralStroke1);margin:0 var(--spacingL); }
+.placeholder-box span { font-size:var(--fontSizeBody1);color:var(--neutralFg4); }
+.section-label { font-size:var(--fontSizeCaption1);font-weight:600;color:var(--neutralFg3);text-transform:uppercase;margin-bottom:var(--spacingS); }
+.preview-area { padding:var(--spacingM) var(--spacingL);border-bottom:var(--strokeThin) solid var(--neutralStroke1); }
+.hist-bars { display:flex;gap:1px;align-items:flex-end;height:48px;margin:0 var(--spacingL);padding:var(--spacingS) 0; }
+.hist-bars div { flex:1;background:var(--brandFg1);border-radius:1px 1px 0 0;opacity:0.7; }
+.gui-footer { padding:4px var(--spacingL);font-size:9px;color:var(--neutralFg4);border-bottom:var(--strokeThin) solid var(--neutralStroke1);display:flex;gap:var(--spacingXL); }
+.footer-area { padding:var(--spacingM) var(--spacingL); }
+
+/* Multi-select note */
+.ms-note { padding:var(--spacingS) var(--spacingL);background:rgba(213,153,0,0.04);border-bottom:var(--strokeThin) solid var(--neutralStroke1);font-size:var(--fontSizeBody1); }
+.ms-note span.w { color:var(--warningFg); }
+
+/* ═══ STATUS BAR ═══ */
+.statusbar { height:36px;background:var(--neutralBg2);border-top:var(--strokeThin) solid var(--neutralStroke1);display:flex;align-items:center;padding:0 var(--spacingL);gap:var(--spacingM);font-size:var(--fontSizeBody1);flex-shrink:0; }
+.sb-item { display:flex;align-items:center;gap:var(--spacingS);color:var(--neutralFg2); }
+.sb-dot { width:8px;height:8px;border-radius:50%;background:var(--successFg); }.sb-sep { color:var(--neutralFg4); }
+</style></head>
+<body>
+<div class="app">
+  <div class="titlebar"><span class="tb-logo">◆</span><span class="tb-title">Photopipeline — HDR Pipeline v1</span><button class="tb-btn">◐</button><button class="tb-btn">⚙</button></div>
+  <div class="main">
+
+    <!-- ═══ LEFT ═══ -->
+    <div class="sidebar">
+      <div class="sb-hdr">Candidate Files<span class="cnt">12 images</span></div>
+      <div class="sb-bar"><button class="btn btn--p btn--xs">📂 Import</button><button class="btn btn--s btn--xs">🗑 Clear</button><button class="btn btn--s btn--xs">📤 To Batch</button></div>
+      <div class="msbar show"><span class="msbar-t">3 images selected</span><button class="btn btn--s btn--xs">+ Group</button><button class="btn btn--s btn--xs">To Batch</button><button class="btn btn--s btn--xs">Clear</button></div>
+      <div class="sb-list">
+        <div class="ic ic--sel"><div class="ic-th" style="background:linear-gradient(135deg,#2a2a,#3a3a)">🌄</div><div class="ic-info"><div class="ic-name">DSC_0034.ARW</div><div class="ic-meta"><span>6000×4000</span><span>ARW</span><span>ISO 6400</span></div><span class="ic-tag">High ISO</span></div><div class="ic-size">24 MB</div></div>
+        <div class="ic ic--multi"><div class="ic-th" style="background:linear-gradient(135deg,#242,#353)">🏔</div><div class="ic-info"><div class="ic-name">PANO_001.DNG</div><div class="ic-meta"><span>8256×5504</span><span>DNG</span><span>ISO 100</span></div></div><div class="ic-size">45 MB</div></div>
+        <div class="ic ic--multi"><div class="ic-th" style="background:linear-gradient(135deg,#432,#543)">🌆</div><div class="ic-info"><div class="ic-name">IMG_8821.CR3</div><div class="ic-meta"><span>6960×4640</span><span>CR3</span><span>ISO 800</span></div></div><div class="ic-size">32 MB</div></div>
+        <div class="ic"><div class="ic-th" style="background:linear-gradient(135deg,#112,#223)">🎆</div><div class="ic-info"><div class="ic-name">night_012.NEF</div><div class="ic-meta"><span>6016×4016</span><span>NEF</span><span>ISO 3200</span></div><span class="ic-tag">Night</span></div><div class="ic-size">29 MB</div></div>
+        <div class="ic"><div class="ic-th" style="background:linear-gradient(135deg,#131,#242)">🌿</div><div class="ic-info"><div class="ic-name">macro_03.RAF</div><div class="ic-meta"><span>6240×4160</span><span>RAF</span><span>ISO 200</span></div></div><div class="ic-size">26 MB</div></div>
+      </div>
+      <div class="groups"><div class="grp-hdr">Groups</div>
+        <div class="grp-item"><span class="grp-dot grp-dot--w"></span>High ISO (≥1600)<span class="grp-cnt">4</span><div class="grp-acts"><button>✎</button><button class="del">🗑</button></div></div>
+        <div class="grp-item"><span class="grp-dot grp-dot--w" style="background:#b084f4"></span>Night (21-05)<span class="grp-cnt">3</span><div class="grp-acts"><button>✎</button><button class="del">🗑</button></div></div>
+        <div class="grp-item"><span class="grp-dot grp-dot--w" style="background:var(--successFg)"></span>GPS: Chengdu<span class="grp-cnt">5</span><div class="grp-acts"><button>✎</button><button class="del">🗑</button></div></div>
+        <div class="grp-add"><button style="flex:1">+ Create Group…</button><button>Auto-group ▾</button></div>
+      </div>
+    </div>
+
+    <!-- ═══ CENTER: DAG + Plugin Browser ═══ -->
+    <div class="content"><div class="ct-hdr"><span style="width:8px;height:8px;border-radius:50%;background:var(--successFg)"></span>Pipeline Editor<span style="margin-left:auto;font-size:var(--fontSizeCaption1);color:var(--neutralFg4);">5 nodes · 120%</span></div>
+      <div class="ct-bar">
+        <button class="btn btn--s">📄 New</button><button class="btn btn--s">💾 Save</button><button class="btn btn--s">📂 Load</button><span class="sep"></span>
+        <button class="btn btn--s">✓ Validate</button><span class="sep"></span>
+        <button class="btn btn--p">▶ Run</button><button class="btn btn--s">⏹ Cancel</button><span class="sep"></span>
+        <button class="btn btn--s" style="padding:4px;min-width:30px;justify-content:center;">🔍+</button><button class="btn btn--s" style="padding:4px;min-width:30px;justify-content:center;">🔍−</button><button class="btn btn--s">⊞ Fit</button>
+      </div>
+      <div class="ct-canvas"><div class="dag-grid">
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1;" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 266,110 L 290,110 Q 320,110 320,165 L 320,205 Q 320,240 360,240" stroke="#479ef5" stroke-width="2" fill="none" opacity="0.55" stroke-linecap="round"/>
+          <path d="M 266,110 L 290,110 Q 320,110 320,345 L 320,380 360,380" stroke="#479ef5" stroke-width="2" fill="none" opacity="0.55" stroke-linecap="round"/>
+          <path d="M 530,240 L 560,240 Q 590,240 590,160 L 590,130 630,130" stroke="#479ef5" stroke-width="2" fill="none" opacity="0.55" stroke-linecap="round"/>
+          <path d="M 530,240 L 560,240 Q 590,240 590,290 L 590,320 630,320" stroke="#479ef5" stroke-width="2" fill="none" opacity="0.55" stroke-linecap="round"/>
+          <path d="M 530,380 L 590,380 Q 630,380 630,320" stroke="#479ef5" stroke-width="2" fill="none" opacity="0.55" stroke-linecap="round"/>
+        </svg>
+        <div class="dnode" style="left:104px;top:80px;"><span class="dn-badge">auto · 12 files</span><div class="dn-name">raw_input</div><div class="dn-type">Input</div><div class="dport dport--o"></div></div>
+        <div class="dnode sel" style="left:360px;top:210px;"><div class="dn-name">transform</div><div class="dn-type">Transform</div><div class="dport dport--i"></div><div class="dport dport--o"></div></div>
+        <div class="dnode" style="left:360px;top:350px;border-color:rgba(139,92,246,0.4);"><div class="dn-name">colorspace</div><div class="dn-type">Color</div><div class="dport dport--i"></div><div class="dport dport--o"></div></div>
+        <div class="dnode" style="left:630px;top:100px;border-color:rgba(168,85,247,0.4);"><div class="dn-name">ai_denoise</div><div class="dn-type">Enhance</div><div class="dport dport--i"></div><div class="dport dport--o"></div></div>
+        <div class="dnode" style="left:630px;top:290px;border-color:rgba(249,115,22,0.4);"><div class="dn-name">jxl_encoder</div><div class="dn-type">Export</div><div class="dport dport--i"></div></div>
+        <div class="minimap"><div class="mm-vp" style="left:5%;top:6%;width:80%;height:58%"></div></div>
+      </div></div>
+
+      <!-- Plugin Browser strip -->
+      <div class="plug-bar">
+        <span class="plug-bar-title">Plugins</span>
+        <input type="text" class="plug-input" placeholder="Search...">
+        <select class="plug-input" style="width:96px;"><option>All</option></select>
+        <span style="flex:1;"></span>
+        <span style="font-size:var(--fontSizeCaption1);color:var(--neutralFg4);">Drag or double-click card to add node to pipeline</span>
+      </div>
+      <div class="plug-scroll">
+        <div class="pcard"><div class="pcard-name">raw_input</div><span class="pcard-cat">Input</span></div>
+        <div class="pcard pcard--sel"><div class="pcard-name">transform</div><span class="pcard-cat">Transform</span></div>
+        <div class="pcard"><div class="pcard-name">colorspace</div><span class="pcard-cat">Color</span></div>
+        <div class="pcard"><div class="pcard-name">lut3d</div><span class="pcard-cat">Color</span></div>
+        <div class="pcard"><div class="pcard-name">ai_denoise</div><span class="pcard-cat">Enhance</span></div>
+        <div class="pcard"><div class="pcard-name">lens_correct</div><span class="pcard-cat">Correct</span></div>
+        <div class="pcard"><div class="pcard-name">exif_rw</div><span class="pcard-cat">Metadata</span></div>
+        <div class="pcard"><div class="pcard-name">gps_set</div><span class="pcard-cat">Metadata</span></div>
+        <div class="pcard"><div class="pcard-name">time_shift</div><span class="pcard-cat">Metadata</span></div>
+        <div class="pcard"><div class="pcard-name">heif_encoder</div><span class="pcard-cat">Export</span></div>
+        <div class="pcard"><div class="pcard-name">jxl_encoder</div><span class="pcard-cat">Export</span></div>
+        <div class="pcard"><div class="pcard-name">avif_encoder</div><span class="pcard-cat">Export</span></div>
+        <div class="pcard"><div class="pcard-name">tiff_encoder</div><span class="pcard-cat">Export</span></div>
+        <div class="pcard"><div class="pcard-name">png_encoder</div><span class="pcard-cat">Export</span></div>
+      </div>
+    </div>
+
+    <!-- ═══ RIGHT: Plugin Details ═══ -->
+    <div class="panel">
+      <div class="sec-hdr">Plugin Details · transform</div>
+      <div class="ctx-bar"><div class="ctx-tab act">All</div><div class="ctx-tab">Template</div><div class="ctx-tab">High ISO</div><div class="ctx-tab">DSC_0034</div></div>
+      <div class="ms-note">📋 <span class="w">3 images selected</span> — some values differ. <span style="color:var(--brandFg1);margin-left:var(--spacingS);cursor:pointer;">Unify values…</span></div>
+
+      <!-- Resize -->
+      <div class="acc-item"><div class="acc-header"><span class="acc-caret">▼</span><span class="acc-title">Resize</span><span class="acc-count">inherited</span></div>
+      <div class="acc-panel">
+        <div class="prow"><span class="plbl">Width</span><div class="pbody"><div class="fui-Slider"><input type="range" min="1" max="65535" value="1920"></div><span style="width:42px;text-align:right;font-family:var(--fontFamilyMono);">1920</span><span style="font-size:var(--fontSizeCaption1);color:var(--neutralFg4);">px</span></div><span class="odot odot--inh"></span></div>
+        <div class="pdesc">Inherited from Template</div>
+        <div class="prow"><span class="plbl">Height</span><div class="pbody"><div class="fui-Slider"><input type="range" min="1" max="65535" value="1080"></div><span style="width:42px;text-align:right;font-family:var(--fontFamilyMono);">1080</span><span style="font-size:var(--fontSizeCaption1);color:var(--neutralFg4);">px</span></div><span class="odot odot--inh"></span></div>
+        <div class="prow"><span class="plbl">Filter</span><div class="pbody"><select class="fui-Dropdown"><option>Lanczos3</option></select></div><span class="odot odot--inh"></span></div>
+      </div></div>
+
+      <!-- Denoise -->
+      <div class="acc-item"><div class="acc-header"><span class="acc-caret">▼</span><span class="acc-title">Denoise</span><span class="acc-badge--override">values vary</span></div>
+      <div class="acc-panel">
+        <div class="prow"><span class="plbl">Strength</span><div class="pbody"><div class="fui-Slider"><input type="range" min="0" max="1" step="0.01" value="0.7"></div><span style="width:42px;text-align:right;font-family:var(--fontFamilyMono);color:var(--warningFg);">vary</span></div><span class="odot odot--ovr"></span></div>
+        <div class="pdesc" style="color:var(--warningFg);">3 images differ: 0.3, 0.8, 0.9</div>
+        <div style="margin-left:113px;margin-bottom:var(--spacingS);display:flex;gap:var(--spacingXS);"><button class="btn btn--xs" style="border-color:var(--brandFg1);color:var(--brandFg1);">Unify to value…</button><button class="btn btn--s btn--xs">Clear overrides</button></div>
+        <div class="prow"><span class="plbl">Luma</span><div class="pbody"><div class="fui-Slider"><input type="range" min="0" max="1" step="0.01" value="0.6"></div><span style="width:42px;text-align:right;font-family:var(--fontFamilyMono);color:var(--warningFg);">varies</span></div><span class="odot odot--ovr"></span></div>
+      </div></div>
+
+      <!-- Crop (collapsed) -->
+      <div class="acc-item collapsed"><div class="acc-header"><span class="acc-caret">▶</span><span class="acc-title">Crop</span><span class="acc-count">inherited</span></div><div class="acc-panel"></div></div>
+
+      <!-- Expression Editor -->
+      <div style="padding:var(--spacingM) var(--spacingL);border-bottom:var(--strokeThin) solid var(--neutralStroke1);">
+        <div class="expr-box">
+          <div class="expr-label"><span>𝑓</span><span>Expression</span></div>
+          <input class="expr-input" type="text" placeholder="clamp(iso / 12800, 0, 1)" value="">
+          <div class="expr-preview"><span>DSC_0034: 6400→0.50</span><span>night_012: 3200→0.25</span></div>
+        </div>
+      </div>
+
+      <!-- Histogram -->
+      <div class="preview-area"><div class="section-label">📊 Histogram</div>
+        <div class="hist-bars"><div style="height:22%"></div><div style="height:34%"></div><div style="height:48%"></div><div style="height:64%"></div><div style="height:78%"></div><div style="height:90%"></div><div style="height:100%"></div><div style="height:88%"></div><div style="height:72%"></div><div style="height:54%"></div><div style="height:36%"></div><div style="height:20%"></div></div>
+      </div>
+
+      <div class="gui-footer"><span>icon: maximize</span><span>color: #06b6d4</span><span>min_panel_width: 340px</span></div>
+      <div class="footer-area"><button class="btn btn--d">🗑 Remove from Pipeline</button></div>
+    </div>
+  </div>
+
+  <!-- ═══ STATUS BAR ═══ -->
+  <div class="statusbar">
+    <div class="sb-item"><span>▶ Batch: 8/12</span></div>
+    <div style="flex:1;max-width:180px;height:4px;background:var(--neutralStroke1);border-radius:2px;"><div style="width:65%;height:100%;background:var(--brandFg1);border-radius:2px;"></div></div>
+    <span style="font-weight:600;">65%</span><span style="color:var(--neutralFg2);">12 done</span><span style="color:var(--dangerFg);">3 failed</span>
+    <span class="sb-sep">|</span><span style="color:var(--neutralFg2);">⏱ 00:03:15</span><span style="color:var(--neutralFg4);">~00:01:20</span><span style="color:var(--neutralFg4);">12 img/min</span>
+    <span style="margin-left:auto;color:var(--neutralFg4);">Mem:512MB · GPU:Ready</span><span class="sb-sep">|</span>
+    <div class="sb-item"><span>Backend</span><span class="sb-dot"></span><span>Connected</span></div>
+  </div>
+</div>
+</body></html>
