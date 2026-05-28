@@ -13,11 +13,6 @@ jobs:
       cache-prefix: main-windows
       timeout: 30
 
-  gui-test:
-    uses: ./.github/workflows/_test-gui.yml
-    with:
-      include-ui-auto: false
-
   stress:
     name: Stress Test
     runs-on: ubuntu-latest

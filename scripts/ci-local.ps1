@@ -33,71 +33,44 @@ function sh([string]$cmd, [string]$cwd, [string]$err) {
 
 # ── Rust ────────────────────────────────────────────────────
 if (-not $SkipRust) {
-    header "[1/9] Rust: cargo build --profile ci --workspace"
+    header "[1/6] Rust: cargo build --profile ci --workspace"
     sh "cargo build --profile ci --workspace" "$RepoRoot" "Rust build failed"
     ok
 
     if (-not $SkipTests) {
-        header "[2/9] Rust: cargo test --workspace --no-fail-fast"
+        header "[2/6] Rust: cargo test --workspace --no-fail-fast"
         sh "cargo test --workspace --no-fail-fast" "$RepoRoot" "Rust tests failed"
         ok
     } else {
-        Write-Host "[2/9] Rust tests: SKIPPED" -ForegroundColor DarkGray
+        Write-Host "[2/6] Rust tests: SKIPPED" -ForegroundColor DarkGray
     }
 
-    header "[3/9] Rust: cargo fmt --all -- --check"
+    header "[3/6] Rust: cargo fmt --all -- --check"
     sh "cargo fmt --all -- --check" "$RepoRoot" "Rust fmt check failed"
     ok
 
-    header "[4/9] Rust: cargo clippy --workspace"
+    header "[4/6] Rust: cargo clippy --workspace"
     sh "cargo clippy --workspace" "$RepoRoot" "Rust clippy failed"
     ok
 } else {
-    Write-Host "[1/9] - [4/9] Rust: SKIPPED" -ForegroundColor DarkGray
+    Write-Host "[1/6] - [4/6] Rust: SKIPPED" -ForegroundColor DarkGray
     Write-Host ""
 }
-# ─────────────────────────────────────────────────────────────
-
-# ── C# ──────────────────────────────────────────────────────
-$SlnDir = "$RepoRoot\gui\windows"
-
-header "[5/9] C#: dotnet build Photopipeline.sln -c Release -p:Platform=x64"
-sh "dotnet build Photopipeline.sln -c Release -p:Platform=x64" "$SlnDir" "C# build failed"
-ok
-
-if (-not $SkipTests) {
-    header "[6/9] C#: dotnet test (L1 + L2) -c Release -p:Platform=x64"
-    sh "dotnet test Photopipeline.Tests/Photopipeline.Tests.csproj -c Release -p:Platform=x64 --no-build" "$SlnDir" "C# tests failed"
-    ok
-} else {
-    Write-Host "[6/9] C# tests: SKIPPED" -ForegroundColor DarkGray
-    Write-Host ""
-}
-# ─────────────────────────────────────────────────────────────
-
-# ── GUI publish ─────────────────────────────────────────────
-header "[7/9] GUI: dotnet publish -> $OutputDir"
-$publishArgs = "publish Photopipeline/Photopipeline.csproj -c Release -p:Platform=x64 -r win-x64 -o `"$OutputDir`" --self-contained "
-sh "dotnet $publishArgs" "$SlnDir" "GUI publish failed"
-ok
-# ─────────────────────────────────────────────────────────────
 
 # ── Stage ───────────────────────────────────────────────────
-header "[8/9] Stage: scripts/stage.ps1 -> staging/"
+header "[5/6] Stage: scripts/stage.ps1 -> staging/"
 sh "powershell -ExecutionPolicy Bypass -File `"$RepoRoot\scripts\stage.ps1`"" "$RepoRoot" "Stage failed"
 ok
-# ─────────────────────────────────────────────────────────────
 
 # ── Smoke ───────────────────────────────────────────────────
-header "[9/9] Smoke: staging/photopipeline-cli.exe --version"
-$cli = "$RepoRoot\staging\photopipeline-cli.exe"
-if (-not (Test-Path $cli)) { fatal "CLI binary not found at $cli" }
-sh "`"$cli`" --version" "$RepoRoot" "CLI smoke test failed"
+header "[6/6] Smoke: staging/photopipeline.exe --version"
+$cli = "$RepoRoot\staging\photopipeline.exe"
+if (-not (Test-Path $cli)) { fatal "Binary not found at $cli" }
+sh "`"$cli`" --version" "$RepoRoot" "Smoke test failed"
 ok
-# ─────────────────────────────────────────────────────────────
 
 Write-Host "============================================" -ForegroundColor Green
 Write-Host " CI PASSED" -ForegroundColor Green
 Write-Host " Package: $RepoRoot\staging\" -ForegroundColor Green
-Write-Host " Launch : $RepoRoot\staging\Photopipeline.exe" -ForegroundColor Green
+Write-Host " Launch : $RepoRoot\staging\photopipeline.exe" -ForegroundColor Green
 Write-Host "============================================" -ForegroundColor Green

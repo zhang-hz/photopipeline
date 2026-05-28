@@ -13,11 +13,6 @@ jobs:
       cache-prefix: pr-windows
       timeout: 30
 
-  gui-test:
-    uses: ./.github/workflows/_test-gui.yml
-    with:
-      include-ui-auto: true
-
   security:
     name: Security Audit
     runs-on: ubuntu-latest
