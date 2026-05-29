@@ -1,5 +1,8 @@
 use std::time::Duration;
 
+use std::os::windows::process::CommandExt;
+const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x01000000;
+
 /// Represents the result of spawning and waiting for the CLI subprocess
 pub struct CliRunResult {
     pub exit_code: Option<i32>,
@@ -53,6 +56,8 @@ impl CliRunner {
             .arg("-o").arg(&output_path)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
+        #[cfg(windows)]
+        cmd.creation_flags(CREATE_BREAKAWAY_FROM_JOB);
 
         let mut child = match cmd.spawn() {
             Ok(c) => c,
@@ -119,8 +124,20 @@ fn wait_timeout(child: &mut std::process::Child, timeout: Duration) -> std::io::
 }
 
 fn kill_process(child: &mut std::process::Child) {
+    let pid = child.id();
+    // Tree-kill on Windows: kill entire process tree (includes ExifTool grandchildren)
+    #[cfg(windows)]
+    {
+        let _ = std::process::Command::new("taskkill")
+            .args(["/F", "/T", "/PID", &pid.to_string()])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn();
+    }
     let _ = child.kill();
     let _ = child.wait();
+    // Allow OS to clean up DLL global state before next process
+    std::thread::sleep(Duration::from_secs(1));
 }
 
 impl Default for CliRunResult {

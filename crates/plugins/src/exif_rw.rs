@@ -1,6 +1,33 @@
 use async_trait::async_trait;
 use std::process::Command;
 use std::sync::LazyLock;
+use std::time::Duration;
+
+/// Run a Command with a timeout (30s). Kills the process on timeout.
+fn command_output_timeout(cmd: &mut Command) -> std::io::Result<std::process::Output> {
+    let mut child = cmd.stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()?;
+    let pid = child.id();
+    let start = std::time::Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let stdout = child.stdout.take().map_or(Vec::new(), |mut s| { use std::io::Read; let mut v = Vec::new(); let _ = s.read_to_end(&mut v); v });
+                let stderr = child.stderr.take().map_or(Vec::new(), |mut s| { use std::io::Read; let mut v = Vec::new(); let _ = s.read_to_end(&mut v); v });
+                return Ok(std::process::Output { status, stdout, stderr });
+            }
+            Ok(None) if start.elapsed() < Duration::from_secs(30) => {
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "exiftool timeout"));
+            }
+        }
+    }
+}
 
 use exif::{Reader, Tag, Value};
 
@@ -431,9 +458,9 @@ fn find_exiftool_path_inner() -> Option<String> {
     } else {
         "exiftool"
     };
-    if std::process::Command::new(path_in_path)
-        .arg("--version")
-        .output()
+    let mut version_cmd = std::process::Command::new(path_in_path);
+    version_cmd.arg("--version");
+    if command_output_timeout(&mut version_cmd)
         .map(|o| o.status.success())
         .unwrap_or(false)
     {
@@ -841,7 +868,7 @@ async fn read_metadata_via_exiftool(
     let mut cmd = Command::new(&exiftool);
     cmd.arg("-json").arg("-G").arg(&target.path);
 
-    let output = cmd.output().map_err(|e| PluginError::Io {
+    let output = command_output_timeout(&mut cmd).map_err(|e| PluginError::Io {
         plugin: id.clone(),
         error: e,
     })?;
@@ -1136,7 +1163,7 @@ async fn write_metadata_via_exiftool(
             }
             cmd.arg(&target.path);
 
-            let output = cmd.output().map_err(|e| PluginError::Io {
+            let output = command_output_timeout(&mut cmd).map_err(|e| PluginError::Io {
                 plugin: id.clone(),
                 error: e,
             })?;
@@ -1161,7 +1188,7 @@ async fn write_metadata_via_exiftool(
         }
         cmd.arg(format!("-XMP:Creator={}", creator));
         cmd.arg(&target.path);
-        let result = cmd.output();
+        let result = command_output_timeout(&mut cmd);
         match result {
             Ok(o) if o.status.success() => {
                 tags_written += 1;
@@ -1184,7 +1211,7 @@ async fn write_metadata_via_exiftool(
             cmd.arg(format!("-IPTC:Keywords+={}", kw));
         }
         cmd.arg(&target.path);
-        let result = cmd.output();
+        let result = command_output_timeout(&mut cmd);
         match result {
             Ok(o) if o.status.success() => {
                 tags_written += iptc.keywords.len() as u32;

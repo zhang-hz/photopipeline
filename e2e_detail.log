@@ -1,0 +1,979 @@
+=== cat01 ===
+E2E Runner — cat01 test categories
+  Binary: staging/photopipeline.exe
+  Output: tests/e2e_suite/output
+  Report: C:/Users/GMW/AppData/Local/Temp/1/e2e_cat01.json
+Loaded 84 test cases
+[1/84] cat01::exif_rw__solid_64x64
+[2/84] cat01::exif_rw__checkerboard_128x128
+[3/84] cat01::exif_rw__gradient_256x256
+[4/84] cat01::exif_rw__color_bars_256x128
+[5/84] cat01::exif_rw__grayscale_256x16
+[6/84] cat01::exif_rw__large_1920x1080
+[7/84] cat01::gps_set__solid_64x64
+[8/84] cat01::gps_set__checkerboard_128x128
+[9/84] cat01::gps_set__gradient_256x256
+[10/84] cat01::gps_set__color_bars_256x128
+[11/84] cat01::gps_set__grayscale_256x16
+[12/84] cat01::gps_set__large_1920x1080
+[13/84] cat01::time_shift__solid_64x64
+[14/84] cat01::time_shift__checkerboard_128x128
+[15/84] cat01::time_shift__gradient_256x256
+[16/84] cat01::time_shift__color_bars_256x128
+[17/84] cat01::time_shift__grayscale_256x16
+[18/84] cat01::time_shift__large_1920x1080
+[19/84] cat01::colorspace__solid_64x64
+[20/84] cat01::colorspace__checkerboard_128x128
+[21/84] cat01::colorspace__gradient_256x256
+[22/84] cat01::colorspace__color_bars_256x128
+[23/84] cat01::colorspace__grayscale_256x16
+[24/84] cat01::colorspace__large_1920x1080
+[25/84] cat01::lut3d__solid_64x64
+[26/84] cat01::lut3d__checkerboard_128x128
+[27/84] cat01::lut3d__gradient_256x256
+[28/84] cat01::lut3d__color_bars_256x128
+[29/84] cat01::lut3d__grayscale_256x16
+[30/84] cat01::lut3d__large_1920x1080
+[31/84] cat01::transform__solid_64x64
+[32/84] cat01::transform__checkerboard_128x128
+[33/84] cat01::transform__gradient_256x256
+[34/84] cat01::transform__color_bars_256x128
+[35/84] cat01::transform__grayscale_256x16
+[36/84] cat01::transform__large_1920x1080
+[37/84] cat01::lens_correct__solid_64x64
+[38/84] cat01::lens_correct__checkerboard_128x128
+[39/84] cat01::lens_correct__gradient_256x256
+[40/84] cat01::lens_correct__color_bars_256x128
+[41/84] cat01::lens_correct__grayscale_256x16
+[42/84] cat01::lens_correct__large_1920x1080
+[43/84] cat01::ai_denoise__solid_64x64
+[44/84] cat01::ai_denoise__checkerboard_128x128
+[45/84] cat01::ai_denoise__gradient_256x256
+[46/84] cat01::ai_denoise__color_bars_256x128
+[47/84] cat01::ai_denoise__grayscale_256x16
+[48/84] cat01::ai_denoise__large_1920x1080
+[49/84] cat01::png_encoder__solid_64x64
+[50/84] cat01::png_encoder__checkerboard_128x128
+[51/84] cat01::png_encoder__gradient_256x256
+[52/84] cat01::png_encoder__color_bars_256x128
+[53/84] cat01::png_encoder__grayscale_256x16
+[54/84] cat01::png_encoder__large_1920x1080
+[55/84] cat01::tiff_encoder__solid_64x64
+[56/84] cat01::tiff_encoder__checkerboard_128x128
+[57/84] cat01::tiff_encoder__gradient_256x256
+[58/84] cat01::tiff_encoder__color_bars_256x128
+[59/84] cat01::tiff_encoder__grayscale_256x16
+[60/84] cat01::tiff_encoder__large_1920x1080
+[61/84] cat01::heif_encoder__solid_64x64
+[62/84] cat01::heif_encoder__checkerboard_128x128
+[63/84] cat01::heif_encoder__gradient_256x256
+[64/84] cat01::heif_encoder__color_bars_256x128
+[65/84] cat01::heif_encoder__grayscale_256x16
+[66/84] cat01::heif_encoder__large_1920x1080
+[67/84] cat01::jxl_encoder__solid_64x64
+[68/84] cat01::jxl_encoder__checkerboard_128x128
+[69/84] cat01::jxl_encoder__gradient_256x256
+[70/84] cat01::jxl_encoder__color_bars_256x128
+[71/84] cat01::jxl_encoder__grayscale_256x16
+[72/84] cat01::jxl_encoder__large_1920x1080
+[73/84] cat01::avif_encoder__solid_64x64
+[74/84] cat01::avif_encoder__checkerboard_128x128
+[75/84] cat01::avif_encoder__gradient_256x256
+[76/84] cat01::avif_encoder__color_bars_256x128
+[77/84] cat01::avif_encoder__grayscale_256x16
+[78/84] cat01::avif_encoder__large_1920x1080
+[79/84] cat01::raw_input__solid_64x64
+[80/84] cat01::raw_input__checkerboard_128x128
+[81/84] cat01::raw_input__gradient_256x256
+[82/84] cat01::raw_input__color_bars_256x128
+[83/84] cat01::raw_input__grayscale_256x16
+[84/84] cat01::raw_input__large_1920x1080
+
+══════════════════════════════════════════════
+  E2E Test Report
+══════════════════════════════════════════════
+  Total:           84
+  Passed:          65 (77.4%)
+  Failed (bypass): 0
+  Failed (real):   19
+  Timed out:       0
+  Elapsed:         14.1s
+══════════════════════════════════════════════
+
+  Real Failures:
+    cat01::ai_denoise__solid_64x64 — expected success but exit code was Some(1)
+    cat01::ai_denoise__checkerboard_128x128 — expected success but exit code was Some(1)
+    cat01::ai_denoise__gradient_256x256 — expected success but exit code was Some(1)
+    cat01::ai_denoise__color_bars_256x128 — expected success but exit code was Some(1)
+    cat01::ai_denoise__grayscale_256x16 — expected success but exit code was Some(1)
+    cat01::ai_denoise__large_1920x1080 — expected success but exit code was Some(1)
+    cat01::heif_encoder__solid_64x64 — expected success but exit code was Some(101)
+    cat01::heif_encoder__checkerboard_128x128 — expected success but exit code was Some(101)
+    cat01::heif_encoder__gradient_256x256 — expected success but exit code was Some(101)
+    cat01::heif_encoder__color_bars_256x128 — expected success but exit code was Some(101)
+    cat01::heif_encoder__grayscale_256x16 — expected success but exit code was Some(101)
+    cat01::heif_encoder__large_1920x1080 — expected success but exit code was Some(101)
+    cat01::jxl_encoder__solid_64x64 — 
+    cat01::jxl_encoder__checkerboard_128x128 — 
+    cat01::jxl_encoder__gradient_256x256 — 
+    cat01::jxl_encoder__color_bars_256x128 — 
+    cat01::jxl_encoder__grayscale_256x16 — 
+    cat01::jxl_encoder__large_1920x1080 — 
+    cat01::avif_encoder__grayscale_256x16 — expected success but exit code was Some(1)
+=== cat02 ===
+E2E Runner — cat02 test categories
+  Binary: staging/photopipeline.exe
+  Output: tests/e2e_suite/output
+  Report: C:/Users/GMW/AppData/Local/Temp/1/e2e_cat02.json
+Loaded 42 test cases
+[1/42] cat02::exif_rw__variant_preserve
+[2/42] cat02::exif_rw__variant_clear
+[3/42] cat02::gps_set__variant_manual
+[4/42] cat02::gps_set__variant_clear
+[5/42] cat02::time_shift__variant_plus_8h
+[6/42] cat02::time_shift__variant_minus_5h30m
+[7/42] cat02::colorspace__variant_srgb_to_adobergb
+[8/42] cat02::colorspace__variant_srgb_to_displayp3
+[9/42] cat02::lut3d__variant_intensity_100
+[10/42] cat02::lut3d__variant_intensity_50
+[11/42] cat02::transform__variant_resize_128x128
+[12/42] cat02::transform__variant_scale_50pct
+[13/42] cat02::lens_correct__variant_mode_auto
+[14/42] cat02::lens_correct__variant_mode_off
+[15/42] cat02::ai_denoise__variant_strength_25
+[16/42] cat02::ai_denoise__variant_strength_0
+[17/42] cat02::png_encoder__variant_compression_9
+[18/42] cat02::png_encoder__variant_compression_0
+[19/42] cat02::tiff_encoder__variant_compression_lzw
+[20/42] cat02::tiff_encoder__variant_compression_deflate
+[21/42] cat02::heif_encoder__variant_quality_100
+[22/42] cat02::heif_encoder__variant_quality_30
+[23/42] cat02::jxl_encoder__variant_effort_9_quality_100
+[24/42] cat02::jxl_encoder__variant_effort_3_quality_50
+[25/42] cat02::avif_encoder__variant_quality_100_speed_0
+[26/42] cat02::avif_encoder__variant_quality_50_speed_8
+[27/42] cat02::raw_input__variant_mode_auto
+[28/42] cat02::raw_input__variant_mode_dcraw
+[29/42] cat02::exif_rw__all_tags
+[30/42] cat02::gps_set__gpx_mode
+[31/42] cat02::time_shift__reset
+[32/42] cat02::colorspace__srgb_to_linear
+[33/42] cat02::lut3d__intensity_75
+[34/42] cat02::transform__crop_32x32
+[35/42] cat02::lens_correct__mode_auto_focal_85
+[36/42] cat02::ai_denoise__strength_0
+[37/42] cat02::png_encoder__compression_6
+[38/42] cat02::tiff_encoder__compression_none
+[39/42] cat02::heif_encoder__quality_80
+[40/42] cat02::jxl_encoder__effort_7_q100
+[41/42] cat02::avif_encoder__q80_s6
+[42/42] cat02::raw_input__mode_auto_output_u8
+
+══════════════════════════════════════════════
+  E2E Test Report
+══════════════════════════════════════════════
+  Total:           42
+  Passed:          33 (78.6%)
+  Failed (bypass): 0
+  Failed (real):   9
+  Timed out:       0
+  Elapsed:         6.7s
+══════════════════════════════════════════════
+
+  Real Failures:
+    cat02::ai_denoise__variant_strength_25 — expected success but exit code was Some(1)
+    cat02::ai_denoise__variant_strength_0 — expected success but exit code was Some(1)
+    cat02::heif_encoder__variant_quality_100 — expected success but exit code was Some(101)
+    cat02::heif_encoder__variant_quality_30 — expected success but exit code was Some(101)
+    cat02::jxl_encoder__variant_effort_9_quality_100 — 
+    cat02::jxl_encoder__variant_effort_3_quality_50 — 
+    cat02::ai_denoise__strength_0 — expected success but exit code was Some(1)
+    cat02::heif_encoder__quality_80 — expected success but exit code was Some(101)
+    cat02::jxl_encoder__effort_7_q100 — 
+=== cat03 ===
+E2E Runner — cat03 test categories
+  Binary: staging/photopipeline.exe
+  Output: tests/e2e_suite/output
+  Report: C:/Users/GMW/AppData/Local/Temp/1/e2e_cat03.json
+Loaded 60 test cases
+[1/60] cat03::meta__exif_rw__png_encoder
+[2/60] cat03::meta__exif_rw__tiff_encoder
+[3/60] cat03::meta__exif_rw__heif_encoder
+[4/60] cat03::meta__exif_rw__jxl_encoder
+[5/60] cat03::meta__exif_rw__avif_encoder
+[6/60] cat03::meta__gps_set__png_encoder
+[7/60] cat03::meta__gps_set__tiff_encoder
+[8/60] cat03::meta__gps_set__heif_encoder
+[9/60] cat03::meta__gps_set__jxl_encoder
+[10/60] cat03::meta__gps_set__avif_encoder
+[11/60] cat03::meta__time_shift__png_encoder
+[12/60] cat03::meta__time_shift__tiff_encoder
+[13/60] cat03::meta__time_shift__heif_encoder
+[14/60] cat03::meta__time_shift__jxl_encoder
+[15/60] cat03::meta__time_shift__avif_encoder
+[16/60] cat03::pixel__colorspace__png_encoder
+[17/60] cat03::pixel__colorspace__tiff_encoder
+[18/60] cat03::pixel__colorspace__heif_encoder
+[19/60] cat03::pixel__colorspace__jxl_encoder
+[20/60] cat03::pixel__colorspace__avif_encoder
+[21/60] cat03::pixel__lut3d__png_encoder
+[22/60] cat03::pixel__lut3d__tiff_encoder
+[23/60] cat03::pixel__lut3d__heif_encoder
+[24/60] cat03::pixel__lut3d__jxl_encoder
+[25/60] cat03::pixel__lut3d__avif_encoder
+[26/60] cat03::pixel__transform__png_encoder
+[27/60] cat03::pixel__transform__tiff_encoder
+[28/60] cat03::pixel__transform__heif_encoder
+[29/60] cat03::pixel__transform__jxl_encoder
+[30/60] cat03::pixel__transform__avif_encoder
+[31/60] cat03::pixel__lens_correct__png_encoder
+[32/60] cat03::pixel__lens_correct__tiff_encoder
+[33/60] cat03::pixel__lens_correct__heif_encoder
+[34/60] cat03::pixel__lens_correct__jxl_encoder
+[35/60] cat03::pixel__lens_correct__avif_encoder
+[36/60] cat03::pixel__ai_denoise__png_encoder
+[37/60] cat03::pixel__ai_denoise__tiff_encoder
+[38/60] cat03::pixel__ai_denoise__heif_encoder
+[39/60] cat03::pixel__ai_denoise__jxl_encoder
+[40/60] cat03::pixel__ai_denoise__avif_encoder
+[41/60] cat03::decode__raw_input__colorspace
+[42/60] cat03::decode__raw_input__lut3d
+[43/60] cat03::decode__raw_input__transform
+[44/60] cat03::decode__raw_input__lens_correct
+[45/60] cat03::decode__raw_input__ai_denoise
+[46/60] cat03::pixel2__colorspace__transform
+[47/60] cat03::pixel2__colorspace__lut3d
+[48/60] cat03::pixel2__transform__lens_correct
+[49/60] cat03::pixel2__transform__ai_denoise
+[50/60] cat03::pixel2__lut3d__colorspace
+[51/60] cat03::pixel2__lens_correct__ai_denoise
+[52/60] cat03::pixel2__colorspace__lens_correct
+[53/60] cat03::pixel2__transform__colorspace
+[54/60] cat03::pixel2__lut3d__transform
+[55/60] cat03::pixel2__ai_denoise__lens_correct
+[56/60] cat03::pixel2__lut3d__lens_correct
+[57/60] cat03::pixel2__colorspace__ai_denoise
+[58/60] cat03::pixel2__transform__lut3d
+[59/60] cat03::pixel2__lens_correct__transform
+[60/60] cat03::pixel2__ai_denoise__colorspace
+
+══════════════════════════════════════════════
+  E2E Test Report
+══════════════════════════════════════════════
+  Total:           60
+  Passed:          42 (70.0%)
+  Failed (bypass): 0
+  Failed (real):   18
+  Timed out:       0
+  Elapsed:         9.4s
+══════════════════════════════════════════════
+
+  Real Failures:
+    cat03::meta__exif_rw__heif_encoder — expected success but exit code was Some(101)
+    cat03::meta__gps_set__heif_encoder — expected success but exit code was Some(101)
+    cat03::meta__time_shift__heif_encoder — expected success but exit code was Some(101)
+    cat03::pixel__colorspace__heif_encoder — expected success but exit code was Some(101)
+    cat03::pixel__lut3d__heif_encoder — expected success but exit code was Some(101)
+    cat03::pixel__transform__heif_encoder — expected success but exit code was Some(101)
+    cat03::pixel__lens_correct__heif_encoder — expected success but exit code was Some(101)
+    cat03::pixel__ai_denoise__png_encoder — expected success but exit code was Some(1)
+    cat03::pixel__ai_denoise__tiff_encoder — expected success but exit code was Some(1)
+    cat03::pixel__ai_denoise__heif_encoder — expected success but exit code was Some(1)
+    cat03::pixel__ai_denoise__jxl_encoder — expected success but exit code was Some(1)
+    cat03::pixel__ai_denoise__avif_encoder — expected success but exit code was Some(1)
+    cat03::decode__raw_input__ai_denoise — expected success but exit code was Some(1)
+    cat03::pixel2__transform__ai_denoise — expected success but exit code was Some(1)
+    cat03::pixel2__lens_correct__ai_denoise — expected success but exit code was Some(1)
+    cat03::pixel2__ai_denoise__lens_correct — expected success but exit code was Some(1)
+    cat03::pixel2__colorspace__ai_denoise — expected success but exit code was Some(1)
+    cat03::pixel2__ai_denoise__colorspace — expected success but exit code was Some(1)
+=== cat04 ===
+E2E Runner — cat04 test categories
+  Binary: staging/photopipeline.exe
+  Output: tests/e2e_suite/output
+  Report: C:/Users/GMW/AppData/Local/Temp/1/e2e_cat04.json
+Loaded 50 test cases
+[1/50] cat04::raw__colorspace__png_encoder
+[2/50] cat04::raw__colorspace__tiff_encoder
+[3/50] cat04::raw__colorspace__heif_encoder
+[4/50] cat04::raw__colorspace__jxl_encoder
+[5/50] cat04::raw__colorspace__avif_encoder
+[6/50] cat04::raw__lut3d__png_encoder
+[7/50] cat04::raw__lut3d__tiff_encoder
+[8/50] cat04::raw__lut3d__heif_encoder
+[9/50] cat04::raw__lut3d__jxl_encoder
+[10/50] cat04::raw__lut3d__avif_encoder
+[11/50] cat04::raw__transform__png_encoder
+[12/50] cat04::raw__transform__tiff_encoder
+[13/50] cat04::raw__transform__heif_encoder
+[14/50] cat04::raw__transform__jxl_encoder
+[15/50] cat04::raw__transform__avif_encoder
+[16/50] cat04::raw__lens_correct__png_encoder
+[17/50] cat04::raw__lens_correct__tiff_encoder
+[18/50] cat04::raw__lens_correct__heif_encoder
+[19/50] cat04::raw__lens_correct__jxl_encoder
+[20/50] cat04::raw__lens_correct__avif_encoder
+[21/50] cat04::raw__ai_denoise__png_encoder
+[22/50] cat04::raw__ai_denoise__tiff_encoder
+[23/50] cat04::raw__ai_denoise__heif_encoder
+[24/50] cat04::raw__ai_denoise__jxl_encoder
+[25/50] cat04::raw__ai_denoise__avif_encoder
+[26/50] cat04::pp__colorspace__transform__png_encoder
+[27/50] cat04::pp__transform__lens_correct__heif_encoder
+[28/50] cat04::pp__colorspace__lut3d__png_encoder
+[29/50] cat04::pp__lut3d__ai_denoise__png_encoder
+[30/50] cat04::pp__transform__ai_denoise__jxl_encoder
+[31/50] cat04::pp__colorspace__ai_denoise__jxl_encoder
+[32/50] cat04::pp__lens_correct__colorspace__png_encoder
+[33/50] cat04::pp__colorspace__transform__tiff_encoder
+[34/50] cat04::pp__colorspace__lut3d__jxl_encoder
+[35/50] cat04::pp__lut3d__ai_denoise__tiff_encoder
+[36/50] cat04::pp__transform__ai_denoise__png_encoder
+[37/50] cat04::pp__transform__ai_denoise__heif_encoder
+[38/50] cat04::pp__colorspace__ai_denoise__png_encoder
+[39/50] cat04::pp__transform__colorspace__avif_encoder
+[40/50] cat04::pp__lens_correct__transform__png_encoder
+[41/50] cat04::meta_gps__colorspace__png_encoder
+[42/50] cat04::meta_gps__colorspace__tiff_encoder
+[43/50] cat04::meta_gps__colorspace__heif_encoder
+[44/50] cat04::meta_gps__colorspace__jxl_encoder
+[45/50] cat04::meta_gps__colorspace__avif_encoder
+[46/50] cat04::pixel_transform__exif__png_encoder
+[47/50] cat04::pixel_transform__exif__tiff_encoder
+[48/50] cat04::pixel_transform__exif__heif_encoder
+[49/50] cat04::pixel_transform__exif__jxl_encoder
+[50/50] cat04::pixel_transform__exif__avif_encoder
+
+══════════════════════════════════════════════
+  E2E Test Report
+══════════════════════════════════════════════
+  Total:           50
+  Passed:          31 (62.0%)
+  Failed (bypass): 0
+  Failed (real):   19
+  Timed out:       0
+  Elapsed:         12.8s
+══════════════════════════════════════════════
+
+  Real Failures:
+    cat04::raw__colorspace__heif_encoder — expected success but exit code was Some(101)
+    cat04::raw__lut3d__heif_encoder — expected success but exit code was Some(101)
+    cat04::raw__transform__heif_encoder — expected success but exit code was Some(101)
+    cat04::raw__lens_correct__heif_encoder — expected success but exit code was Some(101)
+    cat04::raw__ai_denoise__png_encoder — expected success but exit code was Some(1)
+    cat04::raw__ai_denoise__tiff_encoder — expected success but exit code was Some(1)
+    cat04::raw__ai_denoise__heif_encoder — expected success but exit code was Some(1)
+    cat04::raw__ai_denoise__jxl_encoder — expected success but exit code was Some(1)
+    cat04::raw__ai_denoise__avif_encoder — expected success but exit code was Some(1)
+    cat04::pp__transform__lens_correct__heif_encoder — expected success but exit code was Some(101)
+    cat04::pp__lut3d__ai_denoise__png_encoder — expected success but exit code was Some(1)
+    cat04::pp__transform__ai_denoise__jxl_encoder — expected success but exit code was Some(1)
+    cat04::pp__colorspace__ai_denoise__jxl_encoder — expected success but exit code was Some(1)
+    cat04::pp__lut3d__ai_denoise__tiff_encoder — expected success but exit code was Some(1)
+    cat04::pp__transform__ai_denoise__png_encoder — expected success but exit code was Some(1)
+    cat04::pp__transform__ai_denoise__heif_encoder — expected success but exit code was Some(1)
+    cat04::pp__colorspace__ai_denoise__png_encoder — expected success but exit code was Some(1)
+    cat04::meta_gps__colorspace__heif_encoder — expected success but exit code was Some(101)
+    cat04::pixel_transform__exif__heif_encoder — expected success but exit code was Some(101)
+=== cat05 ===
+E2E Runner — cat05 test categories
+  Binary: staging/photopipeline.exe
+  Output: tests/e2e_suite/output
+  Report: C:/Users/GMW/AppData/Local/Temp/1/e2e_cat05.json
+Loaded 26 test cases
+[1/26] cat05::raw_cs_transform
+[2/26] cat05::raw_cs_transform
+[3/26] cat05::raw_cs_transform
+[4/26] cat05::raw_cs_transform
+[5/26] cat05::raw_cs_transform
+[6/26] cat05::raw_cs_denoise
+[7/26] cat05::raw_cs_denoise
+[8/26] cat05::raw_cs_denoise
+[9/26] cat05::raw_cs_denoise
+[10/26] cat05::raw_cs_denoise
+[11/26] cat05::raw_transform_lens
+[12/26] cat05::raw_transform_lens
+[13/26] cat05::raw_transform_lens
+[14/26] cat05::raw_transform_lens
+[15/26] cat05::raw_full_pixel
+[16/26] cat05::raw_full_pixel
+[17/26] cat05::raw_full_pixel
+[18/26] cat05::raw_lut
+[19/26] cat05::raw_lut
+[20/26] cat05::raw_lut
+[21/26] cat05::full_meta
+[22/26] cat05::full_meta
+[23/26] cat05::full_meta
+[24/26] cat05::meta_exif_gps_time_png
+[25/26] cat05::raw_cs_lut_jxl
+[26/26] cat05::raw_transform_denoise_png
+
+══════════════════════════════════════════════
+  E2E Test Report
+══════════════════════════════════════════════
+  Total:           26
+  Passed:          19 (73.1%)
+  Failed (bypass): 0
+  Failed (real):   7
+  Timed out:       0
+  Elapsed:         7.7s
+══════════════════════════════════════════════
+
+  Real Failures:
+    cat05::raw_cs_transform — expected success but exit code was Some(101)
+    cat05::raw_cs_denoise — expected success but exit code was Some(1)
+    cat05::raw_cs_denoise — expected success but exit code was Some(1)
+    cat05::raw_cs_denoise — expected success but exit code was Some(1)
+    cat05::raw_cs_denoise — expected success but exit code was Some(1)
+    cat05::raw_cs_denoise — expected success but exit code was Some(1)
+    cat05::raw_transform_denoise_png — expected success but exit code was Some(1)
+=== cat06 ===
+E2E Runner — cat06 test categories
+  Binary: staging/photopipeline.exe
+  Output: tests/e2e_suite/output
+  Report: C:/Users/GMW/AppData/Local/Temp/1/e2e_cat06.json
+Loaded 29 test cases
+[1/29] cat06::image_solid_64x64
+[2/29] cat06::image_checkerboard_128x128
+[3/29] cat06::image_gradient_256x256
+[4/29] cat06::image_color_bars_256x128
+[5/29] cat06::image_grayscale_256x16
+[6/29] cat06::image_large_1920x1080
+[7/29] cat06::diamond
+[8/29] cat06::disabled_pos0
+[9/29] cat06::disabled_pos1
+[10/29] cat06::disabled_pos2
+[11/29] cat06::linear_50_nodes
+[12/29] cat06::linear_100_nodes
+[13/29] cat06::empty_graph
+[14/29] cat06::cycle_detected
+[15/29] cat06::fan_out_3
+[16/29] cat06::fan_in_2
+[17/29] cat06::disabled_first_node
+[18/29] cat06::disabled_last_node
+[19/29] cat06::single_node_no_edges
+[20/29] cat06::linear_20_nodes
+[21/29] cat06::diamond_metadata
+[22/29] cat06::config_with_groups
+[23/29] cat06::config_with_overrides
+[24/29] cat06::config_with_batch
+[25/29] cat06::disconnected_components
+[26/29] cat06::all_nodes_disabled
+[27/29] cat06::fan_out_5_encoders
+[28/29] cat06::edge_missing_source
+[29/29] cat06::5node_linear_chain
+
+══════════════════════════════════════════════
+  E2E Test Report
+══════════════════════════════════════════════
+  Total:           29
+  Passed:          24 (82.8%)
+  Failed (bypass): 0
+  Failed (real):   3
+  Timed out:       2
+  Elapsed:         374.8s
+══════════════════════════════════════════════
+
+  Real Failures:
+    cat06::cycle_detected — expected failure but pipeline succeeded
+    cat06::diamond_metadata — 
+    cat06::fan_out_5_encoders — expected success but exit code was Some(101)
+
+  Timeouts:
+    cat06::linear_50_nodes — 180032ms
+    cat06::linear_100_nodes — 180076ms
+=== cat07 ===
+E2E Runner — cat07 test categories
+  Binary: staging/photopipeline.exe
+  Output: tests/e2e_suite/output
+  Report: C:/Users/GMW/AppData/Local/Temp/1/e2e_cat07.json
+Loaded 40 test cases
+[1/40] cat07::png_rgb8_sig
+[2/40] cat07::png_gray8
+[3/40] cat07::png_rgba8
+[4/40] cat07::png_compression_9
+[5/40] cat07::png_solid
+[6/40] cat07::png_checker
+[7/40] cat07::png_gradient
+[8/40] cat07::png_large
+[9/40] cat07::tiff_lzw
+[10/40] cat07::tiff_deflate
+[11/40] cat07::tiff_solid
+[12/40] cat07::tiff_checker
+[13/40] cat07::tiff_gradient
+[14/40] cat07::tiff_color_bars
+[15/40] cat07::tiff_grayscale
+[16/40] cat07::tiff_large
+[17/40] cat07::heif_q100
+[18/40] cat07::heif_q50
+[19/40] cat07::heif_q30
+[20/40] cat07::heif_solid
+[21/40] cat07::heif_checker
+[22/40] cat07::heif_gradient
+[23/40] cat07::heif_color_bars
+[24/40] cat07::heif_large
+[25/40] cat07::jxl_q100_e9
+[26/40] cat07::jxl_q50_e3
+[27/40] cat07::jxl_lossless
+[28/40] cat07::jxl_solid
+[29/40] cat07::jxl_checker
+[30/40] cat07::jxl_gradient
+[31/40] cat07::jxl_color_bars
+[32/40] cat07::jxl_large
+[33/40] cat07::avif_q100_s0
+[34/40] cat07::avif_q50_s8
+[35/40] cat07::avif_solid
+[36/40] cat07::avif_checker
+[37/40] cat07::avif_gradient
+[38/40] cat07::avif_color_bars
+[39/40] cat07::avif_grayscale
+[40/40] cat07::avif_large
+
+══════════════════════════════════════════════
+  E2E Test Report
+══════════════════════════════════════════════
+  Total:           40
+  Passed:          24 (60.0%)
+  Failed (bypass): 0
+  Failed (real):   16
+  Timed out:       0
+  Elapsed:         5.1s
+══════════════════════════════════════════════
+
+  Real Failures:
+    cat07::heif_q100 — expected success but exit code was Some(101)
+    cat07::heif_q50 — expected success but exit code was Some(101)
+    cat07::heif_q30 — expected success but exit code was Some(101)
+    cat07::heif_solid — expected success but exit code was Some(101)
+    cat07::heif_checker — expected success but exit code was Some(101)
+    cat07::heif_gradient — expected success but exit code was Some(101)
+    cat07::heif_color_bars — expected success but exit code was Some(101)
+    cat07::heif_large — expected success but exit code was Some(101)
+    cat07::jxl_q100_e9 — 
+    cat07::jxl_q50_e3 — 
+    cat07::jxl_lossless — 
+    cat07::jxl_solid — 
+    cat07::jxl_checker — 
+    cat07::jxl_gradient — 
+    cat07::jxl_color_bars — 
+    cat07::jxl_large — 
+=== cat08 ===
+E2E Runner — cat08 test categories
+  Binary: staging/photopipeline.exe
+  Output: tests/e2e_suite/output
+  Report: C:/Users/GMW/AppData/Local/Temp/1/e2e_cat08.json
+Loaded 56 test cases
+[1/56] cat08::exif_rw__preserve
+[2/56] cat08::exif_rw__custom_full
+[3/56] cat08::exif_rw__invalid_mode
+[4/56] cat08::exif_rw__default
+[5/56] cat08::gps_set__lat_min90_lon_min180
+[6/56] cat08::gps_set__lat_90_lon_180
+[7/56] cat08::gps_set__lat_91_invalid
+[8/56] cat08::gps_set__default_zero
+[9/56] cat08::time_shift__minus_23h
+[10/56] cat08::time_shift__plus_23h
+[11/56] cat08::time_shift__h24_out_of_range
+[12/56] cat08::time_shift__default_0
+[13/56] cat08::colorspace__srgb_to_srgb
+[14/56] cat08::colorspace__srgb_to_prophoto
+[15/56] cat08::colorspace__invalid_target
+[16/56] cat08::colorspace__default_srgb
+[17/56] cat08::lut3d__intensity_0
+[18/56] cat08::lut3d__intensity_100
+[19/56] cat08::lut3d__intensity_101
+[20/56] cat08::lut3d__default_100
+[21/56] cat08::transform__scale_1pct
+[22/56] cat08::transform__scale_400pct
+[23/56] cat08::transform__scale_401pct
+[24/56] cat08::transform__default_100
+[25/56] cat08::lens_correct__mode_off
+[26/56] cat08::lens_correct__mode_auto
+[27/56] cat08::lens_correct__focal_neg1
+[28/56] cat08::lens_correct__default_off
+[29/56] cat08::ai_denoise__strength_0
+[30/56] cat08::ai_denoise__strength_100
+[31/56] cat08::ai_denoise__strength_101
+[32/56] cat08::ai_denoise__default_0
+[33/56] cat08::png_encoder__compression_0
+[34/56] cat08::png_encoder__compression_9
+[35/56] cat08::png_encoder__compression_10
+[36/56] cat08::png_encoder__default_6
+[37/56] cat08::tiff_encoder__compression_none
+[38/56] cat08::tiff_encoder__compression_packbits
+[39/56] cat08::tiff_encoder__compression_invalid
+[40/56] cat08::tiff_encoder__default_none
+[41/56] cat08::heif_encoder__quality_0
+[42/56] cat08::heif_encoder__quality_100
+[43/56] cat08::heif_encoder__quality_101
+[44/56] cat08::heif_encoder__default_80
+[45/56] cat08::jxl_encoder__effort_1_q_minus1
+[46/56] cat08::jxl_encoder__effort_9_q_100
+[47/56] cat08::jxl_encoder__effort_10
+[48/56] cat08::jxl_encoder__default_7
+[49/56] cat08::avif_encoder__q0_s10
+[50/56] cat08::avif_encoder__q100_s0
+[51/56] cat08::avif_encoder__q101
+[52/56] cat08::avif_encoder__default_q80_s6
+[53/56] cat08::raw_input__mode_auto
+[54/56] cat08::raw_input__mode_dcraw
+[55/56] cat08::raw_input__invalid_mode
+[56/56] cat08::raw_input__default
+
+══════════════════════════════════════════════
+  E2E Test Report
+══════════════════════════════════════════════
+  Total:           56
+  Passed:          39 (69.6%)
+  Failed (bypass): 0
+  Failed (real):   17
+  Timed out:       0
+  Elapsed:         8.6s
+══════════════════════════════════════════════
+
+  Real Failures:
+    cat08::exif_rw__invalid_mode — expected failure but pipeline succeeded
+    cat08::time_shift__h24_out_of_range — expected failure but pipeline succeeded
+    cat08::colorspace__invalid_target — expected failure but pipeline succeeded
+    cat08::transform__scale_401pct — expected failure but pipeline succeeded
+    cat08::lens_correct__focal_neg1 — expected failure but pipeline succeeded
+    cat08::ai_denoise__strength_0 — expected success but exit code was Some(1)
+    cat08::ai_denoise__strength_100 — expected success but exit code was Some(1)
+    cat08::ai_denoise__default_0 — expected success but exit code was Some(1)
+    cat08::png_encoder__compression_10 — expected failure but pipeline succeeded
+    cat08::tiff_encoder__compression_invalid — expected failure but pipeline succeeded
+    cat08::heif_encoder__quality_0 — expected success but exit code was Some(101)
+    cat08::heif_encoder__quality_100 — expected success but exit code was Some(101)
+    cat08::heif_encoder__default_80 — expected success but exit code was Some(101)
+    cat08::jxl_encoder__effort_10 — expected failure but pipeline succeeded
+    cat08::avif_encoder__q0_s10 — expected success but exit code was Some(101)
+    cat08::raw_input__mode_dcraw — expected failure but pipeline succeeded
+    cat08::raw_input__invalid_mode — expected failure but pipeline succeeded
+=== cat09 ===
+E2E Runner — cat09 test categories
+  Binary: staging/photopipeline.exe
+  Output: tests/e2e_suite/output
+  Report: C:/Users/GMW/AppData/Local/Temp/1/e2e_cat09.json
+Loaded 24 test cases
+[1/24] cat09::nonexistent_plugin
+[2/24] cat09::typo_in_plugin_id
+[3/24] cat09::empty_plugin_id
+[4/24] cat09::unknown_param_key
+[5/24] cat09::case_sensitive_param
+[6/24] cat09::png_invalid_color_type
+[7/24] cat09::tiff_invalid_compression
+[8/24] cat09::heif_quality_200
+[9/24] cat09::jxl_quality_200
+[10/24] cat09::avif_quality_200
+[11/24] cat09::colorspace_source_equals_target_noop
+[12/24] cat09::transform_crop_without_dims
+[13/24] cat09::lens_manual_without_focal
+[14/24] cat09::duplicate_node_ids
+[15/24] cat09::edge_to_nonexistent
+[16/24] cat09::self_loop
+[17/24] cat09::invalid_json_syntax
+[18/24] cat09::invalid_json_wrong_types
+[19/24] cat09::output_ext_unknown
+[20/24] cat09::output_no_ext
+[21/24] cat09::zero_dim_image
+[22/24] cat09::jxl_negative_effort
+[23/24] cat09::transform_negative_scale
+[24/24] cat09::avif_negative_quality
+
+══════════════════════════════════════════════
+  E2E Test Report
+══════════════════════════════════════════════
+  Total:           24
+  Passed:          11 (45.8%)
+  Failed (bypass): 0
+  Failed (real):   13
+  Timed out:       0
+  Elapsed:         3.5s
+══════════════════════════════════════════════
+
+  Real Failures:
+    cat09::unknown_param_key — expected failure but pipeline succeeded
+    cat09::case_sensitive_param — expected failure but pipeline succeeded
+    cat09::png_invalid_color_type — expected failure but pipeline succeeded
+    cat09::tiff_invalid_compression — expected failure but pipeline succeeded
+    cat09::jxl_quality_200 — expected failure but pipeline succeeded
+    cat09::colorspace_source_equals_target_noop — expected failure but pipeline succeeded
+    cat09::transform_crop_without_dims — expected failure but pipeline succeeded
+    cat09::lens_manual_without_focal — expected failure but pipeline succeeded
+    cat09::duplicate_node_ids — expected failure but pipeline succeeded
+    cat09::self_loop — expected failure but pipeline succeeded
+    cat09::output_ext_unknown — expected failure but pipeline succeeded
+    cat09::jxl_negative_effort — expected failure but pipeline succeeded
+    cat09::transform_negative_scale — expected failure but pipeline succeeded
+=== cat10 ===
+E2E Runner — cat10 test categories
+  Binary: staging/photopipeline.exe
+  Output: tests/e2e_suite/output
+  Report: C:/Users/GMW/AppData/Local/Temp/1/e2e_cat10.json
+Loaded 22 test cases
+[1/22] cat10::passthrough_solid_64x64
+[2/22] cat10::passthrough_checkerboard_128x128
+[3/22] cat10::passthrough_gradient_256x256
+[4/22] cat10::png_lossless_solid_64x64
+[5/22] cat10::png_lossless_checkerboard_128x128
+[6/22] cat10::png_lossless_gradient_256x256
+[7/22] cat10::tiff_lossless_solid_64x64
+[8/22] cat10::tiff_lossless_checkerboard_128x128
+[9/22] cat10::tiff_lossless_gradient_256x256
+[10/22] cat10::heif_q100
+[11/22] cat10::heif_q50
+[12/22] cat10::heif_q10
+[13/22] cat10::jxl_e9q100
+[14/22] cat10::jxl_e3q80
+[15/22] cat10::avif_q100s0
+[16/22] cat10::avif_q50s8
+[17/22] cat10::avif_q10s10
+[18/22] cat10::colorspace_srgb_to_adobergb_size
+[19/22] cat10::transform_resize_64x64
+[20/22] cat10::jxl_lossless_quality
+[21/22] cat10::avif_small_quality_check
+[22/22] cat10::heif_high_quality_large
+
+══════════════════════════════════════════════
+  E2E Test Report
+══════════════════════════════════════════════
+  Total:           22
+  Passed:          14 (63.6%)
+  Failed (bypass): 0
+  Failed (real):   8
+  Timed out:       0
+  Elapsed:         3.3s
+══════════════════════════════════════════════
+
+  Real Failures:
+    cat10::tiff_lossless_solid_64x64 — 
+    cat10::heif_q100 — expected success but exit code was Some(101)
+    cat10::heif_q50 — expected success but exit code was Some(101)
+    cat10::heif_q10 — expected success but exit code was Some(101)
+    cat10::jxl_e9q100 — 
+    cat10::jxl_e3q80 — 
+    cat10::jxl_lossless_quality — 
+    cat10::heif_high_quality_large — expected success but exit code was Some(101)
+=== cat11 ===
+E2E Runner — cat11 test categories
+  Binary: staging/photopipeline.exe
+  Output: tests/e2e_suite/output
+  Report: C:/Users/GMW/AppData/Local/Temp/1/e2e_cat11.json
+Loaded 24 test cases
+[1/24] cat11::exif_read__png_encoder
+[2/24] cat11::exif_read__tiff_encoder
+[3/24] cat11::exif_read__heif_encoder
+[4/24] cat11::exif_read__jxl_encoder
+[5/24] cat11::exif_read__avif_encoder
+[6/24] cat11::gps_set__png_encoder
+[7/24] cat11::gps_set__tiff_encoder
+[8/24] cat11::gps_set__heif_encoder
+[9/24] cat11::gps_set__jxl_encoder
+[10/24] cat11::gps_set__avif_encoder
+[11/24] cat11::gps_time__png_encoder
+[12/24] cat11::gps_time__tiff_encoder
+[13/24] cat11::gps_time__jxl_encoder
+[14/24] cat11::full_meta__png_encoder
+[15/24] cat11::full_meta__tiff_encoder
+[16/24] cat11::full_meta__heif_encoder
+[17/24] cat11::full_meta__jxl_encoder
+[18/24] cat11::gps_clear
+[19/24] cat11::exif_clear
+[20/24] cat11::time_shift_reset
+[21/24] cat11::exif_and_gps_png
+[22/24] cat11::time_shift_and_exif_png
+[23/24] cat11::gps_tokyo_manual
+[24/24] cat11::gps_london_manual
+
+══════════════════════════════════════════════
+  E2E Test Report
+══════════════════════════════════════════════
+  Total:           24
+  Passed:          14 (58.3%)
+  Failed (bypass): 0
+  Failed (real):   10
+  Timed out:       0
+  Elapsed:         10.1s
+══════════════════════════════════════════════
+
+  Real Failures:
+    cat11::exif_read__heif_encoder — expected success but exit code was Some(101)
+    cat11::gps_set__png_encoder — 
+    cat11::gps_set__tiff_encoder — 
+    cat11::gps_set__heif_encoder — expected success but exit code was Some(101)
+    cat11::gps_set__jxl_encoder — 
+    cat11::gps_set__avif_encoder — 
+    cat11::gps_time__png_encoder — 
+    cat11::gps_time__tiff_encoder — 
+    cat11::gps_time__jxl_encoder — 
+    cat11::full_meta__heif_encoder — expected success but exit code was Some(101)
+=== cat12 ===
+E2E Runner — cat12 test categories
+  Binary: staging/photopipeline.exe
+  Output: tests/e2e_suite/output
+  Report: C:/Users/GMW/AppData/Local/Temp/1/e2e_cat12.json
+Loaded 24 test cases
+[1/24] cat12::validate_valid_1node
+[2/24] cat12::validate_invalid_missing_plugin
+[3/24] cat12::validate_invalid_cycle
+[4/24] cat12::validate_empty_graph
+[5/24] cat12::run_same_config_twice
+[6/24] cat12::run_different_inputs_same_config
+[7/24] cat12::run_overwrite_output
+[8/24] cat12::validate_png_encoder_valid
+[9/24] cat12::validate_tiff_encoder_valid
+[10/24] cat12::validate_exif_rw_valid
+[11/24] cat12::validate_colorspace_valid
+[12/24] cat12::validate_transform_valid
+[13/24] cat12::run_png_encoder_output
+[14/24] cat12::run_tiff_encoder_output
+[15/24] cat12::run_heif_encoder_output
+[16/24] cat12::run_jxl_encoder_output
+[17/24] cat12::run_avif_encoder_output
+[18/24] cat12::run_no_args_like_empty
+[19/24] cat12::run_wide_strip_input
+[20/24] cat12::run_large_image_1920x1080
+[21/24] cat12::run_grayscale_input
+[22/24] cat12::validate_3node_valid
+[23/24] cat12::validate_50node_linear
+[24/24] cat12::run_colorspace_to_transform_png
+
+══════════════════════════════════════════════
+  E2E Test Report
+══════════════════════════════════════════════
+  Total:           24
+  Passed:          3 (12.5%)
+  Failed (bypass): 0
+  Failed (real):   21
+  Timed out:       0
+  Elapsed:         7.3s
+══════════════════════════════════════════════
+
+  Real Failures:
+    cat12::validate_valid_1node — expected success but exit code was Some(-1073741502)
+    cat12::run_same_config_twice — expected success but exit code was Some(-1073741502)
+    cat12::run_different_inputs_same_config — expected success but exit code was Some(-1073741502)
+    cat12::run_overwrite_output — expected success but exit code was Some(-1073741502)
+    cat12::validate_png_encoder_valid — expected success but exit code was Some(-1073741502)
+    cat12::validate_tiff_encoder_valid — expected success but exit code was Some(-1073741502)
+    cat12::validate_exif_rw_valid — expected success but exit code was Some(-1073741502)
+    cat12::validate_colorspace_valid — expected success but exit code was Some(-1073741502)
+    cat12::validate_transform_valid — expected success but exit code was Some(-1073741502)
+    cat12::run_png_encoder_output — expected success but exit code was Some(-1073741502)
+    cat12::run_tiff_encoder_output — expected success but exit code was Some(-1073741502)
+    cat12::run_heif_encoder_output — expected success but exit code was Some(-1073741502)
+    cat12::run_jxl_encoder_output — expected success but exit code was Some(-1073741502)
+    cat12::run_avif_encoder_output — expected success but exit code was Some(-1073741502)
+    cat12::run_no_args_like_empty — expected success but exit code was Some(-1073741502)
+    cat12::run_wide_strip_input — expected success but exit code was Some(-1073741502)
+    cat12::run_large_image_1920x1080 — expected success but exit code was Some(-1073741502)
+    cat12::run_grayscale_input — expected success but exit code was Some(-1073741502)
+    cat12::validate_3node_valid — expected success but exit code was Some(-1073741502)
+    cat12::validate_50node_linear — expected success but exit code was Some(-1073741502)
+    cat12::run_colorspace_to_transform_png — expected success but exit code was Some(-1073741502)
+=== cat13 ===
+E2E Runner — cat13 test categories
+  Binary: staging/photopipeline.exe
+  Output: tests/e2e_suite/output
+  Report: C:/Users/GMW/AppData/Local/Temp/1/e2e_cat13.json
+Loaded 15 test cases
+[1/15] cat13::roundtrip_encode_png_encoder
+[2/15] cat13::roundtrip_encode_tiff_encoder
+[3/15] cat13::roundtrip_encode_heif_encoder
+[4/15] cat13::roundtrip_encode_jxl_encoder
+[5/15] cat13::roundtrip_encode_avif_encoder
+[6/15] cat13::roundtrip_resize_png_encoder
+[7/15] cat13::roundtrip_resize_jxl_encoder
+[8/15] cat13::roundtrip_resize_avif_encoder
+[9/15] cat13::roundtrip_colorspace_heif
+[10/15] cat13::roundtrip_colorspace_tiff
+[11/15] cat13::roundtrip_meta_png
+[12/15] cat13::roundtrip_meta_jxl
+[13/15] cat13::roundtrip_raw_to_png_encode
+[14/15] cat13::roundtrip_lut3d_to_jxl
+[15/15] cat13::roundtrip_denoise_to_png
+
+══════════════════════════════════════════════
+  E2E Test Report
+══════════════════════════════════════════════
+  Total:           15
+  Passed:          0 (0.0%)
+  Failed (bypass): 0
+  Failed (real):   15
+  Timed out:       0
+  Elapsed:         4.8s
+══════════════════════════════════════════════
+
+  Real Failures:
+    cat13::roundtrip_encode_png_encoder — expected success but exit code was Some(-1073741502)
+    cat13::roundtrip_encode_tiff_encoder — expected success but exit code was Some(-1073741502)
+    cat13::roundtrip_encode_heif_encoder — expected success but exit code was Some(-1073741502)
+    cat13::roundtrip_encode_jxl_encoder — expected success but exit code was Some(-1073741502)
+    cat13::roundtrip_encode_avif_encoder — expected success but exit code was Some(-1073741502)
+    cat13::roundtrip_resize_png_encoder — expected success but exit code was Some(-1073741502)
+    cat13::roundtrip_resize_jxl_encoder — expected success but exit code was Some(-1073741502)
+    cat13::roundtrip_resize_avif_encoder — expected success but exit code was Some(-1073741502)
+    cat13::roundtrip_colorspace_heif — expected success but exit code was Some(-1073741502)
+    cat13::roundtrip_colorspace_tiff — expected success but exit code was Some(-1073741502)
+    cat13::roundtrip_meta_png — expected success but exit code was Some(-1073741502)
+    cat13::roundtrip_meta_jxl — expected success but exit code was Some(-1073741502)
+    cat13::roundtrip_raw_to_png_encode — expected success but exit code was Some(-1073741502)
+    cat13::roundtrip_lut3d_to_jxl — expected success but exit code was Some(-1073741502)
+    cat13::roundtrip_denoise_to_png — expected success but exit code was Some(-1073741502)
+=== cat14 ===
+E2E Runner — cat14 test categories
+  Binary: staging/photopipeline.exe
+  Output: tests/e2e_suite/output
+  Report: C:/Users/GMW/AppData/Local/Temp/1/e2e_cat14.json
+Loaded 24 test cases
+[1/24] cat14::raw_input_dcraw_mode_unimplemented
+[2/24] cat14::lens_correct_silent_passthrough
+[3/24] cat14::exif_rw_write_silent_noop
+[4/24] cat14::jxl_encoder_detect_cjxl_never_calls_binary
+[5/24] cat14::ai_denoise_u16_precision_loss
+[6/24] cat14::lut3d_fake_gpu_backend
+[7/24] cat14::lens_correct_unused_db_path_param
+[8/24] cat14::avif_encoder_u16_downconvert
+[9/24] cat14::colorspace_f16_unsupported_pure_rust
+[10/24] cat14::time_shift_needs_exiftool
+[11/24] cat14::gps_set_needs_exiftool
+[12/24] cat14::colorspace_fallback_chain
+[13/24] cat14::transform_halide_fallback
+[14/24] cat14::heif_encoder_needs_native_ffi
+[15/24] cat14::jxl_encoder_needs_native_ffi
+[16/24] cat14::raw_to_heif_no_libraw
+[17/24] cat14::raw_to_jxl_no_libraw
+[18/24] cat14::heif_to_png_no_libheif
+[19/24] cat14::jxl_to_png_no_libjxl
+[20/24] cat14::denoise_to_heif_chain
+[21/24] cat14::lens_to_jxl_chain
+[22/24] cat14::raw_full_chain
+[23/24] cat14::meta_full_chain
+[24/24] cat14::complex_color_chain
+
+══════════════════════════════════════════════
+  E2E Test Report
+══════════════════════════════════════════════
+  Total:           24
+  Passed:          10 (41.7%)
+  Failed (bypass): 0
+  Failed (real):   14
+  Timed out:       0
+  Elapsed:         7.3s
+══════════════════════════════════════════════
+
+  Real Failures:
+    cat14::lens_correct_silent_passthrough — expected success but exit code was Some(-1073741502)
+    cat14::exif_rw_write_silent_noop — expected success but exit code was Some(-1073741502)
+    cat14::jxl_encoder_detect_cjxl_never_calls_binary — expected success but exit code was Some(-1073741502)
+    cat14::ai_denoise_u16_precision_loss — expected success but exit code was Some(-1073741502)
+    cat14::lut3d_fake_gpu_backend — expected success but exit code was Some(-1073741502)
+    cat14::lens_correct_unused_db_path_param — expected success but exit code was Some(-1073741502)
+    cat14::avif_encoder_u16_downconvert — expected success but exit code was Some(-1073741502)
+    cat14::colorspace_f16_unsupported_pure_rust — expected success but exit code was Some(-1073741502)
+    cat14::time_shift_needs_exiftool — expected success but exit code was Some(-1073741502)
+    cat14::gps_set_needs_exiftool — expected success but exit code was Some(-1073741502)
+    cat14::colorspace_fallback_chain — expected success but exit code was Some(-1073741502)
+    cat14::transform_halide_fallback — expected success but exit code was Some(-1073741502)
+    cat14::heif_encoder_needs_native_ffi — expected success but exit code was Some(-1073741502)
+    cat14::jxl_encoder_needs_native_ffi — expected success but exit code was Some(-1073741502)

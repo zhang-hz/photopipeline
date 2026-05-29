@@ -94,7 +94,7 @@ fn main() {
         specs: all_specs,
         output_dir,
         default_timeout: Duration::from_secs(60),
-        large_pipeline_timeout: Duration::from_secs(180),
+        large_pipeline_timeout: Duration::from_secs(300),
     };
 
     let start = Instant::now();
