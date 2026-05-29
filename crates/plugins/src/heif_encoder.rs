@@ -460,37 +460,47 @@ fn encode_via_libheif(
             )?;
 
             let in_bit_depth = match bpc { 1 => 8, 2 => 16, _ => 8 };
-            let channel = heif_channel_heif_channel_interleaved;
-            err_check(
-                heif_image_add_plane(heif_image, channel, width, height, in_bit_depth),
-                plugin_id, "heif_image_add_plane"
-            )?;
 
-            // Get plane and copy pixel data
-            let mut stride: c_int = 0;
-            let plane = heif_image_get_plane(heif_image, channel, &mut stride);
-            if plane.is_null() {
-                heif_image_release(heif_image);
-                heif_context_free(ctx);
-                return Err(PluginError::Internal { plugin: plugin_id.clone(), message: "failed to get image plane".into() });
+            // Planar RGB: 3 separate planes (R, G, B) — matches libheif-rs pattern
+            let channels = [
+                heif_channel_heif_channel_R,
+                heif_channel_heif_channel_G,
+                heif_channel_heif_channel_B,
+            ];
+            for &ch in &channels {
+                err_check(
+                    heif_image_add_plane(heif_image, ch, width, height, in_bit_depth),
+                    plugin_id, "heif_image_add_plane"
+                )?;
             }
 
-            let bytes_per_sample = bpc as usize;
-            let plane_bytes = (stride as usize) * (height as usize);
-            let dst = std::slice::from_raw_parts_mut(plane, plane_bytes);
-            if stride as usize == width as usize * 3 * (bytes_per_sample) {
-                let copy_end = std::cmp::min(image.data.data.len(), dst.len());
-                dst[..copy_end].copy_from_slice(&image.data.data[..copy_end]);
-            } else {
-                let width_u = width as usize;
+            // De-interleave: source is interleaved RGBRGB..., copy one channel per plane
+            let src = &image.data.data;
+            let src_stride = width as usize * 3 * (bpc as usize);
+            for (ch_idx, &ch) in channels.iter().enumerate() {
+                let mut stride: c_int = 0;
+                let plane = heif_image_get_plane(heif_image, ch, &mut stride);
+                if plane.is_null() {
+                    heif_image_release(heif_image);
+                    heif_context_free(ctx);
+                    return Err(PluginError::Internal { plugin: plugin_id.clone(), message: "failed to get image plane".into() });
+                }
+                let dst = std::slice::from_raw_parts_mut(plane, (stride as usize) * (height as usize));
                 for y in 0..height as usize {
-                    let src_off = y * width_u * 3 * (bytes_per_sample);
-                    let dst_off = y * stride as usize;
-                    let src_end = std::cmp::min(src_off + width_u * 3 * (bytes_per_sample), image.data.data.len());
-                    let dst_end = std::cmp::min(dst_off + (src_end - src_off), dst.len());
-                    if dst_off < dst.len() && src_off < image.data.data.len() {
-                        let src_slice = &image.data.data[src_off..src_end];
-                        dst[dst_off..dst_end].copy_from_slice(src_slice);
+                    let src_row = y * src_stride;
+                    let dst_row = y * stride as usize;
+                    for x in 0..width as usize {
+                        let si = src_row + x * 3 * (bpc as usize);
+                        let di = dst_row + x * (bpc as usize);
+                        if bpc == 1 {
+                            if si + 3 <= src.len() && di < dst.len() {
+                                dst[di] = src[si + ch_idx];
+                            }
+                        } else {
+                            if si + ch_idx * 2 + 2 <= src.len() && di + 1 < dst.len() {
+                                dst[di..di+2].copy_from_slice(&src[si+ch_idx*2..si+ch_idx*2+2]);
+                            }
+                        }
                     }
                 }
             }
