@@ -56,9 +56,10 @@ fn prost_value_to_json(v: &prost_types::Value) -> serde_json::Value {
 
 #[tauri::command]
 pub async fn list_plugins(
-    grpc: State<'_, Mutex<GrpcClients>>,
+    grpc: State<'_, Mutex<Option<GrpcClients>>>,
 ) -> Result<Vec<PluginEntry>, String> {
-    let mut clients = grpc.lock().await;
+    let mut guard = grpc.lock().await;
+    let clients = guard.as_mut().ok_or("Backend not connected")?;
     let entries = clients.plugin.list_plugins().await?;
     Ok(entries
         .into_iter()
@@ -79,10 +80,11 @@ pub async fn list_plugins(
 
 #[tauri::command]
 pub async fn get_node_schema(
-    grpc: State<'_, Mutex<GrpcClients>>,
+    grpc: State<'_, Mutex<Option<GrpcClients>>>,
     plugin_id: String,
 ) -> Result<NodeSchemaResponse, String> {
-    let mut clients = grpc.lock().await;
+    let mut guard = grpc.lock().await;
+    let clients = guard.as_mut().ok_or("Backend not connected")?;
     let schema = clients.plugin.get_node_schema(&plugin_id).await?;
     Ok(NodeSchemaResponse {
         plugin_id: schema.plugin_id,

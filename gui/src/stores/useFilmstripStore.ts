@@ -50,7 +50,12 @@ export const useFilmstripStore = create<FilmstripState & FilmstripActions>((set,
   isLoading: false,
 
   importImages: (images) =>
-    set((s) => ({ images: [...s.images, ...images], isLoading: false })),
+    set((s) => {
+      const existingIds = new Set(s.images.map((img) => img.id));
+      const newImages = images.filter((img) => !existingIds.has(img.id));
+      if (newImages.length === 0) return s;
+      return { images: [...s.images, ...newImages], isLoading: false };
+    }),
 
   removeImages: (indices) =>
     set((s) => {

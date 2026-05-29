@@ -41,10 +41,11 @@ pub struct ThumbnailResult {
 
 #[tauri::command]
 pub async fn load_images(
-    grpc: State<'_, Mutex<GrpcClients>>,
+    grpc: State<'_, Mutex<Option<GrpcClients>>>,
     paths: Vec<String>,
 ) -> Result<Vec<ImageInfo>, String> {
-    let mut clients = grpc.lock().await;
+    let mut guard = grpc.lock().await;
+    let clients = guard.as_mut().ok_or("Backend not connected")?;
     let mut results = Vec::new();
     for path in &paths {
         match clients.image.load(path).await {
@@ -85,11 +86,12 @@ pub async fn load_images(
 
 #[tauri::command]
 pub async fn get_thumbnail(
-    grpc: State<'_, Mutex<GrpcClients>>,
+    grpc: State<'_, Mutex<Option<GrpcClients>>>,
     path: String,
     max_size: u32,
 ) -> Result<ThumbnailResult, String> {
-    let mut clients = grpc.lock().await;
+    let mut guard = grpc.lock().await;
+    let clients = guard.as_mut().ok_or("Backend not connected")?;
     let data = clients.image.get_thumbnail(&path, max_size).await?;
     Ok(ThumbnailResult {
         data: data.data,
@@ -100,12 +102,13 @@ pub async fn get_thumbnail(
 
 #[tauri::command]
 pub async fn decode_preview(
-    grpc: State<'_, Mutex<GrpcClients>>,
+    grpc: State<'_, Mutex<Option<GrpcClients>>>,
     path: String,
     max_width: u32,
     max_height: u32,
 ) -> Result<Vec<u8>, String> {
-    let mut clients = grpc.lock().await;
+    let mut guard = grpc.lock().await;
+    let clients = guard.as_mut().ok_or("Backend not connected")?;
     clients
         .image
         .decode_preview(&path, max_width, max_height)
