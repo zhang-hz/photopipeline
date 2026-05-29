@@ -475,18 +475,18 @@ fn encode_via_libheif(
                 return Err(PluginError::Internal { plugin: plugin_id.clone(), message: "failed to get image plane".into() });
             }
 
-            let total_pixels = (width * height) as usize;
-            let plane_bytes = if bpc == 2 { total_pixels * 2 } else { total_pixels * ((bit_depth as usize + 7) / 8) };
+            let bytes_per_sample = bpc as usize;
+            let plane_bytes = (stride as usize) * (height as usize);
             let dst = std::slice::from_raw_parts_mut(plane, plane_bytes);
-            if stride as usize == width as usize * 3 * (if bpc == 2 { 2 } else { 1 }) {
+            if stride as usize == width as usize * 3 * (bytes_per_sample) {
                 let copy_end = std::cmp::min(image.data.data.len(), dst.len());
                 dst[..copy_end].copy_from_slice(&image.data.data[..copy_end]);
             } else {
                 let width_u = width as usize;
                 for y in 0..height as usize {
-                    let src_off = y * width_u * 3 * (if bpc == 2 { 2 } else { 1 });
+                    let src_off = y * width_u * 3 * (bytes_per_sample);
                     let dst_off = y * stride as usize;
-                    let src_end = std::cmp::min(src_off + width_u * 3 * (if bpc == 2 { 2 } else { 1 }), image.data.data.len());
+                    let src_end = std::cmp::min(src_off + width_u * 3 * (bytes_per_sample), image.data.data.len());
                     let dst_end = std::cmp::min(dst_off + (src_end - src_off), dst.len());
                     if dst_off < dst.len() && src_off < image.data.data.len() {
                         let src_slice = &image.data.data[src_off..src_end];
