@@ -1,0 +1,93 @@
+syntax = "proto3";
+
+package photopipeline.image;
+
+service ImageService {
+  rpc Load(ImagePath) returns (ImageInfo);
+  rpc Decode(DecodeRequest) returns (stream PixelDataChunk);
+  rpc Encode(EncodeRequest) returns (stream EncodeProgress);
+  rpc GetThumbnail(ThumbnailRequest) returns (ImageData);
+}
+
+message ImagePath {
+  string path = 1;
+}
+
+message ImageInfo {
+  string id = 1;
+  string path = 2;
+  string filename = 3;
+  string format = 4;
+  uint32 width = 5;
+  uint32 height = 6;
+  uint64 file_size_bytes = 7;
+  string pixel_format = 8;
+  string color_space = 9;
+  MetadataInfo metadata = 10;
+}
+
+message MetadataInfo {
+  optional string make = 1;
+  optional string model = 2;
+  optional string lens_model = 3;
+  optional string date_time_original = 4;
+  optional string exposure_time = 5;
+  optional string f_number = 6;
+  optional uint32 iso = 7;
+  optional string focal_length = 8;
+  optional double latitude = 9;
+  optional double longitude = 10;
+  optional double altitude = 11;
+}
+
+message DecodeRequest {
+  string path = 1;
+  optional string pixel_format = 2;
+  optional uint32 max_width = 3;
+  optional uint32 max_height = 4;
+  bool read_metadata = 5;
+  bool apply_transfer = 6;
+}
+
+message PixelDataChunk {
+  uint32 offset = 1;
+  bytes data = 2;
+  uint32 total_size = 3;
+  bool is_last = 4;
+}
+
+message EncodeRequest {
+  bytes pixel_data = 1;
+  uint32 width = 2;
+  uint32 height = 3;
+  string layout = 4;
+  string pixel_format = 5;
+  string output_path = 6;
+  string format = 7;
+  optional float quality = 8;
+  bool lossless = 9;
+  uint32 bit_depth = 10;
+  optional string chroma_subsampling = 11;
+  optional string encoder = 12;
+  optional uint32 effort = 13;
+  MetadataInfo metadata = 14;
+}
+
+message EncodeProgress {
+  float fraction = 1;
+  string message = 2;
+  uint64 bytes_written = 3;
+  bool done = 4;
+}
+
+message ThumbnailRequest {
+  string path = 1;
+  uint32 max_size = 2;
+}
+
+message ImageData {
+  bytes data = 1;
+  uint32 width = 2;
+  uint32 height = 3;
+  string format = 4;
+}

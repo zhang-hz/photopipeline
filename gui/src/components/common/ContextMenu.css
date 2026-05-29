@@ -1,0 +1,36 @@
+.ctx-menu {
+  position: fixed; z-index: 1000;
+  min-width: 180px; max-height: 400px; overflow-y: auto;
+  background: var(--neutralBg2); border: 1px solid var(--neutralStroke1);
+  border-radius: var(--radiusLarge); box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  padding: 4px 0;
+}
+.ctx-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 12px; font-size: var(--fontSizeBody1); color: var(--neutralFg2);
+  cursor: pointer; white-space: nowrap;
+}
+.ctx-item:hover { background: var(--neutralBg3); }
+.ctx-header {
+  padding: 6px 12px; font-size: var(--fontSizeBody1); font-weight: 600;
+  color: var(--neutralFg1); cursor: default;
+}
+.ctx-sep {
+  height: 1px; background: var(--neutralStroke1); margin: 4px 0;
+}
+.ctx-shortcut {
+  margin-left: 24px; font-size: var(--fontSizeCaption1); color: var(--neutralFg4);
+  font-family: var(--fontFamilyMono);
+}
+.ctx-danger { color: var(--dangerFg); }
+.ctx-danger:hover { background: rgba(209,52,71,0.08); }
+.ctx-disabled { opacity: 0.4; cursor: not-allowed; }
+.ctx-has-sub { position: relative; }
+.ctx-sub-arrow { font-size: 8px; margin-left: 16px; }
+.ctx-submenu {
+  display: none; position: absolute; left: 100%; top: 0;
+  min-width: 160px; background: var(--neutralBg2); border: 1px solid var(--neutralStroke1);
+  border-radius: var(--radiusLarge); box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  padding: 4px 0;
+}
+.ctx-has-sub:hover .ctx-submenu { display: block; }

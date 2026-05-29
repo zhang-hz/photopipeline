@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package photopipeline.execution;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/empty.proto";
+
+service ExecutionService {
+  rpc Run(RunRequest) returns (stream RunEvent);
+  rpc Cancel(CancelRequest) returns (google.protobuf.Empty);
+}
+
+message RunRequest {
+  string config_path = 1;
+  repeated string image_paths = 2;
+  string output_directory = 3;
+  google.protobuf.Struct options = 4;
+}
+
+message CancelRequest {
+  string run_id = 1;
+}
+
+message RunEvent {
+  oneof event {
+    ProgressUpdate progress = 1;
+    MetricSnapshot metrics = 2;
+    StageTransition stage = 3;
+    ErrorEvent error = 4;
+    DoneEvent done = 5;
+    Heartbeat heartbeat = 6;
+  }
+}
+
+message ProgressUpdate {
+  string node_id = 1;
+  string node_label = 2;
+  float fraction = 3;
+  string message = 4;
+  int64 elapsed_ms = 5;
+}
+
+message MetricSnapshot {
+  string node_id = 1;
+  uint64 memory_mb = 2;
+  uint64 cpu_time_ms = 3;
+  uint64 gpu_time_ms = 4;
+  uint64 input_pixels = 5;
+  uint64 output_pixels = 6;
+}
+
+message StageTransition {
+  string from_stage = 1;
+  string to_stage = 2;
+  int64 elapsed_ms = 3;
+}
+
+message ErrorEvent {
+  string node_id = 1;
+  string error_code = 2;
+  string message = 3;
+  bool fatal = 4;
+  google.protobuf.Struct details = 5;
+}
+
+message DoneEvent {
+  string output_path = 1;
+  uint64 output_bytes = 2;
+  int64 total_elapsed_ms = 3;
+  repeated string warnings = 4;
+}
+
+message Heartbeat {
+  int64 sequence = 1;
+  int64 elapsed_ms = 2;
+}

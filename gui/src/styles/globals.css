@@ -1,0 +1,91 @@
+/* ═══════════════════════════════════════════
+   Photopipeline — Fluent 2 Design Tokens
+   来源: design_review/fluent_mainwindow.html
+   ═══════════════════════════════════════════ */
+
+:root {
+  /* ── 背景色 ── */
+  --neutralBg1:    #141414;
+  --neutralBg2:    #1f1f1f;
+  --neutralBg3:    #292929;
+  --neutralBg4:    #333333;
+
+  /* ── 边框色 ── */
+  --neutralStroke1: #383838;
+  --neutralStroke2: #4a4a4a;
+
+  /* ── 文字色 ── */
+  --neutralFg1:    #f5f5f5;
+  --neutralFg2:    #adadad;
+  --neutralFg3:    #6e6e6e;
+  --neutralFg4:    #505050;
+
+  /* ── 语义色 ── */
+  --brandFg1:      #479ef5;
+  --successFg:     #54b054;
+  --dangerFg:      #d13447;
+  --warningFg:     #d59900;
+  --expressionFg:  #b084f4;
+
+  /* ── 圆角 ── */
+  --radiusSmall:   2px;
+  --radiusMedium:  4px;
+  --radiusLarge:   8px;
+  --radiusXLarge:  12px;
+  --radiusCircular: 50%;
+
+  /* ── 间距 ── */
+  --spacingXS:     4px;
+  --spacingS:      8px;
+  --spacingM:      12px;
+  --spacingL:      16px;
+  --spacingXL:     20px;
+  --spacingXXL:    24px;
+
+  /* ── 字体 ── */
+  --fontFamily:      'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --fontFamilyMono:  'Cascadia Code', 'Consolas', 'SF Mono', 'Fira Code', monospace;
+  --fontSizeCaption1: 10px;
+  --fontSizeBody1:    12px;
+  --fontSizeBody2:    13px;
+  --fontSizeHeading:  14px;
+
+  /* ── 阴影 ── */
+  --shadow2:   0 1px 4px rgba(0,0,0,0.2);
+  --shadow4:   0 2px 8px rgba(0,0,0,0.3);
+  --shadow8:   0 4px 16px rgba(0,0,0,0.4);
+  --shadow16:  0 8px 32px rgba(0,0,0,0.5);
+
+  /* ── 动画 ── */
+  --transitionFast:   150ms ease;
+  --transitionNormal: 200ms ease;
+  --transitionSlow:   300ms ease;
+
+  /* ── 固定尺寸 ── */
+  --titleBarHeight:   44px;
+  --statusBarHeight:  36px;
+  --sidebarWidth:     272px;
+  --panelWidth:       440px;
+  --contentMinWidth:  480px;
+
+  /* ── 插件色彩 ── */
+  --plugin-raw_input:      #ef4444;
+  --plugin-transform:      #06b6d4;
+  --plugin-colorspace:     #8b5cf6;
+  --plugin-lut3d:          #ec4899;
+  --plugin-lens_correct:   #6366f1;
+  --plugin-ai_denoise:     #a855f7;
+  --plugin-exif_rw:        #3b82f6;
+  --plugin-gps_set:        #10b981;
+  --plugin-time_shift:     #f59e0b;
+  --plugin-heif_encoder:   #14b8a6;
+  --plugin-jxl_encoder:    #f97316;
+  --plugin-avif_encoder:   #22c55e;
+  --plugin-tiff_encoder:   #64748b;
+  --plugin-png_encoder:    #0ea5e9;
+}
+
+/* 脉冲动画 */
+@keyframes pulse {
+  50% { opacity: 0.4; }
+}

@@ -1,0 +1,17 @@
+.siw { display: flex; align-items: center; gap: 6px; flex: 1; }
+.siw--disabled { opacity: 0.5; pointer-events: none; }
+.siw-slider {
+  -webkit-appearance: none; appearance: none;
+  flex: 1; height: 4px; border-radius: var(--radiusSmall); outline: none; cursor: pointer;
+}
+.siw-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--brandFg1); border: 2px solid var(--neutralBg2); cursor: pointer;
+}
+.siw-slider:disabled { opacity: 0.4; cursor: not-allowed; }
+.siw-value {
+  width: 48px; text-align: right; font-family: var(--fontFamilyMono);
+  font-size: var(--fontSizeBody1); color: var(--neutralFg2);
+}
+.siw-unit { font-size: var(--fontSizeBody1); color: var(--neutralFg4); min-width: 20px; }

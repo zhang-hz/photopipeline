@@ -1,0 +1,37 @@
+/* ═══════════════════════════════════════════
+   Window Vibrancy — 平台透明背景
+   ═══════════════════════════════════════════ */
+
+/* Windows Mica / Acrylic */
+:root {
+  --vibrancy-bg: rgba(20, 20, 20, 0.88);
+  --vibrancy-bg-sidebar: rgba(20, 20, 20, 0.92);
+  --vibrancy-bg-content: rgba(31, 31, 31, 0.85);
+}
+
+/* macOS Vibrancy — 更透明 */
+@media (platform: macos) {
+  :root {
+    --vibrancy-bg: rgba(30, 30, 30, 0.65);
+    --vibrancy-bg-sidebar: rgba(30, 30, 30, 0.75);
+    --vibrancy-bg-content: rgba(36, 36, 36, 0.60);
+  }
+}
+
+/* Linux — 纯色后备 */
+@media (platform: linux) {
+  :root {
+    --vibrancy-bg: #141414;
+    --vibrancy-bg-sidebar: #141414;
+    --vibrancy-bg-content: #1f1f1f;
+  }
+}
+
+/* Windows Acrylic fallback class (JS 检测) */
+.app-shell.acrylic {
+  background: rgba(20, 20, 20, 0.88);
+}
+
+.app-shell.solid-fallback {
+  background: #141414;
+}

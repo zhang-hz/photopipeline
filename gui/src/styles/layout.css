@@ -1,0 +1,119 @@
+/* ═══════════════════════════════════════════
+   Layout — 三栏网格 + 固定区域布局
+   ═══════════════════════════════════════════ */
+
+/* ── TitleBar ── */
+.titlebar {
+  height: var(--titleBarHeight);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--spacingL);
+  gap: var(--spacingS);
+  background: linear-gradient(180deg, rgba(255,255,255,0.02) 0%, transparent 100%);
+  border-bottom: 1px solid var(--neutralStroke1);
+  flex-shrink: 0;
+}
+
+/* ── MainLayout (三栏) ── */
+.main-layout {
+  display: grid;
+  grid-template-columns: var(--sidebarWidth) 1fr var(--panelWidth);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  background: var(--vibrancy-bg-sidebar);
+  border-right: 1px solid var(--neutralStroke1);
+  overflow: hidden;
+  min-width: 200px;
+}
+
+/* ── Content ── */
+.content {
+  display: flex;
+  flex-direction: column;
+  background: var(--vibrancy-bg-content);
+  overflow: hidden;
+  min-width: var(--contentMinWidth);
+}
+
+/* ── Panel ── */
+.panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--vibrancy-bg-content);
+  border-left: 1px solid var(--neutralStroke1);
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 320px;
+}
+
+/* ── StatusBar ── */
+.statusbar {
+  height: var(--statusBarHeight);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--spacingL);
+  gap: var(--spacingM);
+  background: var(--neutralBg2);
+  border-top: 1px solid var(--neutralStroke1);
+  font-size: var(--fontSizeBody1);
+  flex-shrink: 0;
+}
+
+/* ── BatchMode ── */
+.batch-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr 340px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.batch-left {
+  display: flex;
+  flex-direction: column;
+  background: var(--vibrancy-bg-sidebar);
+  border-right: 1px solid var(--neutralStroke1);
+  overflow-y: auto;
+  padding: var(--spacingM);
+  gap: var(--spacingS);
+}
+
+.batch-center {
+  display: flex;
+  flex-direction: column;
+  background: var(--vibrancy-bg-content);
+  overflow-y: auto;
+  padding: var(--spacingM);
+  gap: var(--spacingM);
+}
+
+.batch-right {
+  display: flex;
+  flex-direction: column;
+  background: var(--vibrancy-bg-content);
+  border-left: 1px solid var(--neutralStroke1);
+  overflow-y: auto;
+  padding: var(--spacingM);
+  gap: var(--spacingS);
+}
+
+/* ── 可拖拽分隔条 ── */
+.resize-handle {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background var(--transitionFast);
+  flex-shrink: 0;
+  z-index: 10;
+}
+.resize-handle:hover,
+.resize-handle:active {
+  background: var(--brandFg1);
+}

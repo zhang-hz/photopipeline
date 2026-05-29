@@ -1,0 +1,26 @@
+.dnode {
+  min-width: 136px; padding: 8px 14px 8px 20px;
+  background: var(--neutralBg2); border: 1.5px solid var(--neutralStroke2);
+  border-radius: var(--radiusLarge); z-index: 2; cursor: grab;
+  box-shadow: var(--shadow4); user-select: none;
+  transition: box-shadow var(--transitionFast), border-color var(--transitionFast);
+}
+.dnode:hover { z-index: 3; }
+.dnode--sel {
+  border-color: var(--brandFg1);
+  box-shadow: 0 0 0 3px rgba(71,158,245,0.12), var(--shadow8);
+  z-index: 5;
+}
+.dnode--exec { box-shadow: 0 0 0 3px rgba(84,176,84,0.3); }
+.dnode-name { font-size: var(--fontSizeBody1); font-weight: 600; }
+.dnode-cat { font-size: 9px; margin-top: 1px; }
+
+.dport {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 14px; height: 14px; border-radius: var(--radiusSmall);
+  background: var(--neutralBg2); z-index: 6;
+  transition: transform var(--transitionFast);
+}
+.dport:hover { transform: translateY(-50%) scale(1.3); }
+.dport--i { left: -8px; border: 2px solid var(--successFg); }
+.dport--o { right: -8px; border: 2px solid var(--brandFg1); }

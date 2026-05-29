@@ -1,0 +1,8 @@
+.skel { background: var(--neutralBg3); animation: skel-pulse 1.5s ease-in-out infinite; }
+.skel--circle { aspect-ratio: 1; }
+.skel--text:last-child { width: 60% !important; }
+
+@keyframes skel-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}

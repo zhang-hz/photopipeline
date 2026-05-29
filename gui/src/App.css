@@ -1,0 +1,103 @@
+/* App.css — 全局布局 */
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100vh;
+  overflow: hidden;
+  font-family: var(--fontFamily);
+  background: transparent;
+  color: var(--neutralFg1);
+  font-size: var(--fontSizeBody1);
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--vibrancy-bg);
+  border-radius: var(--radiusXLarge);
+  border: 1px solid var(--neutralStroke1);
+  overflow: hidden;
+}
+
+/* 滚动条全局样式 */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--neutralStroke2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--neutralFg3); }
+
+/* 禁止文本选中 (拖拽场景) */
+.no-select {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ── 通用按钮样式 ── */
+.btn-primary-sm {
+  height: 24px;
+  padding: 2px 8px;
+  background: var(--brandFg1);
+  color: var(--neutralBg1);
+  border: 1px solid var(--brandFg1);
+  border-radius: var(--radiusMedium);
+  font-size: 11px;
+  font-family: var(--fontFamily);
+  cursor: pointer;
+  transition: all var(--transitionFast);
+  white-space: nowrap;
+}
+.btn-primary-sm:hover { filter: brightness(1.1); }
+
+.btn-subtle-sm {
+  height: 24px;
+  padding: 2px 8px;
+  background: transparent;
+  color: var(--neutralFg2);
+  border: 1px solid transparent;
+  border-radius: var(--radiusMedium);
+  font-size: 11px;
+  font-family: var(--fontFamily);
+  cursor: pointer;
+  transition: all var(--transitionFast);
+  white-space: nowrap;
+}
+.btn-subtle-sm:hover { background: var(--neutralBg3); color: var(--neutralFg1); }
+
+.btn-subtle-sm:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Global focus ring ── */
+*:focus-visible {
+  outline: 2px solid var(--brandFg1);
+  outline-offset: 1px;
+  border-radius: var(--radiusSmall);
+}
+button:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid var(--brandFg1);
+  outline-offset: 1px;
+}
+.dnode:focus-visible {
+  outline: 2px solid var(--brandFg1);
+  outline-offset: 3px;
+}
+
+/* ── Transitions ── */
+.app-shell {
+  transition: background var(--transitionSlow);
+}
+
+/* ── Smooth collapse animation ── */
+.acc-panel {
+  overflow: hidden;
+  transition: max-height 0.25s ease, opacity 0.2s ease;
+  max-height: 1000px;
+  opacity: 1;
+}
+.acc-item.collapsed .acc-panel {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}

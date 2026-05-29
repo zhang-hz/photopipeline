@@ -1,0 +1,8 @@
+.odot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  flex-shrink: 0; cursor: pointer; transition: all var(--transitionFast);
+}
+.odot--inherited { background: transparent; border: 1.5px solid var(--neutralStroke2); }
+.odot--override { background: var(--warningFg); border: none; }
+.odot--expression { background: var(--expressionFg); border: none; }
+.odot:hover { transform: scale(1.3); }

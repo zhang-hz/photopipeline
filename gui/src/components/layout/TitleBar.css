@@ -1,0 +1,83 @@
+.tb-logo {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--brandFg1);
+  border-radius: var(--radiusMedium);
+  color: var(--neutralBg1);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.tb-title {
+  font-size: var(--fontSizeBody1);
+  font-weight: 600;
+  color: var(--neutralFg1);
+}
+
+.tb-mode-tabs {
+  display: flex;
+  background: var(--neutralBg1);
+  border-radius: 6px;
+  border: 1px solid var(--neutralStroke1);
+  padding: 2px;
+  gap: 0;
+}
+
+.tb-mode-tab {
+  padding: 5px 16px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: var(--fontFamily);
+  color: var(--neutralFg3);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transitionFast);
+  display: flex;
+  align-items: center;
+  gap: var(--spacingXS);
+  white-space: nowrap;
+}
+
+.tb-mode-tab.active {
+  background: rgba(71,158,245,0.10);
+  color: var(--neutralFg1);
+}
+
+.tb-mode-tab:hover:not(.active) {
+  color: var(--neutralFg2);
+}
+
+.tb-badge {
+  background: var(--brandFg1);
+  color: var(--neutralBg1);
+  border-radius: 8px;
+  padding: 1px 7px;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.tb-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radiusMedium);
+  font-size: 14px;
+  color: var(--neutralFg2);
+  cursor: pointer;
+  transition: all var(--transitionFast);
+  flex-shrink: 0;
+}
+
+.tb-btn:hover {
+  background: var(--neutralBg4);
+  color: var(--neutralFg1);
+}

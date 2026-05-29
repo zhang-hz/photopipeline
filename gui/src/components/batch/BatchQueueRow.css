@@ -1,0 +1,17 @@
+.bqr {
+  display: flex; align-items: center; gap: 8px; padding: 7px 8px;
+  border-radius: var(--radiusLarge); transition: all var(--transitionFast);
+}
+.bqr:hover { background: var(--neutralBg3) !important; }
+
+.bqr-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.bqr-dot.queued { background: var(--neutralFg4); }
+.bqr-dot.processing { background: var(--brandFg1); animation: pulse 1s infinite; }
+.bqr-dot.done { background: var(--successFg); }
+.bqr-dot.failed { background: var(--dangerFg); }
+
+.bqr-name { font-weight: 500; flex-shrink: 0; width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bqr-meta { font-size: 10px; color: var(--neutralFg4); flex-shrink: 0; width: 120px; }
+.bqr-size { font-size: 10px; color: var(--neutralFg4); flex-shrink: 0; width: 60px; }
+.bqr-status { font-size: 10px; color: var(--neutralFg2); margin-left: auto; }
+.bqr-status--err { color: var(--dangerFg); }

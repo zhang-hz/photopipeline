@@ -1,0 +1,13 @@
+.pcard {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 8px 12px; min-width: 100px;
+  background: var(--neutralBg2); border: 1px solid transparent;
+  border-radius: var(--radiusLarge); cursor: grab;
+  transition: all var(--transitionFast);
+  user-select: none;
+}
+.pcard:hover { background: var(--neutralBg3); border-color: var(--neutralStroke1); }
+.pcard--sel { border-color: var(--brandFg1); background: rgba(71,158,245,0.06); }
+.pcard-name { font-size: var(--fontSizeBody1); font-weight: 600; }
+.pcard-dot { font-size: 8px; line-height: 1; }
+.pcard-cat { font-size: 9px; color: var(--neutralFg4); background: var(--neutralBg3); padding: 0 4px; border-radius: var(--radiusSmall); align-self: flex-start; }

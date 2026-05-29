@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package photopipeline.batch;
+
+import "google/protobuf/empty.proto";
+
+service BatchService {
+  rpc SubmitBatch(BatchSpec) returns (BatchId);
+  rpc GetProgress(BatchId) returns (stream BatchProgress);
+  rpc Cancel(BatchId) returns (google.protobuf.Empty);
+}
+
+message BatchSpec {
+  string pipeline_config_path = 1;
+  string file_pattern = 2;
+  string output_dir = 3;
+  int32 parallel = 4;
+  bool resume = 5;
+}
+
+message BatchId {
+  string id = 1;
+}
+
+message BatchProgress {
+  enum Status {
+    PENDING = 0;
+    RUNNING = 1;
+    DONE = 2;
+    CANCELED = 3;
+    ERROR = 4;
+  }
+  Status status = 1;
+  int32 total_files = 2;
+  int32 completed_files = 3;
+  int32 failed_files = 4;
+  string current_file = 5;
+  float fraction = 6;
+  string progress_details = 7;
+}
