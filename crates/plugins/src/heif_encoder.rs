@@ -1,8 +1,9 @@
 use async_trait::async_trait;
+use std::fmt;
 use std::sync::LazyLock;
 
 #[cfg(feature = "libheif-native")]
-use libheif_sys as libheif;
+use libheif_rs;
 
 use photopipeline_core::{
     DecodeOptions, DecodedImage, EncodeOptions, FormatProbe, HardwareRequirement, ImageFormat,
@@ -13,49 +14,6 @@ use photopipeline_plugin::{
     EnumOption, FormatProcessor, GuiLayout, GuiSchema, GuiSection, ParameterField, ParameterSchema,
     ParameterSection, ParameterSet, ParameterType, Plugin, PreviewMode, SectionStyle,
 };
-
-// RAII guards — ensure FFI resources are freed on drop (including panic unwind).
-// Pattern borrowed from libheif-rs (strukturag/libheif-rs).
-#[cfg(feature = "libheif-native")]
-mod guards {
-    use libheif_sys::*;
-
-    pub struct ContextGuard {
-        pub ptr: *mut heif_context,
-    }
-    impl Drop for ContextGuard {
-        fn drop(&mut self) {
-            unsafe { heif_context_free(self.ptr); }
-        }
-    }
-
-    pub struct ImageGuard {
-        pub ptr: *mut heif_image,
-    }
-    impl Drop for ImageGuard {
-        fn drop(&mut self) {
-            unsafe { heif_image_release(self.ptr); }
-        }
-    }
-
-    pub struct EncoderGuard {
-        pub ptr: *mut heif_encoder,
-    }
-    impl Drop for EncoderGuard {
-        fn drop(&mut self) {
-            unsafe { heif_encoder_release(self.ptr); }
-        }
-    }
-
-    pub struct ImageHandleGuard {
-        pub ptr: *mut heif_image_handle,
-    }
-    impl Drop for ImageHandleGuard {
-        fn drop(&mut self) {
-            unsafe { heif_image_handle_release(self.ptr); }
-        }
-    }
-}
 
 static PARAMETER_SCHEMA: LazyLock<ParameterSchema> = LazyLock::new(|| ParameterSchema {
     version: 1,
@@ -236,10 +194,19 @@ static GUI_SCHEMA: LazyLock<GuiSchema> = LazyLock::new(|| GuiSchema {
     min_panel_width: 320,
 });
 
-#[derive(Debug)]
 pub struct HeifEncoderPlugin {
     id: String,
     lib_version: LazyLock<String>,
+    #[cfg(feature = "libheif-native")]
+    lib_heif: libheif_rs::LibHeif,
+}
+
+impl fmt::Debug for HeifEncoderPlugin {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("HeifEncoderPlugin")
+            .field("id", &self.id)
+            .finish()
+    }
 }
 
 impl HeifEncoderPlugin {
@@ -247,6 +214,8 @@ impl HeifEncoderPlugin {
         Self {
             id: "photopipeline.plugins.heif_encoder".to_string(),
             lib_version: LazyLock::new(detect_heif_encoder),
+            #[cfg(feature = "libheif-native")]
+            lib_heif: libheif_rs::LibHeif::new(),
         }
     }
 
@@ -276,7 +245,7 @@ impl Plugin for HeifEncoderPlugin {
         PluginCategory::Format
     }
     fn description(&self) -> &str {
-        "Encode images in HEIF/HEIC 10-bit format using libheif native FFI"
+        "Encode images in HEIF/HEIC 10-bit format using libheif-rs"
     }
     fn tags(&self) -> &[String] {
         &TAGS
@@ -302,25 +271,12 @@ impl Plugin for HeifEncoderPlugin {
     }
 
     async fn initialize(&mut self, _cfg: &photopipeline_plugin::PluginConfig) -> PluginResult<()> {
-        #[cfg(feature = "libheif-native")]
-        {
-            // heif_init is reference-counted; must pair with heif_deinit in shutdown.
-            // Required on Windows for encoder plugin registration (libheif >= 1.14).
-            let err = unsafe { libheif::heif_init(std::ptr::null_mut()) };
-            if err.code != 0 {
-                tracing::warn!(code = err.code, subcode = err.subcode, "heif_init failed, encoder may be unavailable");
-            }
-        }
         let version = detect_heif_encoder();
         tracing::info!("HEIF encoder detected: {}", version);
         Ok(())
     }
 
     async fn shutdown(&mut self) -> PluginResult<()> {
-        #[cfg(feature = "libheif-native")]
-        {
-            unsafe { libheif::heif_deinit(); }
-        }
         tracing::info!("heif_encoder plugin shutdown");
         Ok(())
     }
@@ -420,9 +376,7 @@ impl FormatProcessor for HeifEncoderPlugin {
                 .join(format!("pp_oiio_out_{}.heic", std::process::id()));
             let tmp_str = tmp_path.to_string_lossy().to_string();
             if let Ok(()) = photopipeline_oiio::OiioContext::write_image(
-                &tmp_str,
-                image,
-                metadata,
+                &tmp_str, image, metadata,
             ) {
                 if let Ok(data) = std::fs::read(&tmp_str) {
                     let _ = std::fs::remove_file(&tmp_str);
@@ -442,197 +396,126 @@ impl FormatProcessor for HeifEncoderPlugin {
                 photopipeline_core::ChromaSubsampling::Yuv420 => "420",
             });
         let effort_val = options.effort.unwrap_or(4);
-        encode_via_libheif(
-            image,
-            quality,
-            lossless,
-            options.bit_depth,
-            chroma_str_for_ffi,
-            effort_val,
-            &self.id,
+        self.encode_via_libheif(
+            image, quality, lossless, options.bit_depth,
+            chroma_str_for_ffi, effort_val, &self.id,
         )
     }
 }
 
-// — standalone helper (not nested in unsafe) —
-#[cfg(feature = "libheif-native")]
-fn heif_err(e: libheif::heif_error, op: &str, plugin_id: &PluginId) -> PluginResult<()> {
-    if e.code != 0 {
+impl HeifEncoderPlugin {
+    fn internal(&self, e: impl std::fmt::Display) -> PluginError {
+        PluginError::Internal {
+            plugin: self.id.clone(),
+            message: e.to_string(),
+        }
+    }
+
+    fn internal_msg(&self, msg: &str) -> PluginError {
+        PluginError::Internal {
+            plugin: self.id.clone(),
+            message: msg.into(),
+        }
+    }
+
+    #[cfg(not(feature = "libheif-native"))]
+    fn encode_via_libheif(
+        &self,
+        image: &PixelBuffer, quality: f32, lossless: bool,
+        _bit_depth: u8, chroma_str: &str, effort: u8,
+        plugin_id: &PluginId,
+    ) -> PluginResult<Vec<u8>> {
+        let _ = (image, quality, lossless, _bit_depth, chroma_str, effort, plugin_id);
         Err(PluginError::Internal {
             plugin: plugin_id.clone(),
-            message: format!("{op}: code={} subcode={}", e.code, e.subcode),
-        })
-    } else {
-        Ok(())
-    }
-}
-
-// Writer callback — synchronous, called by heif_context_write.
-// userdata is the raw pointer we passed: &mut Vec<u8> cast to *mut c_void.
-// Safe because the callback runs synchronously during heif_context_write
-// and no other code holds a reference to the Vec.
-#[cfg(feature = "libheif-native")]
-unsafe extern "C" fn heif_writer_cb(
-    _ctx: *mut libheif::heif_context,
-    data: *const std::ffi::c_void,
-    size: usize,
-    userdata: *mut std::ffi::c_void,
-) -> libheif::heif_error {
-    let ok = libheif::heif_error { code: 0, subcode: 0, message: std::ptr::null() };
-    if data.is_null() || size == 0 {
-        return ok;
-    }
-    // SAFETY: userdata was created from &mut Vec<u8> in encode_via_libheif,
-    // and this callback runs synchronously during heif_context_write.
-    let buf: &mut Vec<u8> = unsafe { &mut *(userdata as *mut Vec<u8>) };
-    let slice = unsafe { std::slice::from_raw_parts(data as *const u8, size) };
-    buf.extend_from_slice(slice);
-    ok
-}
-
-fn encode_via_libheif(
-    image: &PixelBuffer,
-    quality: f32,
-    lossless: bool,
-    _bit_depth: u8,
-    chroma_str: &str,
-    effort: u8,
-    plugin_id: &PluginId,
-) -> PluginResult<Vec<u8>> {
-    #[cfg(not(feature = "libheif-native"))]
-    {
-        let _ = (image, quality, lossless, _bit_depth, chroma_str, effort, plugin_id);
-        return Err(PluginError::Internal {
-            plugin: plugin_id.clone(),
             message: "libheif native not compiled (use heif-enc fallback)".into(),
-        });
+        })
     }
+
     #[cfg(feature = "libheif-native")]
-    {
-        use libheif::*;
-        use std::ffi::{c_int, c_void};
+    fn encode_via_libheif(
+        &self,
+        image: &PixelBuffer, quality: f32, lossless: bool,
+        _bit_depth: u8, chroma_str: &str, effort: u8,
+        plugin_id: &PluginId,
+    ) -> PluginResult<Vec<u8>> {
+        use libheif_rs::{
+            Channel, ColorSpace, CompressionFormat, EncoderParameterValue,
+            EncoderQuality, HeifContext, Image, RgbChroma,
+        };
 
-        let width = image.width as c_int;
-        let height = image.height as c_int;
+        let w = image.width as u32;
+        let h = image.height as u32;
         let bpc = image.format.bytes_per_channel();
-        let out_bit_depth: c_int = match bpc { 1 => 8, 2 => 10, _ => 8 };
 
-        // --- alloc context (RAII guarded) ---
-        let ctx_ptr = unsafe { heif_context_alloc() };
-        if ctx_ptr.is_null() {
-            return Err(PluginError::Internal {
-                plugin: plugin_id.clone(),
-                message: "failed to allocate heif context".into(),
-            });
-        }
-        let ctx = guards::ContextGuard { ptr: ctx_ptr };
-
-        // --- create interleaved RGB image (RAII guarded) ---
+        // interleaved RGB: RgbChroma::Rgb (8-bit) or HdrRgbLe (10-bit LE)
         let chroma = match bpc {
-            1 => heif_chroma_heif_chroma_interleaved_RGB,
-            _ => heif_chroma_heif_chroma_interleaved_RRGGBB_LE,
+            1 => RgbChroma::Rgb,
+            _ => RgbChroma::HdrRgbLe,
         };
-        let mut img_ptr: *mut heif_image = std::ptr::null_mut();
-        heif_err(
-            unsafe { heif_image_create(width, height, heif_colorspace_heif_colorspace_RGB, chroma, &mut img_ptr) },
-            "heif_image_create", plugin_id,
-        )?;
-        let img = guards::ImageGuard { ptr: img_ptr };
+        let bit_depth = match bpc { 1 => 8, _ => 10 };
 
-        // --- add single interleaved plane ---
-        heif_err(
-            unsafe { heif_image_add_plane(img.ptr, heif_channel_heif_channel_interleaved, width, height, out_bit_depth) },
-            "heif_image_add_plane", plugin_id,
-        )?;
+        let mut img = Image::new(w, h, ColorSpace::Rgb(chroma))
+            .map_err(|e| self.internal(e))?;
+        img.create_plane(Channel::Interleaved, w, h, bit_depth)
+            .map_err(|e| self.internal(e))?;
 
-        // --- copy pixel data (no de-interleave — single interleaved plane) ---
+        // copy interleaved pixel data — single plane, no de-interleave
         {
-            let mut stride: c_int = 0;
-            let plane = unsafe { heif_image_get_plane(img.ptr, heif_channel_heif_channel_interleaved, &mut stride) };
-            if plane.is_null() {
-                return Err(PluginError::Internal {
-                    plugin: plugin_id.clone(),
-                    message: "failed to get image plane".into(),
-                });
-            }
-            let dst = unsafe {
-                std::slice::from_raw_parts_mut(plane, (stride as usize) * (height as usize))
-            };
+            let mut planes = img.planes_mut();
+            let plane = planes.interleaved.as_mut()
+                .ok_or_else(|| self.internal_msg("no interleaved plane"))?;
             let src = &image.data.data;
-            let src_row_bytes = width as usize * 3 * bpc as usize;
-            for y in 0..height as usize {
-                let src_row = y * src_row_bytes;
-                let dst_row = y * stride as usize;
-                dst[dst_row..dst_row + src_row_bytes]
-                    .copy_from_slice(&src[src_row..src_row + src_row_bytes]);
+            let src_row = w as usize * 3 * bpc as usize;
+            for y in 0..h as usize {
+                let dst_off = y * plane.stride;
+                let src_off = y * src_row;
+                plane.data[dst_off..dst_off + src_row]
+                    .copy_from_slice(&src[src_off..src_off + src_row]);
             }
         }
 
-        // --- get encoder (RAII guarded) ---
-        let mut enc_ptr: *mut heif_encoder = std::ptr::null_mut();
-        heif_err(
-            unsafe { heif_context_get_encoder_for_format(ctx.ptr, heif_compression_format_heif_compression_HEVC, &mut enc_ptr) },
-            "heif_context_get_encoder_for_format", plugin_id,
-        )?;
-        let enc = guards::EncoderGuard { ptr: enc_ptr };
+        let mut ctx = HeifContext::new()
+            .map_err(|e| self.internal(e))?;
+        let mut encoder = self.lib_heif.encoder_for_format(CompressionFormat::Hevc)
+            .map_err(|e| self.internal(e))?;
 
-        // --- configure encoder ---
         if lossless {
-            heif_err(unsafe { heif_encoder_set_lossless(enc.ptr, 1) }, "set_lossless", plugin_id)?;
+            encoder.set_quality(EncoderQuality::LossLess)
+                .map_err(|e| self.internal(e))?;
         } else {
-            heif_err(unsafe { heif_encoder_set_lossy_quality(enc.ptr, quality as c_int) }, "set_quality", plugin_id)?;
+            encoder.set_quality(EncoderQuality::Lossy(quality as u8))
+                .map_err(|e| self.internal(e))?;
         }
-        let effort_cstr = std::ffi::CString::new("effort").unwrap();
-        let val_cstr = std::ffi::CString::new(format!("{effort}")).unwrap();
-        heif_err(
-            unsafe { heif_encoder_set_parameter_string(enc.ptr, effort_cstr.as_ptr(), val_cstr.as_ptr()) },
-            "set_effort", plugin_id,
-        )?;
 
-        // chroma subsampling — passed as encoder parameter, not at heif_image level
-        let chroma_cstr = std::ffi::CString::new("chroma").unwrap();
-        let chroma_val = std::ffi::CString::new(chroma_str).unwrap();
-        heif_err(
-            unsafe { heif_encoder_set_parameter_string(enc.ptr, chroma_cstr.as_ptr(), chroma_val.as_ptr()) },
-            "set_chroma", plugin_id,
-        )?;
+        encoder.set_parameter_value("effort",
+            EncoderParameterValue::String(effort.to_string()))
+            .map_err(|e| self.internal(e))?;
+        encoder.set_parameter_value("chroma",
+            EncoderParameterValue::String(chroma_str.to_string()))
+            .map_err(|e| self.internal(e))?;
 
-        // --- encode ---
-        let mut hdl_ptr: *mut heif_image_handle = std::ptr::null_mut();
-        heif_err(
-            unsafe { heif_context_encode_image(ctx.ptr, img.ptr, enc.ptr, std::ptr::null(), &mut hdl_ptr) },
-            "encode_image", plugin_id,
-        )?;
-        let _hdl = guards::ImageHandleGuard { ptr: hdl_ptr };
+        ctx.encode_image(&img, &mut encoder, None)
+            .map_err(|e| self.internal(e))?;
 
-        // --- write to memory ---
-        let mut write_buf: Vec<u8> = Vec::new();
-        let mut writer = heif_writer {
-            writer_api_version: 1,
-            write: Some(heif_writer_cb),
-        };
-        heif_err(
-            unsafe { heif_context_write(ctx.ptr, &mut writer, &mut write_buf as *mut Vec<u8> as *mut c_void) },
-            "context_write", plugin_id,
-        )?;
+        let bytes = ctx.write_to_bytes()
+            .map_err(|e| self.internal(e))?;
 
-        if write_buf.is_empty() {
+        if bytes.is_empty() {
             return Err(PluginError::Internal {
                 plugin: plugin_id.clone(),
                 message: "encode produced no output".into(),
             });
         }
-
-        // Guards drop in reverse order: handle → encoder → image → context.
-        // All resources freed automatically — no manual release calls.
-        Ok(write_buf)
+        Ok(bytes)
     }
 }
 
 fn detect_heif_encoder() -> String {
     #[cfg(feature = "libheif-native")]
     {
-        "libheif (native FFI)".to_string()
+        let v = libheif_rs::LibHeif::new().version();
+        format!("libheif-rs v{}.{}.{}", v[0], v[1], v[2])
     }
     #[cfg(not(feature = "libheif-native"))]
     {

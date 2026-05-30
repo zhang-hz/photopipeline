@@ -8,11 +8,6 @@ fn main() {
         let lib_dir = format!("{}/installed/x64-windows/lib", vcpkg_root);
         println!("cargo:rustc-link-search=native={}", lib_dir);
 
-        // libheif + deps (vcpkg)
-        println!("cargo:rustc-link-lib=heif");
-        println!("cargo:rustc-link-lib=libx265");
-        println!("cargo:rustc-link-lib=de265");
-
         // libjxl + deps (vcpkg)
         println!("cargo:rustc-link-lib=jxl");
         println!("cargo:rustc-link-lib=jxl_threads");

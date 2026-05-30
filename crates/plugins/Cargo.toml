@@ -5,7 +5,7 @@ edition.workspace = true
 
 [features]
 default = []
-libheif-native = ["dep:libheif-sys"]
+libheif-native = ["dep:libheif-rs"]
 libjxl-native = ["dep:libjxl-sys"]
 libraw-native = ["dep:libraw-sys"]
 lcms2-native = ["dep:lcms2-sys"]
@@ -35,7 +35,8 @@ rgb = "0.8"
 ort = { version = "=2.0.0-rc.12", optional = true, default-features = false, features = ["load-dynamic", "ndarray"] }
 ndarray = { version = "0.16", optional = true }
 lensfun = "0.7"
-libheif-sys = { workspace = true, optional = true, features = ["v1_21"] }
+libloading = "0.8"
+libheif-rs = { workspace = true, optional = true }
 libjxl-sys = { workspace = true, optional = true }
 libraw-sys = { workspace = true, optional = true }
 lcms2-sys = { workspace = true, optional = true }
