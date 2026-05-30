@@ -52,7 +52,41 @@ export const usePluginStore = create<PluginState & PluginActions>((set, get) => 
   fetchNodeSchema: async (pluginId: string) => {
     const cached = get().nodeSchemas.get(pluginId);
     if (cached) return cached;
-    // TODO: invoke("get_node_schema", { pluginId })
+    set({ isLoading: true });
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const schema = await invoke<any>("get_node_schema", { pluginId });
+      if (schema) {
+        set((s) => {
+          const next = new Map(s.nodeSchemas);
+          next.set(pluginId, schema);
+          return { nodeSchemas: next, isLoading: false };
+        });
+        return schema;
+      }
+    } catch (e) {
+      console.warn(`Schema fetch failed for ${pluginId}, using mock:`, e);
+    }
+    // Fallback: try MOCK_SCHEMAS from imported data
+    try {
+      const { MOCK_SCHEMAS } = await import("../data/mockSchemas");
+      const mock = MOCK_SCHEMAS[pluginId] as any;
+      if (mock) {
+        const schema = {
+          plugin_id: mock.plugin_id, name: mock.name, version: mock.version, category: mock.category,
+          description: mock.description,
+          parameter_schema: { version: 1, sections: mock.sections },
+          gui_schema: { layout: { Standard: { sections: [] } }, preview: mock.preview, aux_views: mock.aux_views, min_panel_width: mock.min_panel_width },
+        };
+        set((s) => {
+          const next = new Map(s.nodeSchemas);
+          next.set(pluginId, schema);
+          return { nodeSchemas: next, isLoading: false };
+        });
+        return schema;
+      }
+    } catch {}
+    set({ isLoading: false });
     return null;
   },
 

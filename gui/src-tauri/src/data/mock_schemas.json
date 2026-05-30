@@ -1,0 +1,194 @@
+{
+  "photopipeline.plugins.raw_input": {
+    "plugin_id": "photopipeline.plugins.raw_input",
+    "name": "RAW Input",
+    "category": "Input",
+    "description": "Read RAW camera files",
+    "parameter_schema": {
+      "version": 1,
+      "sections": [
+        {"id":"raw_format","label":"RAW Format","collapsible":false,"default_collapsed":false,"fields":[{"id":"raw_mode","label":"Decode Mode","type":"enum","default":"auto","required":true,"advanced":false,"allow_override":true,"supports_expression":false,"options":[{"value":"auto","label":"Auto","recommended":true},{"value":"dcraw","label":"dcraw"},{"value":"libraw","label":"LibRaw"}]}]},
+        {"id":"output","label":"Output","collapsible":false,"default_collapsed":false,"fields":[{"id":"output_format","label":"Pixel Format","type":"enum","default":"u16","required":true,"advanced":false,"allow_override":true,"supports_expression":false,"options":[{"value":"u16","label":"16-bit","recommended":true},{"value":"f32","label":"32-bit float"}]},{"id":"half_size","label":"Half Size","type":"boolean","default":false,"required":false,"advanced":false,"allow_override":true,"supports_expression":false},{"id":"apply_white_balance","label":"Apply WB","type":"boolean","default":true,"required":false,"advanced":false,"allow_override":true,"supports_expression":false}]}
+      ]
+    },
+    "gui_schema": {"layout":{"Standard":{"sections":[]}},"preview":"none","aux_views":[],"min_panel_width":320}
+  },
+  "photopipeline.plugins.transform": {
+    "plugin_id": "photopipeline.plugins.transform",
+    "name": "Transform",
+    "category": "Transform",
+    "description": "Resize, rotate, and crop images",
+    "parameter_schema": {
+      "version": 1,
+      "sections": [
+        {"id":"resize","label":"Resize","collapsible":false,"default_collapsed":false,"fields":[{"id":"width","label":"Width","type":"integer","min":1,"max":65535,"step":1,"unit":"px","default":1920,"required":true,"advanced":false,"allow_override":true,"supports_expression":true,"style":"slider"},{"id":"height","label":"Height","type":"integer","min":1,"max":65535,"step":1,"unit":"px","default":1080,"required":true,"advanced":false,"allow_override":true,"supports_expression":true,"style":"slider"},{"id":"keep_aspect","label":"Keep Aspect","type":"boolean","default":true,"required":false,"advanced":false,"allow_override":true,"supports_expression":false},{"id":"filter","label":"Filter","type":"enum","default":"lanczos3","required":true,"advanced":false,"allow_override":true,"supports_expression":false,"options":[{"value":"lanczos3","label":"Lanczos3","recommended":true},{"value":"bilinear","label":"Bilinear"},{"value":"nearest","label":"Nearest"}]},{"id":"fit_mode","label":"Fit Mode","type":"enum","default":"fit","required":true,"advanced":false,"allow_override":true,"supports_expression":false,"options":[{"value":"fit","label":"Fit","recommended":true},{"value":"fill","label":"Fill"},{"value":"crop","label":"Crop"}]}]},
+        {"id":"rotation","label":"Rotation","collapsible":false,"default_collapsed":false,"fields":[{"id":"angle","label":"Angle","type":"float","min":-360,"max":360,"step":0.1,"precision":1,"unit":"°","default":0.0,"required":false,"advanced":false,"allow_override":true,"supports_expression":true,"style":"slider"},{"id":"flip_horizontal","label":"Flip H","type":"boolean","default":false,"required":false,"advanced":false,"allow_override":true,"supports_expression":false},{"id":"flip_vertical","label":"Flip V","type":"boolean","default":false,"required":false,"advanced":false,"allow_override":true,"supports_expression":false},{"id":"background_color","label":"Background","type":"color","default":"#000000","required":false,"advanced":false,"allow_override":true,"supports_expression":false}]},
+        {"id":"crop","label":"Crop","collapsible":true,"default_collapsed":true,"fields":[{"id":"crop_enabled","label":"Enable","type":"boolean","default":false,"required":false,"advanced":false,"allow_override":true,"supports_expression":false},{"id":"crop_x","label":"X","type":"integer","min":0,"max":65535,"step":1,"unit":"px","default":0,"required":false,"advanced":true,"allow_override":true,"supports_expression":true},{"id":"crop_y","label":"Y","type":"integer","min":0,"max":65535,"step":1,"unit":"px","default":0,"required":false,"advanced":true,"allow_override":true,"supports_expression":true},{"id":"crop_width","label":"Width","type":"integer","min":0,"max":65535,"step":1,"unit":"px","default":0,"required":false,"advanced":true,"allow_override":true,"supports_expression":true},{"id":"crop_height","label":"Height","type":"integer","min":0,"max":65535,"step":1,"unit":"px","default":0,"required":false,"advanced":true,"allow_override":true,"supports_expression":true}]}
+      ]
+    },
+    "gui_schema": {"layout":{"Standard":{"sections":[]}},"preview":"before_after","aux_views":["histogram"],"min_panel_width":340}
+  },
+  "photopipeline.plugins.colorspace": {
+    "plugin_id": "photopipeline.plugins.colorspace",
+    "name": "Color Space",
+    "category": "Color",
+    "description": "Convert between color spaces",
+    "parameter_schema": {
+      "version": 1,
+      "sections": [
+        {"id":"conversion","label":"Conversion","collapsible":false,"default_collapsed":false,"fields":[{"id":"source","label":"Source","type":"enum","default":"sRGB","required":true,"advanced":false,"allow_override":true,"supports_expression":false,"options":[{"value":"sRGB","label":"sRGB","recommended":true},{"value":"Adobe RGB","label":"Adobe RGB"},{"value":"Display P3","label":"Display P3"},{"value":"BT.2020","label":"BT.2020"}]},{"id":"target","label":"Target","type":"enum","default":"Display P3","required":true,"advanced":false,"allow_override":true,"supports_expression":false,"options":[{"value":"sRGB","label":"sRGB"},{"value":"Display P3","label":"Display P3","recommended":true},{"value":"BT.2020","label":"BT.2020"}]},{"id":"intent","label":"Intent","type":"enum","default":"Relative","required":true,"advanced":false,"allow_override":true,"supports_expression":false,"options":[{"value":"Relative","label":"Relative","recommended":true},{"value":"Perceptual","label":"Perceptual"},{"value":"Saturation","label":"Saturation"},{"value":"Absolute","label":"Absolute"}]}]},
+        {"id":"rendering","label":"Rendering","collapsible":false,"default_collapsed":false,"fields":[{"id":"black_point_compensation","label":"Black Point","type":"boolean","default":true,"required":false,"advanced":false,"allow_override":true,"supports_expression":false},{"id":"gamut_clipping","label":"Gamut Clip","type":"boolean","default":true,"required":false,"advanced":false,"allow_override":true,"supports_expression":false}]},
+        {"id":"icc_profile","label":"ICC Profile","collapsible":true,"default_collapsed":true,"fields":[{"id":"icc_profile_path","label":"ICC Path","type":"file_path","default":"","required":false,"advanced":true,"allow_override":true,"supports_expression":false,"kind":"file"},{"id":"embed_icc","label":"Embed ICC","type":"boolean","default":true,"required":false,"advanced":false,"allow_override":true,"supports_expression":false}]}
+      ]
+    },
+    "gui_schema": {"layout":{"Standard":{"sections":[]}},"preview":"before_after","aux_views":["histogram","gamut_diagram"],"min_panel_width":340}
+  },
+  "photopipeline.plugins.lut3d": {
+    "plugin_id": "photopipeline.plugins.lut3d",
+    "name": "3D LUT",
+    "category": "Color",
+    "description": "Apply 3D LUT for color grading",
+    "parameter_schema": {
+      "version": 1,
+      "sections": [
+        {"id":"lut_file","label":"LUT File","collapsible":false,"default_collapsed":false,"fields":[{"id":"lut_path","label":"LUT Path","type":"file_path","default":"","required":true,"advanced":false,"allow_override":true,"supports_expression":false,"kind":"file"},{"id":"lut_format","label":"Format","type":"enum","default":"auto","required":true,"advanced":false,"allow_override":true,"supports_expression":false,"options":[{"value":"auto","label":"Auto","recommended":true},{"value":"cube","label":"Cube"},{"value":"3dl","label":"3DL"}]}]},
+        {"id":"lut_transform","label":"Transform","collapsible":false,"default_collapsed":false,"fields":[{"id":"intensity","label":"Intensity","type":"float","min":0,"max":1,"step":0.01,"precision":2,"default":1.0,"required":true,"advanced":false,"allow_override":true,"supports_expression":false,"style":"slider"}]}
+      ]
+    },
+    "gui_schema": {"layout":{"Standard":{"sections":[]}},"preview":"before_after","aux_views":["histogram","vectorscope"],"min_panel_width":320}
+  },
+  "photopipeline.plugins.lens_correct": {
+    "plugin_id": "photopipeline.plugins.lens_correct",
+    "name": "Lens Correction",
+    "category": "Enhance",
+    "description": "Correct lens distortion",
+    "parameter_schema": {
+      "version": 1,
+      "sections": [
+        {"id":"lens_detection","label":"Detection","collapsible":false,"default_collapsed":false,"fields":[{"id":"auto_detect","label":"Auto Detect","type":"boolean","default":true,"required":false,"advanced":false,"allow_override":true,"supports_expression":false}]},
+        {"id":"corrections","label":"Corrections","collapsible":false,"default_collapsed":false,"fields":[{"id":"distortion","label":"Distortion","type":"boolean","default":true,"required":false,"advanced":false,"allow_override":true,"supports_expression":false},{"id":"tca","label":"TCA","type":"boolean","default":true,"required":false,"advanced":false,"allow_override":true,"supports_expression":false},{"id":"vignetting","label":"Vignetting","type":"boolean","default":true,"required":false,"advanced":false,"allow_override":true,"supports_expression":false},{"id":"geometry_scale","label":"Geometry","type":"float","min":0.5,"max":2.0,"step":0.1,"precision":1,"default":1.0,"required":false,"advanced":false,"allow_override":true,"supports_expression":false,"style":"slider"}]}
+      ]
+    },
+    "gui_schema": {"layout":{"Standard":{"sections":[]}},"preview":"before_after","aux_views":["histogram","status_text"],"min_panel_width":340}
+  },
+  "photopipeline.plugins.ai_denoise": {
+    "plugin_id": "photopipeline.plugins.ai_denoise",
+    "name": "AI Denoise",
+    "category": "Enhance",
+    "description": "AI-based noise reduction",
+    "parameter_schema": {
+      "version": 1,
+      "sections": [
+        {"id":"model","label":"Model","collapsible":false,"default_collapsed":false,"fields":[{"id":"model","label":"Model","type":"enum","default":"standard_v2","required":true,"advanced":false,"allow_override":true,"supports_expression":false,"options":[{"value":"lightweight_v1","label":"Lightweight v1"},{"value":"standard_v2","label":"Standard v2","recommended":true},{"value":"high_quality_v2","label":"High Quality v2"}]}]},
+        {"id":"strength","label":"Strength","collapsible":false,"default_collapsed":false,"fields":[{"id":"strength","label":"Strength","type":"float","min":0,"max":1,"step":0.01,"precision":2,"default":0.5,"required":true,"advanced":false,"allow_override":true,"supports_expression":true,"style":"slider"},{"id":"luma_strength","label":"Luma","type":"float","min":0,"max":1,"step":0.01,"precision":2,"default":0.5,"required":false,"advanced":false,"allow_override":true,"supports_expression":true,"style":"slider"},{"id":"chroma_strength","label":"Chroma","type":"float","min":0,"max":1,"step":0.01,"precision":2,"default":0.5,"required":false,"advanced":false,"allow_override":true,"supports_expression":true,"style":"slider"}]}
+      ]
+    },
+    "gui_schema": {"layout":{"Standard":{"sections":[]}},"preview":"before_after","aux_views":["histogram","progress_bar","status_text"],"min_panel_width":360}
+  },
+  "photopipeline.plugins.exif_rw": {
+    "plugin_id": "photopipeline.plugins.exif_rw",
+    "name": "EXIF Reader/Writer",
+    "category": "Metadata",
+    "description": "Read and write EXIF metadata",
+    "parameter_schema": {
+      "version": 1,
+      "sections": [
+        {"id":"read_options","label":"Read","collapsible":false,"default_collapsed":false,"fields":[{"id":"extract_exif","label":"EXIF","type":"boolean","default":true,"required":false,"advanced":false,"allow_override":true,"supports_expression":false},{"id":"extract_xmp","label":"XMP","type":"boolean","default":true,"required":false,"advanced":false,"allow_override":true,"supports_expression":false}]},
+        {"id":"write_options","label":"Write","collapsible":false,"default_collapsed":false,"fields":[{"id":"preserve_source","label":"Preserve Source","type":"boolean","default":true,"required":false,"advanced":false,"allow_override":true,"supports_expression":false},{"id":"copyright","label":"Copyright","type":"string","default":"","required":false,"advanced":false,"allow_override":true,"supports_expression":false},{"id":"artist","label":"Artist","type":"string","default":"","required":false,"advanced":false,"allow_override":true,"supports_expression":false},{"id":"rating","label":"Rating","type":"integer","min":0,"max":5,"step":1,"default":0,"required":false,"advanced":false,"allow_override":true,"supports_expression":false}]}
+      ]
+    },
+    "gui_schema": {"layout":{"Standard":{"sections":[]}},"preview":"none","aux_views":[],"min_panel_width":320}
+  },
+  "photopipeline.plugins.gps_set": {
+    "plugin_id": "photopipeline.plugins.gps_set",
+    "name": "GPS Manager",
+    "category": "Metadata",
+    "description": "Set GPS coordinates",
+    "parameter_schema": {
+      "version": 1,
+      "sections": [
+        {"id":"source","label":"Source","collapsible":false,"default_collapsed":false,"fields":[{"id":"mode","label":"Mode","type":"enum","default":"manual","required":true,"advanced":false,"allow_override":true,"supports_expression":false,"options":[{"value":"exif_preserve","label":"Preserve"},{"value":"manual","label":"Manual","recommended":true},{"value":"gpx","label":"GPX"},{"value":"clear","label":"Clear"}]}]},
+        {"id":"manual_coords","label":"Coordinates","collapsible":false,"default_collapsed":false,"fields":[{"id":"latitude","label":"Latitude","type":"float","min":-90,"max":90,"step":0.000001,"precision":6,"default":0.0,"required":false,"advanced":false,"allow_override":true,"supports_expression":false},{"id":"longitude","label":"Longitude","type":"float","min":-180,"max":180,"step":0.000001,"precision":6,"default":0.0,"required":false,"advanced":false,"allow_override":true,"supports_expression":false},{"id":"altitude","label":"Altitude","type":"float","min":-500,"max":9000,"step":0.1,"precision":1,"unit":"m","default":0.0,"required":false,"advanced":false,"allow_override":true,"supports_expression":false}]}
+      ]
+    },
+    "gui_schema": {"layout":{"Standard":{"sections":[]}},"preview":"none","aux_views":["map"],"min_panel_width":340}
+  },
+  "photopipeline.plugins.time_shift": {
+    "plugin_id": "photopipeline.plugins.time_shift",
+    "name": "Time Shift",
+    "category": "Metadata",
+    "description": "Adjust DateTimeOriginal",
+    "parameter_schema": {
+      "version": 1,
+      "sections": [
+        {"id":"time_shift","label":"Time Shift","collapsible":false,"default_collapsed":false,"fields":[{"id":"hours","label":"Hours","type":"integer","min":-23,"max":23,"step":1,"default":0,"required":false,"advanced":false,"allow_override":true,"supports_expression":false},{"id":"minutes","label":"Minutes","type":"integer","min":-59,"max":59,"step":1,"default":0,"required":false,"advanced":false,"allow_override":true,"supports_expression":false},{"id":"seconds","label":"Seconds","type":"integer","min":-59,"max":59,"step":1,"default":0,"required":false,"advanced":false,"allow_override":true,"supports_expression":false}]}
+      ]
+    },
+    "gui_schema": {"layout":{"Standard":{"sections":[]}},"preview":"none","aux_views":[],"min_panel_width":320}
+  },
+  "photopipeline.plugins.heif_encoder": {
+    "plugin_id": "photopipeline.plugins.heif_encoder",
+    "name": "HEIF Encoder",
+    "category": "Export",
+    "description": "Encode to HEIF/HEIC",
+    "parameter_schema": {
+      "version": 1,
+      "sections": [
+        {"id":"quality","label":"Quality","collapsible":false,"default_collapsed":false,"fields":[{"id":"quality","label":"Quality","type":"float","min":0,"max":100,"step":1,"precision":0,"default":95,"required":true,"advanced":false,"allow_override":true,"supports_expression":false,"style":"slider"},{"id":"lossless","label":"Lossless","type":"boolean","default":false,"required":false,"advanced":false,"allow_override":true,"supports_expression":false},{"id":"bit_depth","label":"Bit Depth","type":"enum","default":"10","required":true,"advanced":false,"allow_override":true,"supports_expression":false,"options":[{"value":"10","label":"10-bit","recommended":true},{"value":"8","label":"8-bit"}]}]}
+      ]
+    },
+    "gui_schema": {"layout":{"Standard":{"sections":[]}},"preview":"none","aux_views":[],"min_panel_width":320}
+  },
+  "photopipeline.plugins.jxl_encoder": {
+    "plugin_id": "photopipeline.plugins.jxl_encoder",
+    "name": "JPEG XL Encoder",
+    "category": "Export",
+    "description": "Encode to JPEG XL",
+    "parameter_schema": {
+      "version": 1,
+      "sections": [
+        {"id":"quality","label":"Quality","collapsible":false,"default_collapsed":false,"fields":[{"id":"quality","label":"Quality","type":"float","min":0,"max":100,"step":1,"precision":0,"default":90,"required":true,"advanced":false,"allow_override":true,"supports_expression":false,"style":"slider"},{"id":"lossless","label":"Lossless","type":"boolean","default":false,"required":false,"advanced":false,"allow_override":true,"supports_expression":false},{"id":"bit_depth","label":"Bit Depth","type":"enum","default":"16","required":true,"advanced":false,"allow_override":true,"supports_expression":false,"options":[{"value":"16","label":"16-bit","recommended":true},{"value":"8","label":"8-bit"}]}]}
+      ]
+    },
+    "gui_schema": {"layout":{"Standard":{"sections":[]}},"preview":"none","aux_views":[],"min_panel_width":320}
+  },
+  "photopipeline.plugins.avif_encoder": {
+    "plugin_id": "photopipeline.plugins.avif_encoder",
+    "name": "AVIF Encoder",
+    "category": "Export",
+    "description": "Encode to AVIF",
+    "parameter_schema": {
+      "version": 1,
+      "sections": [
+        {"id":"quality","label":"Quality","collapsible":false,"default_collapsed":false,"fields":[{"id":"quality","label":"Quality","type":"float","min":0,"max":100,"step":1,"precision":0,"default":85,"required":true,"advanced":false,"allow_override":true,"supports_expression":false,"style":"slider"},{"id":"speed","label":"Speed","type":"integer","min":0,"max":10,"step":1,"default":6,"required":false,"advanced":false,"allow_override":true,"supports_expression":false}]}
+      ]
+    },
+    "gui_schema": {"layout":{"Standard":{"sections":[]}},"preview":"none","aux_views":[],"min_panel_width":320}
+  },
+  "photopipeline.plugins.tiff_encoder": {
+    "plugin_id": "photopipeline.plugins.tiff_encoder",
+    "name": "TIFF Encoder",
+    "category": "Export",
+    "description": "Encode to TIFF",
+    "parameter_schema": {
+      "version": 1,
+      "sections": [
+        {"id":"encoding","label":"Encoding","collapsible":false,"default_collapsed":false,"fields":[{"id":"compression","label":"Compression","type":"enum","default":"lzw","required":true,"advanced":false,"allow_override":true,"supports_expression":false,"options":[{"value":"none","label":"None"},{"value":"lzw","label":"LZW","recommended":true},{"value":"zip","label":"ZIP"}]},{"id":"bit_depth","label":"Bit Depth","type":"enum","default":"16","required":true,"advanced":false,"allow_override":true,"supports_expression":false,"options":[{"value":"16","label":"16-bit","recommended":true},{"value":"8","label":"8-bit"}]}]}
+      ]
+    },
+    "gui_schema": {"layout":{"Standard":{"sections":[]}},"preview":"none","aux_views":[],"min_panel_width":320}
+  },
+  "photopipeline.plugins.png_encoder": {
+    "plugin_id": "photopipeline.plugins.png_encoder",
+    "name": "PNG Encoder",
+    "category": "Export",
+    "description": "Encode to PNG",
+    "parameter_schema": {
+      "version": 1,
+      "sections": [
+        {"id":"encoding","label":"Encoding","collapsible":false,"default_collapsed":false,"fields":[{"id":"compression_level","label":"Level","type":"integer","min":0,"max":9,"step":1,"default":6,"required":true,"advanced":false,"allow_override":true,"supports_expression":false},{"id":"filter_strategy","label":"Filter","type":"enum","default":"adaptive","required":true,"advanced":false,"allow_override":true,"supports_expression":false,"options":[{"value":"none","label":"None"},{"value":"sub","label":"Sub"},{"value":"adaptive","label":"Adaptive","recommended":true}]}]}
+      ]
+    },
+    "gui_schema": {"layout":{"Standard":{"sections":[]}},"preview":"none","aux_views":[],"min_panel_width":320}
+  }
+}
