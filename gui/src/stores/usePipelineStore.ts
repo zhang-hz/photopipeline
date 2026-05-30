@@ -18,6 +18,8 @@ interface PipelineState {
   undoStack: PipelineSnapshot[];
   redoStack: PipelineSnapshot[];
   currentFilePath: string | null;
+  /** Internal: plugin being dragged from PluginBrowser to DAG canvas */
+  _draggedPluginId: string | null;
 }
 
 interface PipelineActions {
@@ -53,6 +55,7 @@ export const usePipelineStore = create<PipelineState & PipelineActions>((set, ge
   undoStack: [],
   redoStack: [],
   currentFilePath: null,
+  _draggedPluginId: null,
 
   addNode: (pluginId, position) => {
     const id = `node_${++nodeCounter}`;

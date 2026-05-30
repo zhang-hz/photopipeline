@@ -112,7 +112,7 @@ export function Content() {
   const handleCanvasDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOverCanvas(false);
-    const pluginId = e.dataTransfer.getData("pluginId");
+    const pluginId = e.dataTransfer.getData("text/plain") || usePipelineStore.getState()._draggedPluginId;
     if (pluginId) {
       const rect = canvasRef.current?.getBoundingClientRect();
       if (rect) {
@@ -120,6 +120,7 @@ export function Content() {
         const y = (e.clientY - rect.top - panOffset.y) / zoom - 15;
         addNode(pluginId, { x, y });
       }
+      usePipelineStore.setState({ _draggedPluginId: null });
     }
   };
 
@@ -242,7 +243,7 @@ export function Content() {
                 if (!fn) return null;
                 const rect = canvasRef.current?.getBoundingClientRect();
                 const from = { x: fn.position.x + 130, y: fn.position.y + 25 };
-                const to = rect ? { x: (wireDrag.mouseX - rect.left) / zoom - panOffset.x / zoom, y: (wireDrag.mouseY - rect.top) / zoom - panOffset.y / zoom } : { x: 0, y: 0 };
+                const to = rect ? { x: wireDrag.mouseX / zoom - panOffset.x / zoom, y: wireDrag.mouseY / zoom - panOffset.y / zoom } : { x: 0, y: 0 };
                 return <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke="var(--brandFg1)" strokeWidth={2} strokeDasharray="6 3" opacity={0.6} />;
               })()}
             </svg>
